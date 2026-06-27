@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Algo Trading System — Project HQ</title>
+<style>
+  :root {
+    --bg: #f8f8f6;
+    --surface: #ffffff;
+    --surface2: #f2f2ef;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.15);
+    --text: #1a1a18;
+    --text-secondary: #5a5a56;
+    --text-muted: #9a9a94;
+    --accent: #2563eb;
+    --accent-bg: #eff6ff;
+    --accent-border: #bfdbfe;
+    --success: #16a34a;
+    --success-bg: #f0fdf4;
+    --success-border: #bbf7d0;
+    --warning: #d97706;
+    --warning-bg: #fffbeb;
+    --warning-border: #fde68a;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+    --danger-border: #fecaca;
+    --radius: 8px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'SF Mono', 'Fira Code', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141412;
+      --surface: #1e1e1b;
+      --surface2: #252522;
+      --border: rgba(255,255,255,0.08);
+      --border-strong: rgba(255,255,255,0.15);
+      --text: #f0f0ec;
+      --text-secondary: #a0a09a;
+      --text-muted: #606058;
+      --accent: #60a5fa;
+      --accent-bg: #1e3a5f;
+      --accent-border: #2563eb;
+      --success: #4ade80;
+      --success-bg: #14532d;
+      --success-border: #16a34a;
+      --warning: #fbbf24;
+      --warning-bg: #451a03;
+      --warning-border: #d97706;
+      --danger: #f87171;
+      --danger-bg: #450a0a;
+      --danger-border: #dc2626;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .topbar { background: var(--surface); border-bottom: 0.5px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 52px; position: sticky; top: 0; z-index: 10; }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .topbar-logo { font-size: 13px; font-weight: 600; color: var(--text); }
+  .topbar-sub { font-size: 11px; color: var(--text-muted); }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .refresh-btn { font-size: 12px; padding: 6px 14px; border: 0.5px solid var(--border-strong); border-radius: var(--radius); background: transparent; color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .refresh-btn:hover { background: var(--surface2); color: var(--text); }
+  .sync-tag { font-size: 11px; padding: 3px 8px; border-radius: 20px; background: var(--success-bg); color: var(--success); border: 0.5px solid var(--success-border); }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 24px 48px; }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+  .metric { background: var(--surface2); border-radius: var(--radius); padding: 14px; }
+  .metric-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .metric-value { font-size: 24px; font-weight: 600; color: var(--text); }
+  .metric-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 10px; }
+
+  .phases { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 24px; }
+  .phase { border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 8px; text-align: center; }
+  .phase.active { background: var(--accent-bg); border-color: var(--accent-border); }
+  .phase.done { background: var(--success-bg); border-color: var(--success-border); }
+  .phase.pending { background: var(--surface2); }
+  .phase-num { font-size: 10px; font-weight: 600; margin-bottom: 4px; }
+  .phase.active .phase-num { color: var(--accent); }
+  .phase.done .phase-num { color: var(--success); }
+  .phase.pending .phase-num { color: var(--text-muted); }
+  .phase-name { font-size: 11px; line-height: 1.3; }
+  .phase.active .phase-name { color: var(--accent); }
+  .phase.done .phase-name { color: var(--success); }
+  .phase.pending .phase-name { color: var(--text-muted); }
+
+  .tabs { display: flex; gap: 2px; border-bottom: 0.5px solid var(--border); margin-bottom: 20px; }
+  .tab { padding: 8px 16px; font-size: 13px; cursor: pointer; border: none; background: transparent; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .tab:hover:not(.on) { color: var(--text); }
+  .panel { display: none; }
+  .panel.on { display: block; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 13px; gap: 8px; }
+  .row:last-child { border-bottom: none; }
+  .row-main { color: var(--text); font-weight: 500; }
+  .row-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+  .bg { background: var(--success-bg); color: var(--success); border: 0.5px solid var(--success-border); }
+  .ba { background: var(--warning-bg); color: var(--warning); border: 0.5px solid var(--warning-border); }
+  .br { background: var(--danger-bg); color: var(--danger); border: 0.5px solid var(--danger-border); }
+  .bm { background: var(--surface2); color: var(--text-muted); border: 0.5px solid var(--border); }
+  .bb { background: var(--accent-bg); color: var(--accent); border: 0.5px solid var(--accent-border); }
+
+  .log-entry { border-left: 2px solid var(--accent); padding: 12px 16px; margin-bottom: 10px; background: var(--surface); border-radius: 0 8px 8px 0; border-top: 0.5px solid var(--border); border-right: 0.5px solid var(--border); border-bottom: 0.5px solid var(--border); }
+  .log-date { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+  .log-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .log-body { font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+
+  .commit-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 0.5px solid var(--border); font-size: 12px; gap: 8px; }
+  .commit-row:last-child { border-bottom: none; }
+  .commit-msg { color: var(--text-secondary); font-family: var(--mono); font-size: 11px; }
+  .commit-date { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+
+  .api-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .api-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--surface2); border-radius: var(--radius); font-size: 12px; color: var(--text-secondary); }
+
+  .loading { text-align: center; padding: 40px; color: var(--text-muted); font-size: 13px; }
+  .error-msg { background: var(--danger-bg); color: var(--danger); border: 0.5px solid var(--danger-border); border-radius: var(--radius); padding: 12px 16px; font-size: 13px; margin-bottom: 16px; }
+
+  .footer { margin-top: 32px; padding-top: 16px; border-top: 0.5px solid var(--border); font-size: 11px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; }
+
+  @media (max-width: 640px) {
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+    .phases { grid-template-columns: repeat(3, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">Algo Trading System</span>
+    <span class="topbar-sub">Project HQ · <a href="https://github.com/mesan4net-blip/algo-trading-system" target="_blank">GitHub ↗</a></span>
+  </div>
+  <div class="topbar-right">
+    <span class="sync-tag" id="sync-tag">syncing...</span>
+    <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+  </div>
+</div>
+
+<div class="container">
+  <div id="error-area"></div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Current phase</div>
+      <div class="metric-value" id="m-phase">—</div>
+      <div class="metric-sub" id="m-phase-name">loading...</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Phases complete</div>
+      <div class="metric-value" id="m-done">—</div>
+      <div class="metric-sub" id="m-pct">loading...</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Total commits</div>
+      <div class="metric-value" id="m-commits">—</div>
+      <div class="metric-sub" id="m-last-commit">loading...</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Decisions logged</div>
+      <div class="metric-value" id="m-decisions">—</div>
+      <div class="metric-sub">All documented</div>
+    </div>
+  </div>
+
+  <div class="section-label">Phase tracker</div>
+  <div class="phases" id="phase-tracker">
+    <div class="loading" style="grid-column:1/-1;padding:20px">Loading phases...</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" onclick="switchTab('stack')">System stack</button>
+    <button class="tab" onclick="switchTab('decisions')">Decisions</button>
+    <button class="tab" onclick="switchTab('devlog')">Dev log</button>
+    <button class="tab" onclick="switchTab('commits')">Commits</button>
+    <button class="tab" onclick="switchTab('apis')">APIs</button>
+  </div>
+
+  <div id="stack" class="panel on">
+    <div class="two-col">
+      <div class="card">
+        <div class="section-label" style="margin-bottom:12px">Tools & status</div>
+        <div class="row"><div><div class="row-main">TradingView Premium</div><div class="row-sub">Signal detection + backtesting</div></div><span class="badge bg">ready</span></div>
+        <div class="row"><div><div class="row-main">Forex.com MT4</div><div class="row-sub">Broker account</div></div><span class="badge bg">ready</span></div>
+        <div class="row"><div><div class="row-main">Forex.com VPS</div><div class="row-sub">24/7 hosting</div></div><span class="badge bg">available</span></div>
+        <div class="row"><div><div class="row-main">GitHub repo</div><div class="row-sub">Code + docs storage</div></div><span class="badge bg">live</span></div>
+        <div class="row"><div><div class="row-main">Pine Script strategy</div><div class="row-sub">ICT pattern logic</div></div><span class="badge ba">phase 1</span></div>
+        <div class="row"><div><div class="row-main">Python backend</div><div class="row-sub">AI + ML intelligence layer</div></div><span class="badge br">not started</span></div>
+        <div class="row"><div><div class="row-main">ZeroMQ bridge</div><div class="row-sub">Python → MT4 connection</div></div><span class="badge br">not started</span></div>
+        <div class="row"><div><div class="row-main">MT4 Expert Advisor</div><div class="row-sub">Trade execution + management</div></div><span class="badge br">not started</span></div>
+      </div>
+      <div class="card">
+        <div class="section-label" style="margin-bottom:12px">Architecture flow</div>
+        <div class="row"><span style="font-size:12px;color:var(--text-secondary)">1 · TradingView fires webhook on signal</span><span class="badge bg">ready</span></div>
+        <div class="row"><span style="font-size:12px;color:var(--text-secondary)">2 · Python scores news + fundamentals</span><span class="badge br">phase 2</span></div>
+        <div class="row"><span style="font-size:12px;color:var(--text-secondary)">3 · ML filter approves or rejects</span><span class="badge br">phase 5</span></div>
+        <div class="row"><span style="font-size:12px;color:var(--text-secondary)">4 · ZeroMQ sends to MT4 instantly</span><span class="badge br">phase 2</span></div>
+        <div class="row"><span style="font-size:12px;color:var(--text-secondary)">5 · MT4 EA places + manages trade</span><span class="badge br">phase 3</span></div>
+        <div class="row"><span style="font-size:12px;color:var(--text-secondary)">6 · Outcome logged to GitHub</span><span class="badge br">phase 3</span></div>
+        <div class="row"><span style="font-size:12px;color:var(--text-secondary)">7 · ML retrains nightly on outcomes</span><span class="badge br">phase 5</span></div>
+        <div class="row"><span style="font-size:12px;color:var(--text-secondary)">8 · Runs 24/7 on Forex.com VPS</span><span class="badge br">phase 6</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="decisions" class="panel">
+    <div class="card" id="decisions-content"><div class="loading">Loading decisions from GitHub...</div></div>
+  </div>
+
+  <div id="devlog" class="panel">
+    <div id="devlog-content"><div class="loading">Loading dev log from GitHub...</div></div>
+  </div>
+
+  <div id="commits" class="panel">
+    <div class="card" id="commits-content"><div class="loading">Loading commits from GitHub...</div></div>
+  </div>
+
+  <div id="apis" class="panel">
+    <div class="two-col">
+      <div class="card">
+        <div class="section-label" style="margin-bottom:12px">Connected</div>
+        <div class="api-grid">
+          <div class="api-item">TradingView <span class="badge bg">active</span></div>
+          <div class="api-item">GitHub API <span class="badge bg">active</span></div>
+          <div class="api-item">Forex.com MT4 <span class="badge bg">active</span></div>
+          <div class="api-item">Forex.com VPS <span class="badge bg">available</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-label" style="margin-bottom:12px">Needed — all free to start</div>
+        <div class="api-grid">
+          <div class="api-item">NewsAPI <span class="badge ba">phase 2</span></div>
+          <div class="api-item">FRED API <span class="badge ba">phase 2</span></div>
+          <div class="api-item">CFTC COT <span class="badge ba">phase 2</span></div>
+          <div class="api-item">Claude API <span class="badge ba">phase 2</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>mesan4net-blip/algo-trading-system · ICT/SMC Day Trading System</span>
+    <span id="footer-time">—</span>
+  </div>
+</div>
+
+<script>
+const REPO = 'mesan4net-blip/algo-trading-system';
+const API = 'https://api.github.com';
+
+async function get(path) {
+  const r = await fetch(`${API}/repos/${REPO}${path}`);
+  if (!r.ok) throw new Error(`GitHub API error: ${r.status}`);
+  return r.json();
+}
+
+async function getFile(path) {
+  const d = await get(`/contents/${path}`);
+  return atob(d.content.replace(/\n/g,''));
+}
+
+function parsePhasesFromProject(text) {
+  const defs = [
+    {num:1,name:'Pine Script'},
+    {num:2,name:'Python backend'},
+    {num:3,name:'MT4 EA'},
+    {num:4,name:'Intelligence'},
+    {num:5,name:'ML loop'},
+    {num:6,name:'VPS deploy'}
+  ];
+  return defs.map(p => {
+    let state = 'pending';
+    text.split('\n').forEach(line => {
+      if (line.includes(`| ${p.num} |`) || line.includes(`| ${p.num}|`)) {
+        if (line.includes('Active') || line.includes('Progress')) state = 'active';
+        else if (line.includes('Complete') || line.includes('Done')) state = 'done';
+      }
+    });
+    return {...p, state};
+  });
+}
+
+function parseDecisions(text) {
+  const blocks = text.split('## [').slice(1);
+  return blocks.map(b => {
+    const dm = b.match(/^(\d{4}-\d{2}-\d{2})\] (.+)/);
+    const cm = b.match(/\*\*Chosen:\*\* (.+)/);
+    const wm = b.match(/\*\*Why:\*\* (.+)/);
+    return dm ? { date: dm[1], title: dm[2].trim(), chosen: cm ? cm[1].trim() : '', why: wm ? wm[1].trim() : '' } : null;
+  }).filter(Boolean);
+}
+
+function parseDevlog(text) {
+  const entries = [];
+  const blocks = text.split('## ').slice(1);
+  blocks.forEach(b => {
+    const lines = b.split('\n');
+    const title = lines[0].trim();
+    const body = lines.slice(1).join(' ').replace(/###[^#]*/g,' ').replace(/\*\*/g,'').replace(/\s+/g,' ').trim();
+    entries.push({ title, body: body.slice(0, 300) });
+  });
+  return entries;
+}
+
+async function loadAll() {
+  document.getElementById('sync-tag').textContent = 'syncing...';
+  document.getElementById('sync-tag').style.background = 'var(--warning-bg)';
+  document.getElementById('sync-tag').style.color = 'var(--warning)';
+  document.getElementById('sync-tag').style.borderColor = 'var(--warning-border)';
+  document.getElementById('error-area').innerHTML = '';
+
+  try {
+    const [projectMd, decisionsMd, devlogMd, commits] = await Promise.all([
+      getFile('PROJECT.md'),
+      getFile('decisions/decisions-log.md'),
+      getFile('devlog/2026-06-27.md'),
+      get('/commits?per_page=20')
+    ]);
+
+    const phases = parsePhasesFromProject(projectMd);
+    const active = phases.find(p => p.state === 'active');
+    const done = phases.filter(p => p.state === 'done').length;
+
+    document.getElementById('m-phase').textContent = active ? active.num : '—';
+    document.getElementById('m-phase-name').textContent = active ? active.name : 'none active';
+    document.getElementById('m-done').textContent = `${done}/6`;
+    document.getElementById('m-pct').textContent = `${Math.round((done/6)*100)}% complete`;
+    document.getElementById('m-commits').textContent = commits.length;
+    document.getElementById('m-last-commit').textContent = commits.length ? new Date(commits[0].commit.author.date).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '—';
+
+    const decisions = parseDecisions(decisionsMd);
+    document.getElementById('m-decisions').textContent = decisions.length;
+
+    document.getElementById('phase-tracker').innerHTML = phases.map(p => `
+      <div class="phase ${p.state}">
+        <div class="phase-num">Phase ${p.num}</div>
+        <div class="phase-name">${p.name}</div>
+      </div>`).join('');
+
+    document.getElementById('decisions-content').innerHTML = decisions.map(d => `
+      <div class="row">
+        <div>
+          <div class="row-main">${d.title}</div>
+          <div class="row-sub">${d.chosen}</div>
+        </div>
+        <span class="badge bm">${d.date}</span>
+      </div>`).join('') || '<div class="loading">No decisions found</div>';
+
+    const devlog = parseDevlog(devlogMd);
+    document.getElementById('devlog-content').innerHTML = devlog.map(e => `
+      <div class="log-entry">
+        <div class="log-date">June 27, 2026</div>
+        <div class="log-title">${e.title}</div>
+        <div class="log-body">${e.body}</div>
+      </div>`).join('') || '<div class="loading">No entries found</div>';
+
+    document.getElementById('commits-content').innerHTML = `
+      <div class="section-label" style="margin-bottom:12px">${commits.length} commits</div>
+      ${commits.map(c => `
+        <div class="commit-row">
+          <span class="commit-msg">${c.commit.message.slice(0,60)}</span>
+          <span class="commit-date">${new Date(c.commit.author.date).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>
+        </div>`).join('')}`;
+
+    const now = new Date();
+    document.getElementById('sync-tag').textContent = `synced ${now.toLocaleTimeString()}`;
+    document.getElementById('sync-tag').style.background = 'var(--success-bg)';
+    document.getElementById('sync-tag').style.color = 'var(--success)';
+    document.getElementById('sync-tag').style.borderColor = 'var(--success-border)';
+    document.getElementById('footer-time').textContent = `Last updated ${now.toLocaleString()}`;
+
+  } catch(e) {
+    document.getElementById('error-area').innerHTML = `<div class="error-msg">Could not load from GitHub: ${e.message}</div>`;
+    document.getElementById('sync-tag').textContent = 'error';
+    document.getElementById('sync-tag').style.background = 'var(--danger-bg)';
+    document.getElementById('sync-tag').style.color = 'var(--danger)';
+    document.getElementById('sync-tag').style.borderColor = 'var(--danger-border)';
+  }
+}
+
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  event.target.classList.add('on');
+}
+
+loadAll();
+</script>
+</body>
+</html>
