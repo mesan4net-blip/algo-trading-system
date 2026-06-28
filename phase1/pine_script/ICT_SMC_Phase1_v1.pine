@@ -6,9 +6,11 @@
 // Version: 1.0
 // ============================================================================
 //@version=6
-indicator("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
+strategy("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
      overlay=true, max_bars_back=5000, max_labels_count=500, max_boxes_count=500,
-     max_lines_count=500)
+     max_lines_count=500, initial_capital=10000, default_qty_type=strategy.fixed,
+     default_qty_value=1, commission_type=strategy.commission.percent,
+     commission_value=0.01, slippage=1, calc_on_every_tick=false)
 
 // ============================================================================
 // INPUTS
@@ -85,7 +87,7 @@ hud_pos_inp  = input.string("Bottom Right", "HUD Position", options=["Top Left",
 
 // --- Risk Management ---
 grp_risk2 = "Risk Management"
-initial_capital = input.float(10000.0, "Initial Capital ($)",   group=grp_risk2, minval=100, step=100)
+initial_capital = input.float(10000.0, "Initial Capital ($) - must match strategy setting", group=grp_risk2, minval=100, step=100)
 risk_pct        = input.float(1.0,     "Risk Per Trade (%)",    group=grp_risk2, minval=0.1, maxval=10, step=0.1)
 min_lot         = input.float(0.01,    "Minimum Lot Size",      group=grp_risk2, minval=0.01, step=0.01)
 
@@ -847,6 +849,9 @@ if not exited_this_bar and pos == 0 and long_entry_raw
         pos         := 1
         entry_bar   := bar_index
         entry_time  := time
+        strategy.entry("Long", strategy.long, qty=trade_lot_size)
+        strategy.exit("Long TP1", "Long", qty_percent=50, limit=tp1_price, stop=sl_price, comment="TP1")
+        strategy.exit("Long TP2", "Long", qty_percent=100, limit=tp2_price, stop=sl_price, comment="TP2")
 
     if show_entry_labels
         buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
@@ -886,6 +891,9 @@ if not exited_this_bar and pos == 0 and short_entry_raw
         pos        := -1
         entry_bar  := bar_index
         entry_time := time
+        strategy.entry("Short", strategy.short, qty=trade_lot_size)
+        strategy.exit("Short TP1", "Short", qty_percent=50, limit=tp1_price, stop=sl_price, comment="TP1")
+        strategy.exit("Short TP2", "Short", qty_percent=100, limit=tp2_price, stop=sl_price, comment="TP2")
     if show_entry_labels and not trade_skipped
         sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
         label.new(time, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=sell_tt, xloc=xloc.bar_time)
@@ -1155,3 +1163,4 @@ if show_trade_log and barstate.islast
     table.cell(tlog, 5, tot_row, tot_pip_str, bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
     table.cell(tlog, 6, tot_row, tot_usd_str, bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
     table.cell(tlog, 7, tot_row, "",          bgcolor=HDR, text_color=W2,     text_size=SZS2)
+
