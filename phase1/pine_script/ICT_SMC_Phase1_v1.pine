@@ -828,12 +828,32 @@ kz_col  = in_kz ? color.new(color.green, 0) : color.new(color.red, 0)
 wr_col  = win_rate >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
 pnl_col = net_pnl >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
 
+// Signal checklist — shows exactly which conditions are met
+chk_bias_b  = bias_bull  ? "PASS" : "FAIL"
+chk_bias_s  = bias_bear  ? "PASS" : "FAIL"
+chk_poi_b   = poi_bull   ? "PASS" : "FAIL"
+chk_poi_s   = poi_bear   ? "PASS" : "FAIL"
+chk_mss_b   = mss_bull_5m ? "PASS" : "FAIL"
+chk_mss_s   = mss_bear_5m ? "PASS" : "FAIL"
+chk_disp_b  = disp_bull  ? "PASS" : "FAIL"
+chk_disp_s  = disp_bear  ? "PASS" : "FAIL"
+chk_kz      = in_kz      ? "PASS" : "FAIL"
+chk_col_b   = bias_bull  ? color.new(color.green, 0) : color.new(color.red, 0)
+chk_col_s   = bias_bear  ? color.new(color.green, 0) : color.new(color.red, 0)
+chk_poi_cb  = poi_bull   ? color.new(color.green, 0) : color.new(color.red, 0)
+chk_poi_cs  = poi_bear   ? color.new(color.green, 0) : color.new(color.red, 0)
+chk_mss_cb  = mss_bull_5m ? color.new(color.green, 0) : color.new(color.red, 0)
+chk_mss_cs  = mss_bear_5m ? color.new(color.green, 0) : color.new(color.red, 0)
+chk_disp_cb = disp_bull  ? color.new(color.green, 0) : color.new(color.red, 0)
+chk_disp_cs = disp_bear  ? color.new(color.green, 0) : color.new(color.red, 0)
+chk_kz_c    = in_kz      ? color.new(color.green, 0) : color.new(color.red, 0)
+
 W  = color.white
 BK = color.new(color.black, 0)
 GR = color.new(color.gray, 0)
 SZ = size.normal
 
-var table hud = table.new(position.bottom_right, 2, 16, frame_color=W, frame_width=1, border_color=color.new(color.gray, 60), border_width=1)
+var table hud = table.new(position.bottom_right, 2, 28, frame_color=W, frame_width=1, border_color=color.new(color.gray, 60), border_width=1)
 
 if show_hud
     // Row 0 — Title
@@ -899,3 +919,36 @@ if show_hud
     // Row 15 — Net P&L
     table.cell(hud, 0, 15, "Net P&L", bgcolor=W, text_color=BK,    text_size=SZ)
     table.cell(hud, 1, 15, str.tostring(net_pnl, format.mintick) + "   Max DD: " + str.tostring(max_dd, format.mintick), bgcolor=W, text_color=pnl_col, text_size=SZ)
+
+    // Row 16 — Section header: Signal Checklist
+    table.cell(hud, 0, 16, "SIGNAL CHECKLIST", bgcolor=W, text_color=GR, text_size=size.small)
+    table.cell(hud, 1, 16, "LONG  /  SHORT",   bgcolor=W, text_color=GR, text_size=size.small)
+
+    // Row 17 — Bias
+    table.cell(hud, 0, 17, "Bias Aligned", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 17, chk_bias_b + "  /  " + chk_bias_s, bgcolor=W, text_color=bias_bull ? chk_col_b : chk_col_s, text_size=SZ)
+
+    // Row 18 — POI (OB/FVG)
+    table.cell(hud, 0, 18, "In OB / FVG", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 18, chk_poi_b + "  /  " + chk_poi_s, bgcolor=W, text_color=poi_bull ? chk_poi_cb : chk_poi_cs, text_size=SZ)
+
+    // Row 19 — MSS
+    table.cell(hud, 0, 19, "MSS on 5M", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 19, chk_mss_b + "  /  " + chk_mss_s, bgcolor=W, text_color=mss_bull_5m ? chk_mss_cb : chk_mss_cs, text_size=SZ)
+
+    // Row 20 — Displacement
+    table.cell(hud, 0, 20, "Displacement", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 20, chk_disp_b + "  /  " + chk_disp_s, bgcolor=W, text_color=disp_bull ? chk_disp_cb : chk_disp_cs, text_size=SZ)
+
+    // Row 21 — Trade Window
+    table.cell(hud, 0, 21, "Trade Window", bgcolor=W, text_color=BK,  text_size=SZ)
+    table.cell(hud, 1, 21, chk_kz,         bgcolor=W, text_color=chk_kz_c, text_size=SZ)
+
+    // Row 22 — Ready signal
+    all_bull = bias_bull and poi_bull and mss_bull_5m and disp_bull and in_kz
+    all_bear = bias_bear and poi_bear and mss_bear_5m and disp_bear and in_kz
+    sig_txt  = all_bull ? "LONG SIGNAL READY" : all_bear ? "SHORT SIGNAL READY" : "No signal yet"
+    sig_col  = all_bull ? color.new(color.green, 0) : all_bear ? color.new(color.red, 0) : color.new(color.gray, 0)
+    table.cell(hud, 0, 22, "Signal", bgcolor=W, text_color=BK,     text_size=SZ)
+    table.cell(hud, 1, 22, sig_txt,  bgcolor=W, text_color=sig_col, text_size=size.large)
+
