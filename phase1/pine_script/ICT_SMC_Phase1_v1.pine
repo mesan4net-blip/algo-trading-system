@@ -802,102 +802,100 @@ if show_bias_label and barstate.islast
 
 // ============================================================================
 // ============================================================================
-// HUD TABLE — Clean, readable, minimal color
+// ============================================================================
+// HUD TABLE — White background, colored text only
 // ============================================================================
 win_rate = (wins + losses) > 0 ? (float(wins) / float(wins + losses)) * 100.0 : 0.0
 pl_ratio = gross_loss > 0 ? gross_profit / gross_loss : 0.0
 net_pnl  = gross_profit - gross_loss
 
-// Position display values — single line each (Pine v6 rule)
-p_dir  = pos == 1 ? "LONG" : pos == -1 ? "SHORT" : "FLAT"
-p_col  = pos == 1 ? color.lime : pos == -1 ? color.red : color.silver
+p_dir   = pos == 1 ? "LONG" : pos == -1 ? "SHORT" : "FLAT"
+p_col   = pos == 1 ? color.new(color.green, 0) : pos == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
 p_entry = pos != 0 ? str.tostring(entry_price, format.mintick) : "---"
 p_sl    = pos != 0 ? str.tostring(trail_sl,    format.mintick) : "---"
 p_tp1   = pos != 0 ? str.tostring(tp1_price,   format.mintick) : "---"
 p_tp2   = pos != 0 ? str.tostring(tp2_price,   format.mintick) : "---"
-p_tp1s  = tp1_hit ? "TP1 HIT - trailing" : pos != 0 ? "waiting" : "---"
-d_str   = daily_struct == 1 ? "BULL" : daily_struct == -1 ? "BEAR" : "FLAT"
-h4_str  = h4_struct  == 1 ? "BULL" : h4_struct  == -1 ? "BEAR" : "FLAT"
-h1_str  = h1_struct  == 1 ? "BULL" : h1_struct  == -1 ? "BEAR" : "FLAT"
-d_col   = daily_struct == 1 ? color.lime : daily_struct == -1 ? color.red : color.silver
-h4_col  = h4_struct  == 1 ? color.lime : h4_struct  == -1 ? color.red : color.silver
-h1_col  = h1_struct  == 1 ? color.lime : h1_struct  == -1 ? color.red : color.silver
+p_tp1s  = tp1_hit ? "TP1 HIT - trailing runner" : pos != 0 ? "Waiting for TP1" : "---"
+p_tp1sc = tp1_hit ? color.new(color.green, 0) : color.new(color.gray, 0)
+d_str   = daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT"
+h4_str  = h4_struct  == 1 ? "BULLISH" : h4_struct  == -1 ? "BEARISH" : "FLAT"
+h1_str  = h1_struct  == 1 ? "BULLISH" : h1_struct  == -1 ? "BEARISH" : "FLAT"
+d_col   = daily_struct == 1 ? color.new(color.green, 0) : daily_struct == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
+h4_col  = h4_struct  == 1 ? color.new(color.green, 0) : h4_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
+h1_col  = h1_struct  == 1 ? color.new(color.green, 0) : h1_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
 kz_str  = in_london ? "LONDON" : in_ny ? "NEW YORK" : "CLOSED"
-kz_col  = in_kz ? color.lime : color.red
+kz_col  = in_kz ? color.new(color.green, 0) : color.new(color.red, 0)
+wr_col  = win_rate >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
+pnl_col = net_pnl >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
 
-// 2-column table: Label (left) | Value (right)
-var table hud = table.new(position.bottom_right, 2, 16,
-                          frame_color=color.new(color.white, 80), frame_width=1,
-                          border_color=color.new(color.white, 85), border_width=1)
+W  = color.white
+BK = color.new(color.black, 0)
+GR = color.new(color.gray, 0)
+SZ = size.normal
+
+var table hud = table.new(position.bottom_right, 2, 16, frame_color=W, frame_width=1, border_color=color.new(color.gray, 60), border_width=1)
 
 if show_hud
-    BG    = color.new(color.black, 30)
-    HDR   = color.new(color.black, 10)
-    LBL   = color.new(color.silver, 0)
-    VAL   = color.white
-    SZ    = size.normal
-    SZS   = size.small
+    // Row 0 — Title
+    table.cell(hud, 0, 0, "ICT / SMC  Phase 1", bgcolor=W, text_color=BK, text_size=size.large)
+    table.cell(hud, 1, 0, "v1.0",               bgcolor=W, text_color=GR,  text_size=size.large)
 
-    // Header
-    table.cell(hud, 0, 0, "ICT / SMC  Phase 1", bgcolor=HDR, text_color=color.white, text_size=size.large)
-    table.cell(hud, 1, 0, "v1.0",               bgcolor=HDR, text_color=color.new(color.silver, 20), text_size=size.large)
+    // Row 1 — Kill Zone
+    table.cell(hud, 0, 1, "Kill Zone", bgcolor=W, text_color=BK,    text_size=SZ)
+    table.cell(hud, 1, 1, kz_str,      bgcolor=W, text_color=kz_col, text_size=SZ)
 
-    // Kill Zone
-    table.cell(hud, 0, 1, "Kill Zone", bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 1, kz_str,      bgcolor=BG, text_color=kz_col, text_size=SZ)
+    // Row 2 — Section header
+    table.cell(hud, 0, 2, "POSITION", bgcolor=W, text_color=GR, text_size=size.small)
+    table.cell(hud, 1, 2, "",          bgcolor=W, text_color=GR, text_size=size.small)
 
-    // Spacer
-    table.cell(hud, 0, 2, "- POSITION -", bgcolor=color.new(color.black, 20), text_color=color.new(color.silver, 40), text_size=SZS)
-    table.cell(hud, 1, 2, "",             bgcolor=color.new(color.black, 20), text_color=LBL, text_size=SZS)
+    // Row 3 — Direction
+    table.cell(hud, 0, 3, "Direction", bgcolor=W, text_color=BK,   text_size=SZ)
+    table.cell(hud, 1, 3, p_dir,       bgcolor=W, text_color=p_col, text_size=size.large)
 
-    // Direction
-    table.cell(hud, 0, 3, "Direction", bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 3, p_dir,       bgcolor=BG, text_color=p_col, text_size=size.large)
+    // Row 4 — Entry
+    table.cell(hud, 0, 4, "Entry",  bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 4, p_entry,  bgcolor=W, text_color=BK, text_size=SZ)
 
-    // Entry
-    table.cell(hud, 0, 4, "Entry",  bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 4, p_entry, bgcolor=BG, text_color=VAL, text_size=SZ)
+    // Row 5 — Stop Loss
+    table.cell(hud, 0, 5, "Stop Loss", bgcolor=W, text_color=BK,                  text_size=SZ)
+    table.cell(hud, 1, 5, p_sl,        bgcolor=W, text_color=color.new(color.red, 0), text_size=SZ)
 
-    // Stop Loss
-    table.cell(hud, 0, 5, "Stop Loss", bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 5, p_sl,        bgcolor=BG, text_color=color.red, text_size=SZ)
+    // Row 6 — TP1
+    table.cell(hud, 0, 6, "TP1",  bgcolor=W, text_color=BK,                    text_size=SZ)
+    table.cell(hud, 1, 6, p_tp1,  bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
-    // TP1
-    table.cell(hud, 0, 6, "TP1",  bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 6, p_tp1, bgcolor=BG, text_color=color.lime, text_size=SZ)
+    // Row 7 — TP2
+    table.cell(hud, 0, 7, "TP2",  bgcolor=W, text_color=BK,                    text_size=SZ)
+    table.cell(hud, 1, 7, p_tp2,  bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
-    // TP2
-    table.cell(hud, 0, 7, "TP2",  bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 7, p_tp2, bgcolor=BG, text_color=color.lime, text_size=SZ)
+    // Row 8 — Status
+    table.cell(hud, 0, 8, "Status", bgcolor=W, text_color=BK,    text_size=size.small)
+    table.cell(hud, 1, 8, p_tp1s,   bgcolor=W, text_color=p_tp1sc, text_size=size.small)
 
-    // TP1 Status
-    table.cell(hud, 0, 8, "Status", bgcolor=BG, text_color=LBL, text_size=SZS)
-    table.cell(hud, 1, 8, p_tp1s,  bgcolor=BG, text_color=tp1_hit ? color.lime : color.silver, text_size=SZS)
+    // Row 9 — Section header
+    table.cell(hud, 0, 9, "BIAS STACK", bgcolor=W, text_color=GR, text_size=size.small)
+    table.cell(hud, 1, 9, "",            bgcolor=W, text_color=GR, text_size=size.small)
 
-    // Spacer
-    table.cell(hud, 0, 9, "- BIAS STACK -", bgcolor=color.new(color.black, 20), text_color=color.new(color.silver, 40), text_size=SZS)
-    table.cell(hud, 1, 9, "",               bgcolor=color.new(color.black, 20), text_color=LBL, text_size=SZS)
+    // Row 10 — Daily
+    table.cell(hud, 0, 10, "Daily",  bgcolor=W, text_color=BK,   text_size=SZ)
+    table.cell(hud, 1, 10, d_str,    bgcolor=W, text_color=d_col, text_size=SZ)
 
-    // Daily
-    table.cell(hud, 0, 10, "Daily",  bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 10, d_str,    bgcolor=BG, text_color=d_col, text_size=SZ)
+    // Row 11 — 4H
+    table.cell(hud, 0, 11, "4 Hour", bgcolor=W, text_color=BK,    text_size=SZ)
+    table.cell(hud, 1, 11, h4_str,   bgcolor=W, text_color=h4_col, text_size=SZ)
 
-    // 4H
-    table.cell(hud, 0, 11, "4 Hour", bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 11, h4_str,   bgcolor=BG, text_color=h4_col, text_size=SZ)
+    // Row 12 — 1H
+    table.cell(hud, 0, 12, "1 Hour", bgcolor=W, text_color=BK,    text_size=SZ)
+    table.cell(hud, 1, 12, h1_str,   bgcolor=W, text_color=h1_col, text_size=SZ)
 
-    // 1H
-    table.cell(hud, 0, 12, "1 Hour", bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 12, h1_str,   bgcolor=BG, text_color=h1_col, text_size=SZ)
+    // Row 13 — Section header
+    table.cell(hud, 0, 13, "STATS", bgcolor=W, text_color=GR, text_size=size.small)
+    table.cell(hud, 1, 13, "",       bgcolor=W, text_color=GR, text_size=size.small)
 
-    // Spacer
-    table.cell(hud, 0, 13, "- STATS -", bgcolor=color.new(color.black, 20), text_color=color.new(color.silver, 40), text_size=SZS)
-    table.cell(hud, 1, 13, "",          bgcolor=color.new(color.black, 20), text_color=LBL, text_size=SZS)
+    // Row 14 — Win Rate
+    table.cell(hud, 0, 14, "Win Rate", bgcolor=W, text_color=BK,   text_size=SZ)
+    table.cell(hud, 1, 14, str.tostring(win_rate, "#.0") + "%  (" + str.tostring(wins) + "W / " + str.tostring(losses) + "L)", bgcolor=W, text_color=wr_col, text_size=SZ)
 
-    // Win Rate
-    table.cell(hud, 0, 14, "Win Rate", bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 14, str.tostring(win_rate, "#.0") + "%  (" + str.tostring(wins) + "W / " + str.tostring(losses) + "L)", bgcolor=BG, text_color=win_rate >= 50 ? color.lime : color.red, text_size=SZ)
-
-    // Net P&L
-    table.cell(hud, 0, 15, "Net P&L", bgcolor=BG, text_color=LBL, text_size=SZ)
-    table.cell(hud, 1, 15, str.tostring(net_pnl, format.mintick) + "  DD: " + str.tostring(max_dd, format.mintick), bgcolor=BG, text_color=net_pnl >= 0 ? color.lime : color.red, text_size=SZ)
+    // Row 15 — Net P&L
+    table.cell(hud, 0, 15, "Net P&L", bgcolor=W, text_color=BK,    text_size=SZ)
+    table.cell(hud, 1, 15, str.tostring(net_pnl, format.mintick) + "   Max DD: " + str.tostring(max_dd, format.mintick), bgcolor=W, text_color=pnl_col, text_size=SZ)
