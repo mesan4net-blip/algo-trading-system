@@ -11,12 +11,6 @@ indicator("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
      max_lines_count=500)
 
 // ============================================================================
-// TF GUARD - Chart must be set to TTF for trade detection
-// ============================================================================
-if barstate.isfirst and timeframe.period != ttf_in
-    runtime.error("ICT Phase 1: Set chart to TTF (" + ttf_in + ") for trade detection. Labels appear on all TFs via xloc.bar_time.")
-
-// ============================================================================
 // INPUTS
 // ============================================================================
 
