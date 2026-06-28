@@ -638,6 +638,27 @@ if pos == 1 and long_tp2_hit
         losses += 1
     peak_equity := math.max(peak_equity, equity)
     max_dd := math.max(max_dd, peak_equity - equity)
+    array.unshift(tl_num,    trades)
+    array.unshift(tl_dir,    "BUY")
+    array.unshift(tl_entry,  entry_price)
+    array.unshift(tl_exit,   tp2_price)
+    array.unshift(tl_result, "TP2")
+    array.unshift(tl_pips,   _pnl_ltp2 / syminfo.mintick)
+    array.unshift(tl_dollar, _pnl_ltp2 * syminfo.pointvalue * lot_size)
+    array.unshift(tl_date,   f_date_str())
+    if array.size(tl_num) > 20
+        array.pop(tl_num)
+        array.pop(tl_dir)
+        array.pop(tl_entry)
+        array.pop(tl_exit)
+        array.pop(tl_result)
+        array.pop(tl_pips)
+        array.pop(tl_dollar)
+        array.pop(tl_date)
+    if first_trade_date == "---"
+        first_trade_date := f_date_str()
+    last_trade_date := f_date_str()
+
     pos          := 0
     trail_sl     := na
     tp1_hit      := false
@@ -658,6 +679,27 @@ if pos == -1 and short_tp2_hit
         losses += 1
     peak_equity := math.max(peak_equity, equity)
     max_dd := math.max(max_dd, peak_equity - equity)
+    array.unshift(tl_num,    trades)
+    array.unshift(tl_dir,    "SELL")
+    array.unshift(tl_entry,  entry_price)
+    array.unshift(tl_exit,   tp2_price)
+    array.unshift(tl_result, "TP2")
+    array.unshift(tl_pips,   _pnl_stp2 / syminfo.mintick)
+    array.unshift(tl_dollar, _pnl_stp2 * syminfo.pointvalue * lot_size)
+    array.unshift(tl_date,   f_date_str())
+    if array.size(tl_num) > 20
+        array.pop(tl_num)
+        array.pop(tl_dir)
+        array.pop(tl_entry)
+        array.pop(tl_exit)
+        array.pop(tl_result)
+        array.pop(tl_pips)
+        array.pop(tl_dollar)
+        array.pop(tl_date)
+    if first_trade_date == "---"
+        first_trade_date := f_date_str()
+    last_trade_date := f_date_str()
+
     pos          := 0
     trail_sl     := na
     tp1_hit      := false
@@ -694,6 +736,27 @@ if not exited_this_bar and pos == 1 and long_sl_hit
         losses += 1
     peak_equity := math.max(peak_equity, equity)
     max_dd := math.max(max_dd, peak_equity - equity)
+    array.unshift(tl_num,    trades)
+    array.unshift(tl_dir,    "BUY")
+    array.unshift(tl_entry,  entry_price)
+    array.unshift(tl_exit,   trail_sl)
+    array.unshift(tl_result, "SL")
+    array.unshift(tl_pips,   _pnl_lsl / syminfo.mintick)
+    array.unshift(tl_dollar, _pnl_lsl * syminfo.pointvalue * lot_size)
+    array.unshift(tl_date,   f_date_str())
+    if array.size(tl_num) > 20
+        array.pop(tl_num)
+        array.pop(tl_dir)
+        array.pop(tl_entry)
+        array.pop(tl_exit)
+        array.pop(tl_result)
+        array.pop(tl_pips)
+        array.pop(tl_dollar)
+        array.pop(tl_date)
+    if first_trade_date == "---"
+        first_trade_date := f_date_str()
+    last_trade_date := f_date_str()
+
     pos          := 0
     trail_sl     := na
     tp1_hit      := false
@@ -714,6 +777,27 @@ if not exited_this_bar and pos == -1 and short_sl_hit
         losses += 1
     peak_equity := math.max(peak_equity, equity)
     max_dd := math.max(max_dd, peak_equity - equity)
+    array.unshift(tl_num,    trades)
+    array.unshift(tl_dir,    "SELL")
+    array.unshift(tl_entry,  entry_price)
+    array.unshift(tl_exit,   trail_sl)
+    array.unshift(tl_result, "SL")
+    array.unshift(tl_pips,   _pnl_ssl / syminfo.mintick)
+    array.unshift(tl_dollar, _pnl_ssl * syminfo.pointvalue * lot_size)
+    array.unshift(tl_date,   f_date_str())
+    if array.size(tl_num) > 20
+        array.pop(tl_num)
+        array.pop(tl_dir)
+        array.pop(tl_entry)
+        array.pop(tl_exit)
+        array.pop(tl_result)
+        array.pop(tl_pips)
+        array.pop(tl_dollar)
+        array.pop(tl_date)
+    if first_trade_date == "---"
+        first_trade_date := f_date_str()
+    last_trade_date := f_date_str()
+
     pos          := 0
     trail_sl     := na
     tp1_hit      := false
