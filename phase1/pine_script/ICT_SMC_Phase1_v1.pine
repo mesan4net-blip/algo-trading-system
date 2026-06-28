@@ -812,7 +812,7 @@ if not exited_this_bar and pos == 0 and short_entry_raw
 // --- TRAILING SL UPDATE (after TP1, trail the runner) ---
 if pos == 1 and tp1_hit
     candidate = f_trail_long()
-    if not na(candidate) and candidate > trail_sl and candidate < close
+    if not na(candidate) and candidate > trail_sl and candidate < m5_c
         if show_trail_dots
             label.new(bar_index, candidate - atr14 * 0.3, "",
                       style=label.style_circle, color=color.new(color.green, 0), size=size.tiny)
@@ -820,7 +820,10 @@ if pos == 1 and tp1_hit
 
 if pos == -1 and tp1_hit
     candidate = f_trail_short()
-    if not na(candidate) and candidate < trail_sl and candidate > close
+    // For shorts: move SL down (lower high = tighter stop = more profit locked)
+    // candidate < trail_sl = new highest high is lower than current SL (good, move it down)
+    // candidate > close = don't move SL below current price (would cause immediate exit)
+    if not na(candidate) and candidate < trail_sl and candidate > m5_c
         if show_trail_dots
             label.new(bar_index, candidate + atr14 * 0.3, "",
                       style=label.style_circle, color=color.new(color.red, 0), size=size.tiny)
