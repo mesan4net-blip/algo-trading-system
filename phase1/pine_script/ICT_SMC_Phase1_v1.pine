@@ -1127,7 +1127,7 @@ if show_trade_log and barstate.islast
 
     tot_row     = max_rows + 1
     net_pips2   = (gross_profit - gross_loss) / syminfo.mintick
-    net_usd2    = (gross_profit - gross_loss) * syminfo.pointvalue * lot_size
+    net_usd2    = (gross_profit - gross_loss) / pip_size * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue)
     tot_pip_str = net_pips2 >= 0 ? "+" + str.tostring(math.round(net_pips2)) : str.tostring(math.round(net_pips2))
     tot_usd_abs = math.abs(math.round(net_usd2, 2))
     tot_usd_str = net_usd2 >= 0 ? "+$" + str.tostring(tot_usd_abs) : "-$" + str.tostring(tot_usd_abs)
