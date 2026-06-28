@@ -72,12 +72,14 @@ displace_mult  = input.float(1.5, "Displacement Candle Min Size (ATRx)", group=g
 
 // --- Visuals ---
 grp_vis = "Visuals"
-show_entry_labels = input.bool(true, "Show Entry Labels",    group=grp_vis)
-show_sl_line      = input.bool(true, "Show SL Line",         group=grp_vis)
-show_tp_lines     = input.bool(true, "Show TP1/TP2 Lines",   group=grp_vis)
-show_trail_dots   = input.bool(true, "Show Trail SL Dots",   group=grp_vis)
-show_hud          = input.bool(true, "Show HUD Table",       group=grp_vis)
+show_entry_labels = input.bool(true, "Show Entry Labels",         group=grp_vis)
+show_sl_line      = input.bool(true, "Show SL Line",              group=grp_vis)
+show_tp_lines     = input.bool(true, "Show TP1/TP2 Lines",        group=grp_vis)
+show_trail_dots   = input.bool(true, "Show Trail SL Dots",        group=grp_vis)
+show_hud          = input.bool(true, "Show HUD Panel (toggle)",   group=grp_vis)
+show_trade_log    = input.bool(true, "Show Trade Log Panel (toggle)", group=grp_vis)
 show_bias_label   = input.bool(true, "Show Bias Label (top right)", group=grp_vis)
+lot_size          = input.float(1.0, "Lot Size (for $ P&L)",      group=grp_vis, minval=0.01, step=0.01)
 
 // --- Alerts ---
 grp_alert = "Alerts / Webhook"
@@ -580,6 +582,27 @@ var int   trades       = 0
 var float peak_equity  = 0.0
 var float equity       = 0.0
 var float max_dd       = 0.0
+
+// Trade log arrays - stores last 20 completed trades
+var int[]    tl_num    = array.new_int()
+var string[] tl_dir    = array.new_string()
+var float[]  tl_entry  = array.new_float()
+var float[]  tl_exit   = array.new_float()
+var string[] tl_result = array.new_string()
+var float[]  tl_pips   = array.new_float()
+var float[]  tl_dollar = array.new_float()
+var string[] tl_date   = array.new_string()
+
+// Date range tracking
+var string first_trade_date = "---"
+var string last_trade_date  = "---"
+
+f_date_str() =>
+    mo = month < 10 ? "0" + str.tostring(month) : str.tostring(month)
+    dy = dayofmonth < 10 ? "0" + str.tostring(dayofmonth) : str.tostring(dayofmonth)
+    hr = hour < 10 ? "0" + str.tostring(hour) : str.tostring(hour)
+    mi = minute < 10 ? "0" + str.tostring(minute) : str.tostring(minute)
+    str.tostring(year) + "-" + mo + "-" + dy + "  " + hr + ":" + mi
 
 // f_log_exit replaced with inline logic below
 
