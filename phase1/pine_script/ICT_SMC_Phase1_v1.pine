@@ -866,7 +866,7 @@ GR  = color.new(color.gray, 20)
 SZ  = size.normal
 SZS = size.small
 
-var table hud = table.new(position.bottom_right, 2, 20, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
+var table hud = table.new(position.bottom_right, 2, 23, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
 
 if show_hud
     // Row 0 - Title + timestamp
@@ -949,10 +949,84 @@ if show_hud
     table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
     table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
 
+    // Row 20 - Date Range header
+    table.cell(hud, 0, 20, "DATE RANGE", bgcolor=W, text_color=GR, text_size=SZS)
+    table.cell(hud, 1, 20, "",            bgcolor=W, text_color=GR, text_size=SZS)
 
+    // Row 21 - First trade
+    table.cell(hud, 0, 21, "First Trade", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 21, first_trade_date, bgcolor=W, text_color=BK, text_size=SZ)
 
+    // Row 22 - Last trade
+    table.cell(hud, 0, 22, "Last Trade", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 22, last_trade_date, bgcolor=W, text_color=BK, text_size=SZ)
 
+// ============================================================================
+// TRADE LOG PANEL - top left, toggleable, last 20 trades
+// ============================================================================
+var table tlog = table.new(position.top_left, 8, 22, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
 
+if show_trade_log and barstate.islast
+    W2   = color.white
+    BK2  = color.new(color.black, 0)
+    GR2  = color.new(color.gray, 20)
+    HDR  = color.new(color.black, 10)
+    SZS2 = size.small
+    SZT2 = size.tiny
 
+    table.cell(tlog, 0, 0, "#",      bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 1, 0, "DIR",    bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 2, 0, "ENTRY",  bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 3, 0, "EXIT",   bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 4, 0, "RESULT", bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 5, 0, "PIPS",   bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 6, 0, "$",      bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 7, 0, "DATE",   bgcolor=HDR, text_color=W2, text_size=SZS2)
 
+    tl_size  = array.size(tl_num)
+    max_rows = math.min(tl_size, 20)
 
+    if max_rows > 0
+        for idx = 0 to max_rows - 1
+            trow     = idx + 1
+            t_num    = str.tostring(array.get(tl_num,    idx))
+            t_dir    = array.get(tl_dir,    idx)
+            t_entry  = str.tostring(array.get(tl_entry,  idx), format.mintick)
+            t_exit   = str.tostring(array.get(tl_exit,   idx), format.mintick)
+            t_result = array.get(tl_result, idx)
+            t_pips   = array.get(tl_pips,   idx)
+            t_dollar = array.get(tl_dollar, idx)
+            t_date   = array.get(tl_date,   idx)
+            t_win    = t_pips >= 0
+            t_col    = t_win ? color.new(color.green, 0) : color.new(color.red, 0)
+            pip_str  = t_win ? "+" + str.tostring(math.round(t_pips)) : str.tostring(math.round(t_pips))
+            usd_abs  = math.abs(math.round(t_dollar, 2))
+            usd_str  = t_win ? "+$" + str.tostring(usd_abs) : "-$" + str.tostring(usd_abs)
+            dir_col  = t_dir == "BUY" ? color.new(color.green, 0) : color.new(color.red, 0)
+            res_col  = t_result == "SL" ? color.new(color.red, 0) : color.new(color.green, 0)
+
+            table.cell(tlog, 0, trow, t_num,    bgcolor=W2, text_color=BK2,    text_size=SZT2)
+            table.cell(tlog, 1, trow, t_dir,    bgcolor=W2, text_color=dir_col, text_size=SZT2)
+            table.cell(tlog, 2, trow, t_entry,  bgcolor=W2, text_color=BK2,    text_size=SZT2)
+            table.cell(tlog, 3, trow, t_exit,   bgcolor=W2, text_color=BK2,    text_size=SZT2)
+            table.cell(tlog, 4, trow, t_result, bgcolor=W2, text_color=res_col, text_size=SZT2)
+            table.cell(tlog, 5, trow, pip_str,  bgcolor=W2, text_color=t_col,  text_size=SZT2)
+            table.cell(tlog, 6, trow, usd_str,  bgcolor=W2, text_color=t_col,  text_size=SZT2)
+            table.cell(tlog, 7, trow, t_date,   bgcolor=W2, text_color=GR2,    text_size=SZT2)
+
+    tot_row     = max_rows + 1
+    net_pips2   = (gross_profit - gross_loss) / syminfo.mintick
+    net_usd2    = (gross_profit - gross_loss) * syminfo.pointvalue * lot_size
+    tot_pip_str = net_pips2 >= 0 ? "+" + str.tostring(math.round(net_pips2)) : str.tostring(math.round(net_pips2))
+    tot_usd_abs = math.abs(math.round(net_usd2, 2))
+    tot_usd_str = net_usd2 >= 0 ? "+$" + str.tostring(tot_usd_abs) : "-$" + str.tostring(tot_usd_abs)
+    tot_col2    = net_usd2 >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
+
+    table.cell(tlog, 0, tot_row, "TOTAL",   bgcolor=HDR, text_color=W2,     text_size=SZS2)
+    table.cell(tlog, 1, tot_row, str.tostring(trades) + " trades", bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 2, tot_row, "",         bgcolor=HDR, text_color=W2,     text_size=SZS2)
+    table.cell(tlog, 3, tot_row, "",         bgcolor=HDR, text_color=W2,     text_size=SZS2)
+    table.cell(tlog, 4, tot_row, str.tostring(wins) + "W / " + str.tostring(losses) + "L", bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 5, tot_row, tot_pip_str, bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
+    table.cell(tlog, 6, tot_row, tot_usd_str, bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
+    table.cell(tlog, 7, tot_row, "",          bgcolor=HDR, text_color=W2,     text_size=SZS2)
