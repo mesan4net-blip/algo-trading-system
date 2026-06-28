@@ -646,7 +646,7 @@ f_date_str() =>
 // --- ENTRIES ---
 var int last_alert_bar = na
 
-if not exited_this_bar and pos == 0 and long_entry_raw
+if pos == 0 and long_entry_raw
     entry_price     := close
     sl_price        := f_long_sl(active_ob_bot)
     risk             = entry_price - sl_price
@@ -686,7 +686,7 @@ if not exited_this_bar and pos == 0 and long_entry_raw
         alert(msg, alert.freq_once_per_bar)
         last_alert_bar := bar_index
 
-if not exited_this_bar and pos == 0 and short_entry_raw
+if pos == 0 and short_entry_raw
     entry_price    := close
     sl_price       := f_short_sl(active_bear_ob_top)
     risk            = sl_price - entry_price
