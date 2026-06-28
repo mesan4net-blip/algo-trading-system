@@ -242,9 +242,11 @@ if not na(last_sl_1h) and h1_close < last_sl_1h
 // TOP-DOWN BIAS
 // Daily sets bias -> 4H confirms -> 1H activates -> 5M triggers
 // ============================================================================
-// Bias: Daily + 4H must agree. 1H must not be opposite (can be flat).
-bias_bull = daily_struct == 1 and h4_struct == 1 and h1_struct >= 0
-bias_bear = daily_struct == -1 and h4_struct == -1 and h1_struct <= 0
+// Bias: 4H + 1H must agree (trading bias).
+// Daily acts as a filter — if Daily is bearish, only allow short bias. If bullish, only long.
+// If Daily is flat/0, allow 4H+1H to decide freely.
+bias_bull = h4_struct == 1 and h1_struct == 1 and daily_struct >= 0
+bias_bear = h4_struct == -1 and h1_struct == -1 and daily_struct <= 0
 
 // ============================================================================
 // ORDER BLOCK DETECTION (5M chart)
@@ -949,5 +951,6 @@ if show_hud
     sig_col  = all_bull ? color.new(color.green, 0) : all_bear ? color.new(color.red, 0) : color.new(color.gray, 0)
     table.cell(hud, 0, 21, "Signal", bgcolor=W, text_color=BK,     text_size=SZ)
     table.cell(hud, 1, 21, sig_txt,  bgcolor=W, text_color=sig_col, text_size=size.large)
+
 
 
