@@ -865,7 +865,7 @@ GR  = color.new(color.gray, 20)
 SZ  = size.normal
 SZS = size.small
 
-var table hud = table.new(f_pos(hud_pos_inp), 2, 23, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
+var table hud = table.new(f_pos(hud_pos_inp), 2, 24, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
 
 if show_hud
     // Row 0 - Title + timestamp
@@ -925,43 +925,47 @@ if show_hud
     table.cell(hud, 1, 13, sig_txt,  bgcolor=W, text_color=sig_col, text_size=SZ)
 
     // Row 14 - Section
-    table.cell(hud, 0, 14, "TRADE HISTORY", bgcolor=W, text_color=GR, text_size=SZS)
-    table.cell(hud, 1, 14, str.tostring(trades) + " trades", bgcolor=W, text_color=GR, text_size=SZS)
+    // --- TRADE HISTORY (from strategy native) ---
+    strat_total  = strategy.wintrades + strategy.losstrades + strategy.eventrades
+    strat_wr     = strat_total > 0 ? strategy.wintrades / strat_total * 100 : 0.0
+    strat_wr_c   = strat_wr >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
+    strat_pnl_c  = strategy.netprofit >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
+    strat_pf     = strategy.grossloss != 0 ? math.abs(strategy.grossprofit / strategy.grossloss) : 0.0
+    pf_col       = strat_pf >= 1.5 ? color.new(color.green, 0) : strat_pf >= 1.0 ? color.new(color.orange, 0) : color.new(color.red, 0)
 
-    // Row 15 - Win Rate (from strategy)
-    strat_wr   = strategy.wintrades + strategy.losstrades > 0 ? strategy.wintrades / (strategy.wintrades + strategy.losstrades) * 100 : 0.0
-    strat_wr_c = strat_wr >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
+    // First and last trade dates from strategy
+    first_dt = strat_total > 0 ? str.format_time(strategy.closedtrades.entry_time(strat_total - 1), "yyyy-MM-dd HH:mm") : "---"
+    last_dt  = strat_total > 0 ? str.format_time(strategy.closedtrades.exit_time(0), "yyyy-MM-dd HH:mm") : "---"
+
+    table.cell(hud, 0, 14, "TRADE HISTORY", bgcolor=W, text_color=GR, text_size=SZS)
+    table.cell(hud, 1, 14, str.tostring(strat_total) + " trades", bgcolor=W, text_color=GR, text_size=SZS)
+
     table.cell(hud, 0, 15, "Win Rate", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 15, str.tostring(strat_wr, "#.0") + "%  (" + str.tostring(strategy.wintrades) + "W / " + str.tostring(strategy.losstrades) + "L)", bgcolor=W, text_color=strat_wr_c, text_size=SZ)
 
-    // Row 16 - Net P&L (from strategy)
-    strat_pnl_c = strategy.netprofit >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
     table.cell(hud, 0, 16, "Net P&L ($)", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 16, "$" + str.tostring(math.round(strategy.netprofit, 2)), bgcolor=W, text_color=strat_pnl_c, text_size=SZ)
 
-    // Row 17 - Gross Profit
-    table.cell(hud, 0, 17, "Gross Profit", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 17, "$" + str.tostring(math.round(strategy.grossprofit, 2)), bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
+    table.cell(hud, 0, 17, "Profit Factor", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 17, str.tostring(strat_pf, "#.00"), bgcolor=W, text_color=pf_col, text_size=SZ)
 
-    // Row 18 - Gross Loss
-    table.cell(hud, 0, 18, "Gross Loss", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 18, "$" + str.tostring(math.round(strategy.grossloss, 2)), bgcolor=W, text_color=color.new(color.red, 0), text_size=SZ)
+    table.cell(hud, 0, 18, "Gross Profit", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 18, "$" + str.tostring(math.round(strategy.grossprofit, 2)), bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
-    // Row 19 - Max DD
-    table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 19, "$" + str.tostring(math.round(strategy.max_drawdown, 2)), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+    table.cell(hud, 0, 19, "Gross Loss", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 19, "$" + str.tostring(math.round(strategy.grossloss, 2)), bgcolor=W, text_color=color.new(color.red, 0), text_size=SZ)
 
-    // Row 20 - Date Range header
-    table.cell(hud, 0, 20, "DATE RANGE", bgcolor=W, text_color=GR, text_size=SZS)
-    table.cell(hud, 1, 20, "",            bgcolor=W, text_color=GR, text_size=SZS)
+    table.cell(hud, 0, 20, "Max Drawdown", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 20, "$" + str.tostring(math.round(strategy.max_drawdown, 2)), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
 
-    // Row 21 - First trade
-    table.cell(hud, 0, 21, "First Trade", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 21, array.get(first_trade_arr, 0), bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 0, 21, "DATE RANGE", bgcolor=W, text_color=GR, text_size=SZS)
+    table.cell(hud, 1, 21, "",            bgcolor=W, text_color=GR, text_size=SZS)
 
-    // Row 22 - Last trade
-    table.cell(hud, 0, 22, "Last Trade", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 22, array.get(last_trade_arr, 0), bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 0, 22, "First Trade", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 22, first_dt,      bgcolor=W, text_color=BK, text_size=SZ)
+
+    table.cell(hud, 0, 23, "Last Trade", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 23, last_dt,       bgcolor=W, text_color=BK, text_size=SZ)
 
 // ============================================================================
 // TRADE LOG PANEL - top left, toggleable, last 20 trades
@@ -1032,4 +1036,5 @@ if show_trade_log and barstate.islast
     table.cell(tlog, 5, tot_row, tot_pip_str, bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
     table.cell(tlog, 6, tot_row, tot_usd_str, bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
     table.cell(tlog, 7, tot_row, "",          bgcolor=HDR, text_color=W2,     text_size=SZS2)
+
 
