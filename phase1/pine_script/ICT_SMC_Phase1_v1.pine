@@ -926,7 +926,7 @@ if show_hud
 
     // Row 14 - Section
     // --- TRADE HISTORY (from strategy native) ---
-    strat_total  = strategy.wintrades + strategy.losstrades + strategy.eventrades
+    strat_total  = strategy.closedtrades
     strat_wr     = strat_total > 0 ? strategy.wintrades / strat_total * 100 : 0.0
     strat_wr_c   = strat_wr >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
     strat_pnl_c  = strategy.netprofit >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
@@ -936,7 +936,7 @@ if show_hud
     // First and last trade dates from strategy
     first_dt = "---"
     if strat_total > 0
-        ft = strategy.closedtrades.entry_time(strat_total - 1)
+        ft = strategy.closedtrades.entry_time(strat_total - 1)  // oldest = first
         fmo = month(ft) < 10 ? "0" + str.tostring(month(ft)) : str.tostring(month(ft))
         fdy = dayofmonth(ft) < 10 ? "0" + str.tostring(dayofmonth(ft)) : str.tostring(dayofmonth(ft))
         fhr = hour(ft) < 10 ? "0" + str.tostring(hour(ft)) : str.tostring(hour(ft))
@@ -944,7 +944,7 @@ if show_hud
         first_dt := str.tostring(year(ft)) + "-" + fmo + "-" + fdy + " " + fhr + ":" + fmi
     last_dt = "---"
     if strat_total > 0
-        lt = strategy.closedtrades.exit_time(0)
+        lt = strategy.closedtrades.entry_time(0)  // most recent = last
         lmo = month(lt) < 10 ? "0" + str.tostring(month(lt)) : str.tostring(month(lt))
         ldy = dayofmonth(lt) < 10 ? "0" + str.tostring(dayofmonth(lt)) : str.tostring(dayofmonth(lt))
         lhr = hour(lt) < 10 ? "0" + str.tostring(hour(lt)) : str.tostring(hour(lt))
@@ -952,7 +952,7 @@ if show_hud
         last_dt := str.tostring(year(lt)) + "-" + lmo + "-" + ldy + " " + lhr + ":" + lmi
 
     table.cell(hud, 0, 14, "TRADE HISTORY", bgcolor=W, text_color=GR, text_size=SZS)
-    table.cell(hud, 1, 14, str.tostring(strat_total) + " trades", bgcolor=W, text_color=GR, text_size=SZS)
+    table.cell(hud, 1, 14, str.tostring(strat_total) + " trades  " + str.tostring(strategy.wintrades) + "W / " + str.tostring(strategy.losstrades) + "L", bgcolor=W, text_color=GR, text_size=SZS)
 
     table.cell(hud, 0, 15, "Win Rate", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 15, str.tostring(strat_wr, "#.0") + "%  (" + str.tostring(strategy.wintrades) + "W / " + str.tostring(strategy.losstrades) + "L)", bgcolor=W, text_color=strat_wr_c, text_size=SZ)
