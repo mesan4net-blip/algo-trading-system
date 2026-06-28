@@ -6,7 +6,7 @@
 // Version: 1.0
 // ============================================================================
 //@version=6
-indicator("ICT/SMC Phase 1 - OB/FVG/BOS/MSS", shorttitle="ICT Phase1 v1.0",
+indicator("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
      overlay=true, max_bars_back=5000, max_labels_count=500, max_boxes_count=500,
      max_lines_count=500)
 
