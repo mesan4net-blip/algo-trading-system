@@ -832,12 +832,8 @@ if show_bias_label and barstate.islast
     label.delete(bias_lbl)
     bias_txt   = bias_bull ? "^ BULLISH BIAS" : bias_bear ? "v BEARISH BIAS" : "- NO BIAS"
     bias_col   = bias_bull ? color.new(color.green, 0) : bias_bear ? color.new(color.red, 0) : color.new(color.gray, 0)
-    bias_lbl  := label.new(bar_index + 3, high,
-                           bias_txt + "\nD: " + (daily_struct == 1 ? "^" : daily_struct == -1 ? "v" : "-") +
-                           "  4H: " + (h4_struct == 1 ? "^" : h4_struct == -1 ? "v" : "-") +
-                           "  1H: " + (h1_struct == 1 ? "^" : h1_struct == -1 ? "v" : "-"),
-                           style=label.style_label_left,
-                           color=bias_col, textcolor=color.white, size=size.normal)
+    bias_full = bias_txt + "\n" + htf3_in + ": " + (daily_struct == 1 ? "^" : daily_struct == -1 ? "v" : "-") + "  " + htf2_in + ": " + (h4_struct == 1 ? "^" : h4_struct == -1 ? "v" : "-") + "  " + htf1_in + ": " + (h1_struct == 1 ? "^" : h1_struct == -1 ? "v" : "-")
+    bias_lbl  := label.new(bar_index + 3, high, bias_full, style=label.style_label_left, color=bias_col, textcolor=color.white, size=size.normal)
 
 // ============================================================================
 // ============================================================================
