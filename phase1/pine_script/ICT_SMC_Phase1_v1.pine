@@ -396,44 +396,40 @@ if show_fvg and barstate.islast
 
 // ============================================================================
 // ============================================================================
-// MARKET STRUCTURE LABELS — BOS / MSS (with break lines)
-// BOS = continuation, MSS = shift (your entry trigger signal)
-// CHoCH = early warning only, off by default
+// ============================================================================
+// MARKET STRUCTURE LABELS
+// MSS = your entry trigger — bold, clear, with vertical spike
+// BOS = continuation context — subtle dashed line only, no label clutter
+// CHoCH = off by default
 // ============================================================================
 
-// BOS Bull — draw horizontal line from swing high that was broken
-if show_bos and bos_bull_5m and not na(last_sh_5m)
-    line.new(last_sh_5m_bar, last_sh_5m, bar_index, last_sh_5m, color=color.new(color.green, 40), width=1, style=line.style_dashed)
-    label.new(bar_index, last_sh_5m, "BOS", style=label.style_label_left, color=color.new(color.green, 40), textcolor=color.white, size=size.tiny)
+// BOS — dashed line only, no floating label
+if show_bos and bos_bull_5m and not na(last_sh_5m) and not na(last_sh_5m_bar)
+    line.new(last_sh_5m_bar, last_sh_5m, bar_index, last_sh_5m, color=color.new(color.green, 60), width=1, style=line.style_dashed)
 
-// BOS Bear — draw horizontal line from swing low that was broken
-if show_bos and bos_bear_5m and not na(last_sl_5m)
-    line.new(last_sl_5m_bar, last_sl_5m, bar_index, last_sl_5m, color=color.new(color.red, 40), width=1, style=line.style_dashed)
-    label.new(bar_index, last_sl_5m, "BOS", style=label.style_label_left, color=color.new(color.red, 40), textcolor=color.white, size=size.tiny)
+if show_bos and bos_bear_5m and not na(last_sl_5m) and not na(last_sl_5m_bar)
+    line.new(last_sl_5m_bar, last_sl_5m, bar_index, last_sl_5m, color=color.new(color.red, 60), width=1, style=line.style_dashed)
 
-// MSS Bull — bold, solid line, larger label. This is the SHIFT signal.
-if show_mss and mss_bull_5m and not na(last_sh_5m)
-    line.new(last_sh_5m_bar, last_sh_5m, bar_index, last_sh_5m, color=color.new(color.lime, 0), width=2, style=line.style_solid)
-    label.new(bar_index, last_sh_5m, "MSS", style=label.style_label_left, color=color.new(color.lime, 0), textcolor=color.black, size=size.small)
-    // Vertical marker on the MSS candle
-    line.new(bar_index, low - atr14 * 0.3, bar_index, low - atr14 * 1.2, color=color.new(color.lime, 0), width=2)
+// MSS — solid bold line + label at right end + vertical spike on candle
+if show_mss and mss_bull_5m and not na(last_sh_5m) and not na(last_sh_5m_bar)
+    line.new(last_sh_5m_bar, last_sh_5m, bar_index + 3, last_sh_5m, color=color.new(color.lime, 0), width=2, style=line.style_solid)
+    label.new(bar_index + 3, last_sh_5m, "MSS", style=label.style_label_left, color=color.new(color.lime, 0), textcolor=color.black, size=size.small)
+    line.new(bar_index, low - atr14 * 0.2, bar_index, low - atr14 * 1.0, color=color.new(color.lime, 0), width=2)
 
-// MSS Bear — bold, solid line, larger label
-if show_mss and mss_bear_5m and not na(last_sl_5m)
-    line.new(last_sl_5m_bar, last_sl_5m, bar_index, last_sl_5m, color=color.new(color.orange, 0), width=2, style=line.style_solid)
-    label.new(bar_index, last_sl_5m, "MSS", style=label.style_label_left, color=color.new(color.orange, 0), textcolor=color.black, size=size.small)
-    // Vertical marker on the MSS candle
-    line.new(bar_index, high + atr14 * 0.3, bar_index, high + atr14 * 1.2, color=color.new(color.orange, 0), width=2)
+if show_mss and mss_bear_5m and not na(last_sl_5m) and not na(last_sl_5m_bar)
+    line.new(last_sl_5m_bar, last_sl_5m, bar_index + 3, last_sl_5m, color=color.new(color.orange, 0), width=2, style=line.style_solid)
+    label.new(bar_index + 3, last_sl_5m, "MSS", style=label.style_label_left, color=color.new(color.orange, 0), textcolor=color.black, size=size.small)
+    line.new(bar_index, high + atr14 * 0.2, bar_index, high + atr14 * 1.0, color=color.new(color.orange, 0), width=2)
 
-// CHoCH — early warning only, subtle
+// CHoCH — off by default, tiny if enabled
 choch_bull = struct_dir_5m == -1 and not na(last_sl_5m) and low < last_sl_5m and close > last_sl_5m
 choch_bear = struct_dir_5m == 1  and not na(last_sh_5m) and high > last_sh_5m and close < last_sh_5m
 
 if show_choch and choch_bull
-    label.new(bar_index, low - atr14 * 0.4, "CHoCH", style=label.style_label_up, color=color.new(color.teal, 50), textcolor=color.white, size=size.tiny)
+    label.new(bar_index, low - atr14 * 0.3, "CHoCH", style=label.style_label_up, color=color.new(color.teal, 50), textcolor=color.white, size=size.tiny)
 
 if show_choch and choch_bear
-    label.new(bar_index, high + atr14 * 0.4, "CHoCH", style=label.style_label_down, color=color.new(color.purple, 50), textcolor=color.white, size=size.tiny)
+    label.new(bar_index, high + atr14 * 0.3, "CHoCH", style=label.style_label_down, color=color.new(color.purple, 50), textcolor=color.white, size=size.tiny)
 
 // POI PROXIMITY CHECK
 // Is price currently inside or retesting a valid OB or FVG?
@@ -789,70 +785,58 @@ if show_bias_label and barstate.islast
 // ============================================================================
 // ============================================================================
 // ============================================================================
-// HUD TABLE — White background, colored text only
+// ============================================================================
+// HUD TABLE — White background, colored text only, with trade log
 // ============================================================================
 win_rate = (wins + losses) > 0 ? (float(wins) / float(wins + losses)) * 100.0 : 0.0
-pl_ratio = gross_loss > 0 ? gross_profit / gross_loss : 0.0
 net_pnl  = gross_profit - gross_loss
 
-p_dir   = pos == 1 ? "LONG" : pos == -1 ? "SHORT" : "FLAT"
-p_col   = pos == 1 ? color.new(color.green, 0) : pos == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
-p_entry = pos != 0 ? str.tostring(entry_price, format.mintick) : "---"
-p_sl    = pos != 0 ? str.tostring(trail_sl,    format.mintick) : "---"
-p_tp1   = pos != 0 ? str.tostring(tp1_price,   format.mintick) : "---"
-p_tp2   = pos != 0 ? str.tostring(tp2_price,   format.mintick) : "---"
-p_tp1s  = tp1_hit ? "TP1 HIT - trailing runner" : pos != 0 ? "Waiting for TP1" : "---"
-p_tp1sc = tp1_hit ? color.new(color.green, 0) : color.new(color.gray, 0)
-d_str   = daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT"
-h4_str  = h4_struct  == 1 ? "BULLISH" : h4_struct  == -1 ? "BEARISH" : "FLAT"
-h1_str  = h1_struct  == 1 ? "BULLISH" : h1_struct  == -1 ? "BEARISH" : "FLAT"
-d_col   = daily_struct == 1 ? color.new(color.green, 0) : daily_struct == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
-h4_col  = h4_struct  == 1 ? color.new(color.green, 0) : h4_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
-h1_col  = h1_struct  == 1 ? color.new(color.green, 0) : h1_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
-kz_str  = in_london ? "LONDON" : in_ny ? "NEW YORK" : "CLOSED"
-kz_col  = in_kz ? color.new(color.green, 0) : color.new(color.red, 0)
-wr_col  = win_rate >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
-pnl_col = net_pnl >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
+p_dir    = pos == 1 ? "LONG" : pos == -1 ? "SHORT" : "FLAT"
+p_col    = pos == 1 ? color.new(color.green, 0) : pos == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
+p_entry  = pos != 0 ? str.tostring(entry_price, format.mintick) : "---"
+p_sl     = pos != 0 ? str.tostring(trail_sl,    format.mintick) : "---"
+p_tp1    = pos != 0 ? str.tostring(tp1_price,   format.mintick) : "---"
+p_tp2    = pos != 0 ? str.tostring(tp2_price,   format.mintick) : "---"
+p_stat   = tp1_hit ? "TP1 hit - trailing" : pos != 0 ? "Waiting for TP1" : "---"
+p_statc  = tp1_hit ? color.new(color.green, 0) : color.new(color.gray, 0)
+d_str    = daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT"
+h4_str   = h4_struct  == 1 ? "BULLISH" : h4_struct  == -1 ? "BEARISH" : "FLAT"
+h1_str   = h1_struct  == 1 ? "BULLISH" : h1_struct  == -1 ? "BEARISH" : "FLAT"
+d_col    = daily_struct == 1 ? color.new(color.green, 0) : daily_struct == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
+h4_col   = h4_struct  == 1 ? color.new(color.green, 0) : h4_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
+h1_col   = h1_struct  == 1 ? color.new(color.green, 0) : h1_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
+kz_str   = in_london ? "LONDON" : in_ny ? "NEW YORK" : "CLOSED"
+kz_col   = in_kz ? color.new(color.green, 0) : color.new(color.red, 0)
+wr_col   = win_rate >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
+pnl_col  = net_pnl >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
+sig_all_b = bias_bull and poi_bull and mss_bull_5m and in_kz
+sig_all_s = bias_bear and poi_bear and mss_bear_5m and in_kz
+sig_txt   = sig_all_b ? "LONG SIGNAL READY" : sig_all_s ? "SHORT SIGNAL READY" : "No signal yet"
+sig_col   = sig_all_b ? color.new(color.green, 0) : sig_all_s ? color.new(color.red, 0) : color.new(color.gray, 0)
 
-// Signal checklist — shows exactly which conditions are met
-chk_bias_b  = bias_bull  ? "PASS" : "FAIL"
-chk_bias_s  = bias_bear  ? "PASS" : "FAIL"
-chk_poi_b   = poi_bull   ? "PASS" : "FAIL"
-chk_poi_s   = poi_bear   ? "PASS" : "FAIL"
-chk_mss_b   = mss_bull_5m ? "PASS" : "FAIL"
-chk_mss_s   = mss_bear_5m ? "PASS" : "FAIL"
-chk_disp_b  = disp_bull  ? "PASS" : "FAIL"
-chk_disp_s  = disp_bear  ? "PASS" : "FAIL"
-chk_kz      = in_kz      ? "PASS" : "FAIL"
-chk_col_b   = bias_bull  ? color.new(color.green, 0) : color.new(color.red, 0)
-chk_col_s   = bias_bear  ? color.new(color.green, 0) : color.new(color.red, 0)
-chk_poi_cb  = poi_bull   ? color.new(color.green, 0) : color.new(color.red, 0)
-chk_poi_cs  = poi_bear   ? color.new(color.green, 0) : color.new(color.red, 0)
-chk_mss_cb  = mss_bull_5m ? color.new(color.green, 0) : color.new(color.red, 0)
-chk_mss_cs  = mss_bear_5m ? color.new(color.green, 0) : color.new(color.red, 0)
-chk_disp_cb = disp_bull  ? color.new(color.green, 0) : color.new(color.red, 0)
-chk_disp_cs = disp_bear  ? color.new(color.green, 0) : color.new(color.red, 0)
-chk_kz_c    = in_kz      ? color.new(color.green, 0) : color.new(color.red, 0)
+// Timestamp
+ts_str = str.tostring(year) + "-" + (month < 10 ? "0" : "") + str.tostring(month) + "-" + (dayofmonth < 10 ? "0" : "") + str.tostring(dayofmonth) + " " + (hour < 10 ? "0" : "") + str.tostring(hour) + ":" + (minute < 10 ? "0" : "") + str.tostring(minute)
 
-W  = color.white
-BK = color.new(color.black, 0)
-GR = color.new(color.gray, 0)
-SZ = size.normal
+W   = color.white
+BK  = color.new(color.black, 0)
+GR  = color.new(color.gray, 20)
+SZ  = size.normal
+SZS = size.small
 
-var table hud = table.new(position.bottom_right, 2, 22, frame_color=W, frame_width=1, border_color=color.new(color.gray, 60), border_width=1)
+var table hud = table.new(position.bottom_right, 2, 20, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
 
 if show_hud
-    // Row 0 — Title
+    // Row 0 — Title + timestamp
     table.cell(hud, 0, 0, "ICT / SMC  Phase 1", bgcolor=W, text_color=BK, text_size=size.large)
-    table.cell(hud, 1, 0, "v1.0",               bgcolor=W, text_color=GR,  text_size=size.large)
+    table.cell(hud, 1, 0, ts_str,                bgcolor=W, text_color=GR, text_size=SZS)
 
     // Row 1 — Trade Window
     table.cell(hud, 0, 1, "Trade Window", bgcolor=W, text_color=BK,    text_size=SZ)
-    table.cell(hud, 1, 1, kz_str,      bgcolor=W, text_color=kz_col, text_size=SZ)
+    table.cell(hud, 1, 1, kz_str,         bgcolor=W, text_color=kz_col, text_size=SZ)
 
-    // Row 2 — Section header
-    table.cell(hud, 0, 2, "POSITION", bgcolor=W, text_color=GR, text_size=size.small)
-    table.cell(hud, 1, 2, "",          bgcolor=W, text_color=GR, text_size=size.small)
+    // Row 2 — Section
+    table.cell(hud, 0, 2, "OPEN POSITION", bgcolor=W, text_color=GR, text_size=SZS)
+    table.cell(hud, 1, 2, "",              bgcolor=W, text_color=GR, text_size=SZS)
 
     // Row 3 — Direction
     table.cell(hud, 0, 3, "Direction", bgcolor=W, text_color=BK,   text_size=SZ)
@@ -863,24 +847,24 @@ if show_hud
     table.cell(hud, 1, 4, p_entry,  bgcolor=W, text_color=BK, text_size=SZ)
 
     // Row 5 — Stop Loss
-    table.cell(hud, 0, 5, "Stop Loss", bgcolor=W, text_color=BK,                  text_size=SZ)
+    table.cell(hud, 0, 5, "Stop Loss", bgcolor=W, text_color=BK,                      text_size=SZ)
     table.cell(hud, 1, 5, p_sl,        bgcolor=W, text_color=color.new(color.red, 0), text_size=SZ)
 
     // Row 6 — TP1
-    table.cell(hud, 0, 6, "TP1",  bgcolor=W, text_color=BK,                    text_size=SZ)
+    table.cell(hud, 0, 6, "TP1",  bgcolor=W, text_color=BK,                        text_size=SZ)
     table.cell(hud, 1, 6, p_tp1,  bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
     // Row 7 — TP2
-    table.cell(hud, 0, 7, "TP2",  bgcolor=W, text_color=BK,                    text_size=SZ)
+    table.cell(hud, 0, 7, "TP2",  bgcolor=W, text_color=BK,                        text_size=SZ)
     table.cell(hud, 1, 7, p_tp2,  bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
     // Row 8 — Status
-    table.cell(hud, 0, 8, "Status", bgcolor=W, text_color=BK,    text_size=size.small)
-    table.cell(hud, 1, 8, p_tp1s,   bgcolor=W, text_color=p_tp1sc, text_size=size.small)
+    table.cell(hud, 0, 8, "Status", bgcolor=W, text_color=BK,     text_size=SZS)
+    table.cell(hud, 1, 8, p_stat,   bgcolor=W, text_color=p_statc, text_size=SZS)
 
-    // Row 9 — Section header
-    table.cell(hud, 0, 9, "BIAS STACK", bgcolor=W, text_color=GR, text_size=size.small)
-    table.cell(hud, 1, 9, "",            bgcolor=W, text_color=GR, text_size=size.small)
+    // Row 9 — Section
+    table.cell(hud, 0, 9, "BIAS STACK", bgcolor=W, text_color=GR, text_size=SZS)
+    table.cell(hud, 1, 9, "",            bgcolor=W, text_color=GR, text_size=SZS)
 
     // Row 10 — Daily
     table.cell(hud, 0, 10, "Daily",  bgcolor=W, text_color=BK,   text_size=SZ)
@@ -894,46 +878,30 @@ if show_hud
     table.cell(hud, 0, 12, "1 Hour", bgcolor=W, text_color=BK,    text_size=SZ)
     table.cell(hud, 1, 12, h1_str,   bgcolor=W, text_color=h1_col, text_size=SZ)
 
-    // Row 13 — Section header
-    table.cell(hud, 0, 13, "STATS", bgcolor=W, text_color=GR, text_size=size.small)
-    table.cell(hud, 1, 13, "",       bgcolor=W, text_color=GR, text_size=size.small)
+    // Row 13 — Signal
+    table.cell(hud, 0, 13, "Signal", bgcolor=W, text_color=BK,    text_size=SZ)
+    table.cell(hud, 1, 13, sig_txt,  bgcolor=W, text_color=sig_col, text_size=SZ)
 
-    // Row 14 — Win Rate
-    table.cell(hud, 0, 14, "Win Rate", bgcolor=W, text_color=BK,   text_size=SZ)
-    table.cell(hud, 1, 14, str.tostring(win_rate, "#.0") + "%  (" + str.tostring(wins) + "W / " + str.tostring(losses) + "L)", bgcolor=W, text_color=wr_col, text_size=SZ)
+    // Row 14 — Section
+    table.cell(hud, 0, 14, "TRADE HISTORY", bgcolor=W, text_color=GR, text_size=SZS)
+    table.cell(hud, 1, 14, str.tostring(trades) + " trades", bgcolor=W, text_color=GR, text_size=SZS)
 
-    // Row 15 — Net P&L
-    table.cell(hud, 0, 15, "Net P&L", bgcolor=W, text_color=BK,    text_size=SZ)
-    table.cell(hud, 1, 15, str.tostring(net_pnl, format.mintick) + "   Max DD: " + str.tostring(max_dd, format.mintick), bgcolor=W, text_color=pnl_col, text_size=SZ)
+    // Row 15 — Win Rate
+    table.cell(hud, 0, 15, "Win Rate", bgcolor=W, text_color=BK,   text_size=SZ)
+    table.cell(hud, 1, 15, str.tostring(win_rate, "#.0") + "%  (" + str.tostring(wins) + "W / " + str.tostring(losses) + "L)", bgcolor=W, text_color=wr_col, text_size=SZ)
 
-    // Row 16 — Section header: Signal Checklist
-    table.cell(hud, 0, 16, "SIGNAL CHECKLIST", bgcolor=W, text_color=GR, text_size=size.small)
-    table.cell(hud, 1, 16, "LONG  /  SHORT",   bgcolor=W, text_color=GR, text_size=size.small)
+    // Row 16 — Net P&L
+    table.cell(hud, 0, 16, "Net P&L", bgcolor=W, text_color=BK,    text_size=SZ)
+    table.cell(hud, 1, 16, str.tostring(net_pnl, format.mintick),   bgcolor=W, text_color=pnl_col, text_size=SZ)
 
-    // Row 17 — Bias
-    table.cell(hud, 0, 17, "Bias Aligned", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 17, chk_bias_b + "  /  " + chk_bias_s, bgcolor=W, text_color=bias_bull ? chk_col_b : chk_col_s, text_size=SZ)
+    // Row 17 — Gross Profit
+    table.cell(hud, 0, 17, "Gross Profit", bgcolor=W, text_color=BK,                        text_size=SZ)
+    table.cell(hud, 1, 17, str.tostring(gross_profit, format.mintick), bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
-    // Row 18 — POI (OB/FVG)
-    table.cell(hud, 0, 18, "In OB / FVG", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 18, chk_poi_b + "  /  " + chk_poi_s, bgcolor=W, text_color=poi_bull ? chk_poi_cb : chk_poi_cs, text_size=SZ)
+    // Row 18 — Gross Loss
+    table.cell(hud, 0, 18, "Gross Loss", bgcolor=W, text_color=BK,                      text_size=SZ)
+    table.cell(hud, 1, 18, str.tostring(gross_loss,   format.mintick), bgcolor=W, text_color=color.new(color.red, 0),   text_size=SZ)
 
-    // Row 19 — MSS
-    table.cell(hud, 0, 19, "MSS on 5M", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 19, chk_mss_b + "  /  " + chk_mss_s, bgcolor=W, text_color=mss_bull_5m ? chk_mss_cb : chk_mss_cs, text_size=SZ)
-
-    // Row 20 — Trade Window
-    table.cell(hud, 0, 20, "Trade Window", bgcolor=W, text_color=BK,  text_size=SZ)
-    table.cell(hud, 1, 20, chk_kz,         bgcolor=W, text_color=chk_kz_c, text_size=SZ)
-
-    // Row 22 — Ready signal
-    all_bull = bias_bull and poi_bull and mss_bull_5m and in_kz
-    all_bear = bias_bear and poi_bear and mss_bear_5m and in_kz
-    sig_txt  = all_bull ? "LONG SIGNAL READY" : all_bear ? "SHORT SIGNAL READY" : "No signal yet"
-    sig_col  = all_bull ? color.new(color.green, 0) : all_bear ? color.new(color.red, 0) : color.new(color.gray, 0)
-    table.cell(hud, 0, 21, "Signal", bgcolor=W, text_color=BK,     text_size=SZ)
-    table.cell(hud, 1, 21, sig_txt,  bgcolor=W, text_color=sig_col, text_size=size.large)
-
-
-
-
+    // Row 19 — Max DD
+    table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
+    table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
