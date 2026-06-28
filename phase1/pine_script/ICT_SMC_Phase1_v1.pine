@@ -867,7 +867,7 @@ SZS = size.small
 
 var table hud = table.new(f_pos(hud_pos_inp), 2, 24, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
 
-if show_hud
+if show_hud and barstate.islast
     // Row 0 - Title + timestamp
     table.cell(hud, 0, 0, "ICT / SMC  Phase 1", bgcolor=W, text_color=BK, text_size=size.large)
     table.cell(hud, 1, 0, ts_str,                bgcolor=W, text_color=GR, text_size=SZS)
