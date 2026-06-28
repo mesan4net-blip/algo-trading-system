@@ -565,18 +565,7 @@ var float peak_equity  = 0.0
 var float equity       = 0.0
 var float max_dd       = 0.0
 
-f_log_exit(_entry, _exit, _is_long) =>
-    pnl = _is_long ? (_exit - _entry) : (_entry - _exit)
-    equity  += pnl
-    trades  += 1
-    if pnl >= 0
-        gross_profit += pnl
-        wins         += 1
-    else
-        gross_loss   += math.abs(pnl)
-        losses       += 1
-    peak_equity := math.max(peak_equity, equity)
-    max_dd      := math.max(max_dd, peak_equity - equity)
+// f_log_exit replaced with inline logic below
 
 // ============================================================================
 // ENGINE - Exits first, then entries
@@ -591,7 +580,17 @@ if pos == 1 and long_tp2_hit
         label.new(bar_index, high + atr14 * 0.3, "TP2 OK",
                   style=label.style_label_down, color=color.new(color.gold, 0),
                   textcolor=color.black, size=size.small)
-    f_log_exit(entry_price, tp2_price, true)
+    var float _pnl_ltp2 = tp2_price - entry_price
+    equity += _pnl_ltp2
+    trades += 1
+    if _pnl_ltp2 >= 0
+        gross_profit += _pnl_ltp2
+        wins += 1
+    else
+        gross_loss += math.abs(_pnl_ltp2)
+        losses += 1
+    peak_equity := math.max(peak_equity, equity)
+    max_dd := math.max(max_dd, peak_equity - equity)
     pos          := 0
     trail_sl     := na
     tp1_hit      := false
@@ -602,7 +601,17 @@ if pos == -1 and short_tp2_hit
         label.new(bar_index, low - atr14 * 0.3, "TP2 OK",
                   style=label.style_label_up, color=color.new(color.gold, 0),
                   textcolor=color.black, size=size.small)
-    f_log_exit(entry_price, tp2_price, false)
+    var float _pnl_stp2 = entry_price - tp2_price
+    equity += _pnl_stp2
+    trades += 1
+    if _pnl_stp2 >= 0
+        gross_profit += _pnl_stp2
+        wins += 1
+    else
+        gross_loss += math.abs(_pnl_stp2)
+        losses += 1
+    peak_equity := math.max(peak_equity, equity)
+    max_dd := math.max(max_dd, peak_equity - equity)
     pos          := 0
     trail_sl     := na
     tp1_hit      := false
@@ -631,7 +640,17 @@ if not exited_this_bar and pos == 1 and long_sl_hit
         label.new(bar_index, high + atr14 * 0.3, "SL XX",
                   style=label.style_label_down, color=color.new(color.red, 0),
                   textcolor=color.white, size=size.small)
-    f_log_exit(entry_price, trail_sl, true)
+    var float _pnl_lsl = trail_sl - entry_price
+    equity += _pnl_lsl
+    trades += 1
+    if _pnl_lsl >= 0
+        gross_profit += _pnl_lsl
+        wins += 1
+    else
+        gross_loss += math.abs(_pnl_lsl)
+        losses += 1
+    peak_equity := math.max(peak_equity, equity)
+    max_dd := math.max(max_dd, peak_equity - equity)
     pos          := 0
     trail_sl     := na
     tp1_hit      := false
@@ -642,7 +661,17 @@ if not exited_this_bar and pos == -1 and short_sl_hit
         label.new(bar_index, low - atr14 * 0.3, "SL XX",
                   style=label.style_label_up, color=color.new(color.red, 0),
                   textcolor=color.white, size=size.small)
-    f_log_exit(entry_price, trail_sl, false)
+    var float _pnl_ssl = entry_price - trail_sl
+    equity += _pnl_ssl
+    trades += 1
+    if _pnl_ssl >= 0
+        gross_profit += _pnl_ssl
+        wins += 1
+    else
+        gross_loss += math.abs(_pnl_ssl)
+        losses += 1
+    peak_equity := math.max(peak_equity, equity)
+    max_dd := math.max(max_dd, peak_equity - equity)
     pos          := 0
     trail_sl     := na
     tp1_hit      := false
