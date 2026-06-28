@@ -141,20 +141,6 @@ h1_high  = f_htf_high(htf1_in)
 h1_low   = f_htf_low(htf1_in)
 
 // ============================================================================
-// ============================================================================
-// 5M TRADE DATA - always fetched at 5M resolution for trade detection
-// Structure runs on chart TF. Trades always detected on 5M.
-// Labels placed with xloc.bar_time so they appear on all TFs correctly.
-// ============================================================================
-// TTF (default: 5M) - Trade detection data
-
-// Trade Window - evaluated on 5M time
-tw_london = kz_london_on and (bar_hour >= kz_london_h1 and bar_hour < kz_london_h2)
-tw_ny     = kz_ny_on     and (bar_hour >= kz_ny_h1     and bar_hour < kz_ny_h2)
-in_kz_ttf  = tw_london or tw_ny
-kz_ttf_name = tw_london ? "London" : tw_ny ? "New York" : "Closed"
-
-// 5M structure for trade entry trigger only
 // MARKET STRUCTURE ENGINE
 // Detects swing highs/lows, BOS, MSS on each timeframe
 // ============================================================================
@@ -543,8 +529,8 @@ disp_bear     = is_displaced and close < open and close <= (high - candle_range 
 // All must align: Bias + POI + MSS + Displacement + Trade Window + No Gap
 // ============================================================================
 // Entry: Bias + POI + MSS + Trade Window. Displacement removed - MSS candle is the displacement.
-long_entry_raw  = bias_bull and poi_bull and mss_bull and in_kz_ttf and not gap_bar and barstate.isconfirmed
-short_entry_raw = bias_bear and poi_bear and mss_bear and in_kz_ttf and not gap_bar and barstate.isconfirmed
+long_entry_raw  = bias_bull and poi_bull and mss_bull and in_kz and not gap_bar and barstate.isconfirmed
+short_entry_raw = bias_bear and poi_bear and mss_bear and in_kz and not gap_bar and barstate.isconfirmed
 
 // ============================================================================
 // TRADE STATE & MANAGEMENT
@@ -854,12 +840,12 @@ h1_str   = h1_struct  == 1 ? "BULLISH" : h1_struct  == -1 ? "BEARISH" : "FLAT"
 d_col    = daily_struct == 1 ? color.new(color.green, 0) : daily_struct == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
 h4_col   = h4_struct  == 1 ? color.new(color.green, 0) : h4_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
 h1_col   = h1_struct  == 1 ? color.new(color.green, 0) : h1_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
-kz_str   = tw_london ? "LONDON" : tw_ny ? "NEW YORK" : "CLOSED"
-kz_col   = in_kz_ttf ? color.new(color.green, 0) : color.new(color.red, 0)
+kz_str   = in_london ? "LONDON" : in_ny ? "NEW YORK" : "CLOSED"
+kz_col   = in_kz ? color.new(color.green, 0) : color.new(color.red, 0)
 wr_col   = win_rate >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
 pnl_col  = net_pnl >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
-sig_all_b = bias_bull and poi_bull and mss_bull and in_kz_ttf
-sig_all_s = bias_bear and poi_bear and mss_bear and in_kz_ttf
+sig_all_b = bias_bull and poi_bull and mss_bull and in_kz
+sig_all_s = bias_bear and poi_bear and mss_bear and in_kz
 sig_txt   = sig_all_b ? "LONG SIGNAL READY" : sig_all_s ? "SHORT SIGNAL READY" : "No signal yet"
 sig_col   = sig_all_b ? color.new(color.green, 0) : sig_all_s ? color.new(color.red, 0) : color.new(color.gray, 0)
 
@@ -951,6 +937,7 @@ if show_hud
     // Row 19 - Max DD
     table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
     table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+
 
 
 
