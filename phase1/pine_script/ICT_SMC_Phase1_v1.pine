@@ -275,10 +275,11 @@ if not na(last_sl_1h) and h1_close < last_sl_1h
 // TOP-DOWN BIAS
 // Daily sets bias -> 4H confirms -> 1H activates -> 5M triggers
 // ============================================================================
-// Bias: HTF3 (4H) sets direction. HTF2 (1H) confirms. HTF1 (15M) activates.
-// All three must agree for a valid bias. No Daily involved.
-bias_bull = daily_struct == 1 and h4_struct == 1 and h1_struct == 1
-bias_bear = daily_struct == -1 and h4_struct == -1 and h1_struct == -1
+// Bias: HTF3 (4H) sets direction, HTF2 (1H) confirms.
+// HTF1 (15M) must not be opposite (can be flat/0 or aligned).
+// Removing strict HTF1 requirement generates more trades.
+bias_bull = daily_struct == 1 and h4_struct == 1 and h1_struct >= 0
+bias_bear = daily_struct == -1 and h4_struct == -1 and h1_struct <= 0
 
 // ============================================================================
 // ORDER BLOCK DETECTION (5M chart)
