@@ -81,11 +81,6 @@ grp_alert = "Alerts / Webhook"
 alert_on_entry = input.bool(true, "Fire Alert on Entry Signal", group=grp_alert)
 
 // ============================================================================
-// TTF GUARD - must be after inputs so ttf_in is declared
-// ============================================================================
-if barstate.isfirst and timeframe.period != ttf_in
-    runtime.error("Set chart to TTF (" + ttf_in + "). Structure + trades must run on same TF.")
-
 // ============================================================================
 // CONSTANTS & HELPERS
 // ============================================================================
@@ -928,6 +923,7 @@ if show_hud
     // Row 19 - Max DD
     table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
     table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+
 
 
 
