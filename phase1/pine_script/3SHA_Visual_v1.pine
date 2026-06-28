@@ -7,14 +7,13 @@
 indicator("3SHA Visual — Base + HTF1 + HTF2", shorttitle="3SHA-Visual", overlay=true, max_bars_back=5000)
 
 // ============================================================================
-// SHA FUNCTION
-// Two-pass: EMA → HA → EMA
+// SHA FUNCTION — Two-pass: EMA → HA → EMA
 // ============================================================================
 f_sha(_len1, _len2, _o, _h, _l, _c) =>
-    o1 = ta.ema(_o, _len1)
-    h1 = ta.ema(_h, _len1)
-    l1 = ta.ema(_l, _len1)
-    c1 = ta.ema(_c, _len1)
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
     haC = (o1 + h1 + l1 + c1) / 4.0
     var float haO = na
     haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
@@ -29,65 +28,65 @@ f_sha(_len1, _len2, _o, _h, _l, _c) =>
 // ============================================================================
 // INPUTS — GLOBAL DISPLAY
 // ============================================================================
-grp_global = "Global Display"
-show_wicks   = input.bool(true,  "Show Wicks (all layers)",   group=grp_global)
-show_borders = input.bool(true,  "Show Borders (all layers)", group=grp_global)
+grp_global   = "Global Display"
+show_wicks   = input.bool(true, "Show Wicks (all layers)",   group=grp_global)
+show_borders = input.bool(true, "Show Borders (all layers)", group=grp_global)
 
 // ============================================================================
-// INPUTS — BASE SHA (chart timeframe)
+// INPUTS — BASE SHA (chart timeframe — automatic)
 // ============================================================================
-grp_base = "Base SHA  [Chart TF — auto]"
+grp_base     = "Base SHA  [Chart TF — auto]"
 base_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_base)
 base_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_base)
-base_show    = input.bool(true, "Show Base SHA Candles", group=grp_base)
-base_bull    = input.color(color.new(color.teal,   0),  "Bull Color",   group=grp_base)
-base_bear    = input.color(color.new(color.red,    0),  "Bear Color",   group=grp_base)
-base_border  = input.color(color.new(color.black,  0),  "Border Color", group=grp_base)
-base_wick    = input.color(color.new(color.gray,   0),  "Wick Color",   group=grp_base)
-base_opacity = input.int(0, "Opacity (0=solid, 100=invisible)", minval=0, maxval=100, group=grp_base)
+base_show    = input.bool(true, "Show Base SHA Candles",     group=grp_base)
+base_bull    = input.color(color.new(#00897B, 0),  "Bull Color",   group=grp_base)
+base_bear    = input.color(color.new(#F44336, 0),  "Bear Color",   group=grp_base)
+base_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_base)
+base_wick    = input.color(color.new(#607D8B, 0),  "Wick Color",   group=grp_base)
+base_opacity = input.int(0,  "Opacity (0=solid, 100=invisible)", minval=0, maxval=100, group=grp_base)
 
 // ============================================================================
 // INPUTS — HTF1 SHA
 // ============================================================================
-grp_htf1 = "HTF1 SHA  [Mid Timeframe]"
-htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
-htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
-htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
-htf1_show    = input.bool(true, "Show HTF1 SHA Candles",      group=grp_htf1)
-htf1_bull    = input.color(color.new(color.lime,   0),  "Bull Color",   group=grp_htf1)
-htf1_bear    = input.color(color.new(color.maroon, 0),  "Bear Color",   group=grp_htf1)
-htf1_border  = input.color(color.new(color.black,  0),  "Border Color", group=grp_htf1)
-htf1_wick    = input.color(color.new(color.gray,   0),  "Wick Color",   group=grp_htf1)
-htf1_opacity = input.int(0, "Opacity (0=solid, 100=invisible)", minval=0, maxval=100, group=grp_htf1)
+grp_htf1     = "HTF1 SHA  [Mid Timeframe]"
+htf1_tf      = input.timeframe("60", "HTF1 Timeframe",       group=grp_htf1)
+htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_htf1)
+htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_htf1)
+htf1_show    = input.bool(true, "Show HTF1 SHA Candles",     group=grp_htf1)
+htf1_bull    = input.color(color.new(#76FF03, 0),  "Bull Color",   group=grp_htf1)
+htf1_bear    = input.color(color.new(#FF3D00, 0),  "Bear Color",   group=grp_htf1)
+htf1_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_htf1)
+htf1_wick    = input.color(color.new(#607D8B, 0),  "Wick Color",   group=grp_htf1)
+htf1_opacity = input.int(25, "Opacity (0=solid, 100=invisible)", minval=0, maxval=100, group=grp_htf1)
 
 // ============================================================================
 // INPUTS — HTF2 SHA
 // ============================================================================
-grp_htf2 = "HTF2 SHA  [High Timeframe]"
-htf2_tf      = input.timeframe("240", "HTF2 Timeframe",        group=grp_htf2)
-htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,   group=grp_htf2)
-htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,   group=grp_htf2)
-htf2_show    = input.bool(true, "Show HTF2 SHA Candles",       group=grp_htf2)
-htf2_bull    = input.color(color.new(color.blue,   0),  "Bull Color",   group=grp_htf2)
-htf2_bear    = input.color(color.new(color.purple, 0),  "Bear Color",   group=grp_htf2)
-htf2_border  = input.color(color.new(color.black,  0),  "Border Color", group=grp_htf2)
-htf2_wick    = input.color(color.new(color.gray,   0),  "Wick Color",   group=grp_htf2)
-htf2_opacity = input.int(0, "Opacity (0=solid, 100=invisible)", minval=0, maxval=100, group=grp_htf2)
+grp_htf2     = "HTF2 SHA  [High Timeframe]"
+htf2_tf      = input.timeframe("240", "HTF2 Timeframe",      group=grp_htf2)
+htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_htf2)
+htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_htf2)
+htf2_show    = input.bool(true, "Show HTF2 SHA Candles",     group=grp_htf2)
+htf2_bull    = input.color(color.new(#1565C0, 0),  "Bull Color",   group=grp_htf2)
+htf2_bear    = input.color(color.new(#B71C1C, 0),  "Bear Color",   group=grp_htf2)
+htf2_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_htf2)
+htf2_wick    = input.color(color.new(#607D8B, 0),  "Wick Color",   group=grp_htf2)
+htf2_opacity = input.int(50, "Opacity (0=solid, 100=invisible)", minval=0, maxval=100, group=grp_htf2)
 
 // ============================================================================
-// BASE SHA — computed on chart timeframe directly
+// BASE SHA — computed directly on chart timeframe
 // ============================================================================
 [bO, bH, bL, bC] = f_sha(base_len1, base_len2, open, high, low, close)
 
-base_ready   = not na(bO) and not na(bH) and not na(bL) and not na(bC)
-base_bull_c  = bC >= bO ? color.new(base_bull,   base_opacity) : color.new(base_bear,   base_opacity)
-base_wick_c  = show_wicks   ? color.new(base_wick,   base_opacity) : na
-base_border_c = show_borders ? color.new(base_border, base_opacity) : color.new(base_bull_c, base_opacity)
-base_bH      = show_wicks ? bH : math.max(bO, bC)
-base_bL      = show_wicks ? bL : math.min(bO, bC)
+base_ready    = not na(bO) and not na(bH) and not na(bL) and not na(bC)
+base_body_col = bC >= bO ? color.new(base_bull, base_opacity) : color.new(base_bear, base_opacity)
+base_wick_col = show_wicks   ? color.new(base_wick,   base_opacity) : na
+base_brdr_col = show_borders ? color.new(base_border, base_opacity) : base_body_col
+base_pH       = show_wicks ? bH : math.max(bO, bC)
+base_pL       = show_wicks ? bL : math.min(bO, bC)
 
 // ============================================================================
-// HTF1 SHA — computed on HTF1 timeframe via request.security
+// HTF1 SHA — via request.security on completed HTF1 candles
 // ============================================================================
 htf1_o = request.security(syminfo.tickerid, htf1_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
 htf1_h = request.security(syminfo.tickerid, htf1_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
@@ -97,14 +96,14 @@ htf1_c = request.security(syminfo.tickerid, htf1_tf, close, barmerge.gaps_off, b
 [h1O, h1H, h1L, h1C] = f_sha(htf1_len1, htf1_len2, htf1_o, htf1_h, htf1_l, htf1_c)
 
 htf1_ready    = not na(h1O) and not na(h1H) and not na(h1L) and not na(h1C)
-htf1_bull_c   = h1C >= h1O ? color.new(htf1_bull,   htf1_opacity) : color.new(htf1_bear,   htf1_opacity)
-htf1_wick_c   = show_wicks   ? color.new(htf1_wick,   htf1_opacity) : na
-htf1_border_c = show_borders ? color.new(htf1_border, htf1_opacity) : color.new(htf1_bull_c, htf1_opacity)
-htf1_bH       = show_wicks ? h1H : math.max(h1O, h1C)
-htf1_bL       = show_wicks ? h1L : math.min(h1O, h1C)
+htf1_body_col = h1C >= h1O ? color.new(htf1_bull, htf1_opacity) : color.new(htf1_bear, htf1_opacity)
+htf1_wick_col = show_wicks   ? color.new(htf1_wick,   htf1_opacity) : na
+htf1_brdr_col = show_borders ? color.new(htf1_border, htf1_opacity) : htf1_body_col
+htf1_pH       = show_wicks ? h1H : math.max(h1O, h1C)
+htf1_pL       = show_wicks ? h1L : math.min(h1O, h1C)
 
 // ============================================================================
-// HTF2 SHA — computed on HTF2 timeframe via request.security
+// HTF2 SHA — via request.security on completed HTF2 candles
 // ============================================================================
 htf2_o = request.security(syminfo.tickerid, htf2_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
 htf2_h = request.security(syminfo.tickerid, htf2_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
@@ -114,38 +113,38 @@ htf2_c = request.security(syminfo.tickerid, htf2_tf, close, barmerge.gaps_off, b
 [h2O, h2H, h2L, h2C] = f_sha(htf2_len1, htf2_len2, htf2_o, htf2_h, htf2_l, htf2_c)
 
 htf2_ready    = not na(h2O) and not na(h2H) and not na(h2L) and not na(h2C)
-htf2_bull_c   = h2C >= h2O ? color.new(htf2_bull,   htf2_opacity) : color.new(htf2_bear,   htf2_opacity)
-htf2_wick_c   = show_wicks   ? color.new(htf2_wick,   htf2_opacity) : na
-htf2_border_c = show_borders ? color.new(htf2_border, htf2_opacity) : color.new(htf2_bull_c, htf2_opacity)
-htf2_bH       = show_wicks ? h2H : math.max(h2O, h2C)
-htf2_bL       = show_wicks ? h2L : math.min(h2O, h2C)
+htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
+htf2_wick_col = show_wicks   ? color.new(htf2_wick,   htf2_opacity) : na
+htf2_brdr_col = show_borders ? color.new(htf2_border, htf2_opacity) : htf2_body_col
+htf2_pH       = show_wicks ? h2H : math.max(h2O, h2C)
+htf2_pL       = show_wicks ? h2L : math.min(h2O, h2C)
 
 // ============================================================================
-// PLOT — Draw order: HTF2 first (bottom), HTF1 second, Base last (top)
+// PLOT — Draw order: HTF2 first (background), HTF1 second, Base last (foreground)
 // ============================================================================
-plotcandle(htf2_ready and htf2_show ? h2O : na,
-           htf2_ready and htf2_show ? htf2_bH : na,
-           htf2_ready and htf2_show ? htf2_bL : na,
-           htf2_ready and htf2_show ? h2C : na,
+plotcandle(htf2_ready and htf2_show ? h2O  : na,
+           htf2_ready and htf2_show ? htf2_pH : na,
+           htf2_ready and htf2_show ? htf2_pL : na,
+           htf2_ready and htf2_show ? h2C  : na,
            title="HTF2 SHA",
-           color=htf2_ready and htf2_show ? htf2_bull_c : na,
-           wickcolor=htf2_ready and htf2_show ? htf2_wick_c : na,
-           bordercolor=htf2_ready and htf2_show ? htf2_border_c : na)
+           color=htf2_ready and htf2_show ? htf2_body_col : na,
+           wickcolor=htf2_ready and htf2_show ? htf2_wick_col : na,
+           bordercolor=htf2_ready and htf2_show ? htf2_brdr_col : na)
 
-plotcandle(htf1_ready and htf1_show ? h1O : na,
-           htf1_ready and htf1_show ? htf1_bH : na,
-           htf1_ready and htf1_show ? htf1_bL : na,
-           htf1_ready and htf1_show ? h1C : na,
+plotcandle(htf1_ready and htf1_show ? h1O  : na,
+           htf1_ready and htf1_show ? htf1_pH : na,
+           htf1_ready and htf1_show ? htf1_pL : na,
+           htf1_ready and htf1_show ? h1C  : na,
            title="HTF1 SHA",
-           color=htf1_ready and htf1_show ? htf1_bull_c : na,
-           wickcolor=htf1_ready and htf1_show ? htf1_wick_c : na,
-           bordercolor=htf1_ready and htf1_show ? htf1_border_c : na)
+           color=htf1_ready and htf1_show ? htf1_body_col : na,
+           wickcolor=htf1_ready and htf1_show ? htf1_wick_col : na,
+           bordercolor=htf1_ready and htf1_show ? htf1_brdr_col : na)
 
-plotcandle(base_ready and base_show ? bO : na,
-           base_ready and base_show ? base_bH : na,
-           base_ready and base_show ? base_bL : na,
-           base_ready and base_show ? bC : na,
+plotcandle(base_ready and base_show ? bO   : na,
+           base_ready and base_show ? base_pH : na,
+           base_ready and base_show ? base_pL : na,
+           base_ready and base_show ? bC   : na,
            title="Base SHA",
-           color=base_ready and base_show ? base_bull_c : na,
-           wickcolor=base_ready and base_show ? base_wick_c : na,
-           bordercolor=base_ready and base_show ? base_border_c : na)
+           color=base_ready and base_show ? base_body_col : na,
+           wickcolor=base_ready and base_show ? base_wick_col : na,
+           bordercolor=base_ready and base_show ? base_brdr_col : na)
