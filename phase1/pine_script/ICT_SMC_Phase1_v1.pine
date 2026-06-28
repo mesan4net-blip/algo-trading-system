@@ -16,10 +16,10 @@ indicator("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
 
 // --- Timeframe Settings ---
 grp_tf   = "Timeframe Settings"
-ttf_in   = input.timeframe("5",   "TTF  - Trade Timeframe (entry/exit detection)", group=grp_tf)
-htf1_in  = input.timeframe("60",  "HTF1 - Higher Timeframe 1 (confirmation)",      group=grp_tf)
-htf2_in  = input.timeframe("240", "HTF2 - Higher Timeframe 2 (setup)",             group=grp_tf)
-htf3_in  = input.timeframe("D",   "HTF3 - Higher Timeframe 3 (bias)",              group=grp_tf)
+ttf_in   = input.timeframe("5",   "TTF  - Trade Timeframe (5M default)",  group=grp_tf)
+htf1_in  = input.timeframe("15",  "HTF1 - Higher Timeframe 1 (15M default)", group=grp_tf)
+htf2_in  = input.timeframe("60",  "HTF2 - Higher Timeframe 2 (1H default)",  group=grp_tf)
+htf3_in  = input.timeframe("240", "HTF3 - Higher Timeframe 3 (4H default)", group=grp_tf)
 
 // --- Trade Windows ---
 grp_kz = "Trade Windows"
@@ -38,7 +38,10 @@ grp_str = "Market Structure"
 show_bos      = input.bool(true, "Show BOS Labels",  group=grp_str)
 show_mss      = input.bool(true, "Show MSS Labels",  group=grp_str)
 show_choch    = input.bool(true, "Show CHoCH Labels (visual only)", group=grp_str)
-str_lookback  = input.int(10,    "Swing Lookback (bars)", group=grp_str, minval=3, maxval=50)
+ttf_lb   = input.int(5, "TTF  Swing Lookback (bars)", group=grp_str, minval=2, maxval=20)
+htf1_lb  = input.int(5, "HTF1 Swing Lookback (bars)", group=grp_str, minval=2, maxval=20)
+htf2_lb  = input.int(5, "HTF2 Swing Lookback (bars)", group=grp_str, minval=2, maxval=20)
+htf3_lb  = input.int(5, "HTF3 Swing Lookback (bars)", group=grp_str, minval=2, maxval=20)
 
 // --- Order Blocks ---
 grp_ob = "Order Blocks"
@@ -120,17 +123,17 @@ f_htf_high(_tf) =>
 f_htf_low(_tf) =>
     request.security(syminfo.tickerid, _tf, low, barmerge.gaps_off, barmerge.lookahead_off)
 
-// HTF3 (default: Daily) - Bias
+// HTF3 (default: 4H) - Bias
 d_close  = f_htf_close(htf3_in)
 d_high   = f_htf_high(htf3_in)
 d_low    = f_htf_low(htf3_in)
 
-// HTF2 (default: 4H) - Setup
+// HTF2 (default: 1H) - Setup
 h4_close = f_htf_close(htf2_in)
 h4_high  = f_htf_high(htf2_in)
 h4_low   = f_htf_low(htf2_in)
 
-// HTF1 (default: 1H) - Confirmation
+// HTF1 (default: 15M) - Confirmation
 h1_close = f_htf_close(htf1_in)
 h1_high  = f_htf_high(htf1_in)
 h1_low   = f_htf_low(htf1_in)
@@ -150,8 +153,8 @@ f_swing_low(_low, _n) =>
     pl
 
 // 5M structure (chart TF)
-swing_h_ttf = f_swing_high(high, str_lookback)
-swing_l_ttf = f_swing_low(low,  str_lookback)
+swing_h_ttf = f_swing_high(high, ttf_lb)
+swing_l_ttf = f_swing_low(low,  ttf_lb)
 
 // Track last confirmed swing high/low on 5M
 var float last_sh_ttf = na
@@ -161,11 +164,11 @@ var int   last_sl_ttf_bar = na
 
 if not na(swing_h_ttf)
     last_sh_ttf     := swing_h_ttf
-    last_sh_ttf_bar := bar_index - str_lookback
+    last_sh_ttf_bar := bar_index - ttf_lb
 
 if not na(swing_l_ttf)
     last_sl_ttf     := swing_l_ttf
-    last_sl_ttf_bar := bar_index - str_lookback
+    last_sl_ttf_bar := bar_index - ttf_lb
 
 // 5M BOS & MSS detection
 var int   struct_dir = 0   // 1 = bullish structure, -1 = bearish
@@ -196,8 +199,8 @@ if not na(last_sl_ttf) and close < last_sl_ttf and barstate.isconfirmed
     struct_dir := -1
 
 // Daily structure (simplified - track bias via HTF close vs prior swings)
-swing_h_d = f_swing_high(d_high, str_lookback)
-swing_l_d = f_swing_low(d_low,   str_lookback)
+swing_h_d = f_swing_high(d_high, htf3_lb)
+swing_l_d = f_swing_low(d_low,   htf3_lb)
 
 var float last_sh_d = na
 var float last_sl_d = na
@@ -214,8 +217,8 @@ if not na(last_sl_d) and d_close < last_sl_d
     daily_struct := -1
 
 // 4H structure
-swing_h_4h = f_swing_high(h4_high, str_lookback)
-swing_l_4h = f_swing_low(h4_low,   str_lookback)
+swing_h_4h = f_swing_high(h4_high, htf2_lb)
+swing_l_4h = f_swing_low(h4_low,   htf2_lb)
 
 var float last_sh_4h = na
 var float last_sl_4h = na
@@ -232,8 +235,8 @@ if not na(last_sl_4h) and h4_close < last_sl_4h
     h4_struct := -1
 
 // 1H structure
-swing_h_1h = f_swing_high(h1_high, str_lookback)
-swing_l_1h = f_swing_low(h1_low,   str_lookback)
+swing_h_1h = f_swing_high(h1_high, htf1_lb)
+swing_l_1h = f_swing_low(h1_low,   htf1_lb)
 
 var float last_sh_1h = na
 var float last_sl_1h = na
@@ -253,11 +256,10 @@ if not na(last_sl_1h) and h1_close < last_sl_1h
 // TOP-DOWN BIAS
 // Daily sets bias -> 4H confirms -> 1H activates -> 5M triggers
 // ============================================================================
-// Bias: 4H + 1H must agree (trading bias).
-// Daily acts as a filter - if Daily is bearish, only allow short bias. If bullish, only long.
-// If Daily is flat/0, allow 4H+1H to decide freely.
-bias_bull = h4_struct == 1 and h1_struct == 1 and daily_struct >= 0
-bias_bear = h4_struct == -1 and h1_struct == -1 and daily_struct <= 0
+// Bias: HTF3 (4H) sets direction. HTF2 (1H) confirms. HTF1 (15M) activates.
+// All three must agree for a valid bias. No Daily involved.
+bias_bull = daily_struct == 1 and h4_struct == 1 and h1_struct == 1
+bias_bear = daily_struct == -1 and h4_struct == -1 and h1_struct == -1
 
 // ============================================================================
 // ORDER BLOCK DETECTION (5M chart)
@@ -277,7 +279,7 @@ var bool[]  ob_bear_valid = array.new_bool()
 // On bullish MSS/BOS -> find last bearish candle before it
 if (bos_bull or mss_bull) and barstate.isconfirmed
     // Look back for last bearish candle (close < open)
-    for i = 1 to math.min(str_lookback * 2, bar_index)
+    for i = 1 to math.min(ttf_lb * 2, bar_index)
         if close[i] < open[i]   // bearish candle = bullish OB
             array.unshift(ob_bull_top,   high[i])
             array.unshift(ob_bull_bot,   low[i])
@@ -293,7 +295,7 @@ if (bos_bull or mss_bull) and barstate.isconfirmed
 
 // On bearish MSS/BOS -> find last bullish candle before it
 if (bos_bear or mss_bear) and barstate.isconfirmed
-    for i = 1 to math.min(str_lookback * 2, bar_index)
+    for i = 1 to math.min(ttf_lb * 2, bar_index)
         if close[i] > open[i]   // bullish candle = bearish OB
             array.unshift(ob_bear_top,   high[i])
             array.unshift(ob_bear_bot,   low[i])
