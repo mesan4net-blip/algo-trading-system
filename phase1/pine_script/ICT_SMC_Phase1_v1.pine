@@ -149,8 +149,8 @@ h1_low   = f_htf_low(htf1_in)
 // TTF (default: 5M) - Trade detection data
 
 // Trade Window - evaluated on 5M time
-tw_london = kz_london_on and (highr >= kz_london_h1 and highr < kz_london_h2)
-tw_ny     = kz_ny_on     and (highr >= kz_ny_h1     and highr < kz_ny_h2)
+tw_london = kz_london_on and (bar_hour >= kz_london_h1 and bar_hour < kz_london_h2)
+tw_ny     = kz_ny_on     and (bar_hour >= kz_ny_h1     and bar_hour < kz_ny_h2)
 in_kz_5m  = tw_london or tw_ny
 kz_5m_name = tw_london ? "London" : tw_ny ? "New York" : "Closed"
 
@@ -163,10 +163,6 @@ var bool  mss_bear_trade    = false
 
 mss_bull_trade := false
 mss_bear_trade := false
-
-// Trade MSS uses same structure as chart (chart IS TTF)
-mss_bull_trade = mss_bull_5m
-mss_bear_trade = mss_bear_5m
 
 // MARKET STRUCTURE ENGINE
 // Detects swing highs/lows, BOS, MSS on each timeframe
@@ -439,6 +435,10 @@ if show_fvg and barstate.islast
 
 // ============================================================================
 // ============================================================================
+// Trade entry MSS — aliases to chart structure (chart IS TTF)
+mss_bull_trade = mss_bull_5m
+mss_bear_trade = mss_bear_5m
+
 // ============================================================================
 // MARKET STRUCTURE LABELS
 // MSS = your entry trigger - bold, clear, with vertical spike
