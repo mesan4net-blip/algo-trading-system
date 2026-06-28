@@ -859,18 +859,20 @@ if not exited_this_bar and pos == 0 and long_entry_raw
         last_alert_bar := bar_index
 
 if not exited_this_bar and pos == 0 and short_entry_raw
-    entry_price := close
-    sl_price    := f_short_sl(active_bear_ob_top)
-    risk        = sl_price - entry_price
-    tp1_price   := entry_price - risk * tp1_rr
-    tp2_price   := entry_price - risk * tp2_rr
-    trail_sl    := sl_price
-    tp1_hit     := false
-    pos         := -1
-    entry_bar   := bar_index
-    entry_time  := time
-
-    if show_entry_labels
+    entry_price    := close
+    sl_price       := f_short_sl(active_bear_ob_top)
+    risk            = sl_price - entry_price
+    tp1_price      := entry_price - risk * tp1_rr
+    tp2_price      := entry_price - risk * tp2_rr
+    trade_lot_size := f_calc_lot(entry_price, sl_price)
+    trade_skipped  := trade_lot_size < min_lot
+    if not trade_skipped
+        trail_sl   := sl_price
+        tp1_hit    := false
+        pos        := -1
+        entry_bar  := bar_index
+        entry_time := time
+    if show_entry_labels and not trade_skipped
         sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
         label.new(time, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=sell_tt, xloc=xloc.bar_time)
 
