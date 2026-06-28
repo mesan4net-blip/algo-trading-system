@@ -612,12 +612,12 @@ f_trail_short() =>
     best
 
 // Exit conditions
-long_sl_hit   = pos == 1  and not na(trail_sl) and low  <= trail_sl
-short_sl_hit  = pos == -1 and not na(trail_sl) and high >= trail_sl
-long_tp1_hit  = pos == 1  and not tp1_hit and not na(tp1_price) and high >= tp1_price
-short_tp1_hit = pos == -1 and not tp1_hit and not na(tp1_price) and low  <= tp1_price
-long_tp2_hit  = pos == 1  and tp1_hit and not na(tp2_price) and high >= tp2_price
-short_tp2_hit = pos == -1 and tp1_hit and not na(tp2_price) and low  <= tp2_price
+long_sl_hit   = pos == 1  and not na(trail_sl) and m5_l <= trail_sl
+short_sl_hit  = pos == -1 and not na(trail_sl) and m5_h >= trail_sl
+long_tp1_hit  = pos == 1  and not tp1_hit and not na(tp1_price) and m5_h >= tp1_price
+short_tp1_hit = pos == -1 and not tp1_hit and not na(tp1_price) and m5_l <= tp1_price
+long_tp2_hit  = pos == 1  and tp1_hit and not na(tp2_price) and m5_h >= tp2_price
+short_tp2_hit = pos == -1 and tp1_hit and not na(tp2_price) and m5_l <= tp2_price
 
 // HUD variables
 var float gross_profit = 0.0
