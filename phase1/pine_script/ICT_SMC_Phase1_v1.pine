@@ -426,10 +426,6 @@ if show_fvg and barstate.islast
 
 // ============================================================================
 // ============================================================================
-// Trade entry MSS — aliases to chart structure (chart IS TTF)
-mss_bull = mss_bull
-mss_bear = mss_bear
-
 // ============================================================================
 // MARKET STRUCTURE LABELS
 // MSS = your entry trigger - bold, clear, with vertical spike
