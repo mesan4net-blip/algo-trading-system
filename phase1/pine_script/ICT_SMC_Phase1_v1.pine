@@ -934,8 +934,22 @@ if show_hud
     pf_col       = strat_pf >= 1.5 ? color.new(color.green, 0) : strat_pf >= 1.0 ? color.new(color.orange, 0) : color.new(color.red, 0)
 
     // First and last trade dates from strategy
-    first_dt = strat_total > 0 ? str.format_time(strategy.closedtrades.entry_time(strat_total - 1), "yyyy-MM-dd HH:mm") : "---"
-    last_dt  = strat_total > 0 ? str.format_time(strategy.closedtrades.exit_time(0), "yyyy-MM-dd HH:mm") : "---"
+    first_dt = "---"
+    if strat_total > 0
+        ft = strategy.closedtrades.entry_time(strat_total - 1)
+        fmo = month(ft) < 10 ? "0" + str.tostring(month(ft)) : str.tostring(month(ft))
+        fdy = dayofmonth(ft) < 10 ? "0" + str.tostring(dayofmonth(ft)) : str.tostring(dayofmonth(ft))
+        fhr = hour(ft) < 10 ? "0" + str.tostring(hour(ft)) : str.tostring(hour(ft))
+        fmi = minute(ft) < 10 ? "0" + str.tostring(minute(ft)) : str.tostring(minute(ft))
+        first_dt := str.tostring(year(ft)) + "-" + fmo + "-" + fdy + " " + fhr + ":" + fmi
+    last_dt = "---"
+    if strat_total > 0
+        lt = strategy.closedtrades.exit_time(0)
+        lmo = month(lt) < 10 ? "0" + str.tostring(month(lt)) : str.tostring(month(lt))
+        ldy = dayofmonth(lt) < 10 ? "0" + str.tostring(dayofmonth(lt)) : str.tostring(dayofmonth(lt))
+        lhr = hour(lt) < 10 ? "0" + str.tostring(hour(lt)) : str.tostring(hour(lt))
+        lmi = minute(lt) < 10 ? "0" + str.tostring(minute(lt)) : str.tostring(minute(lt))
+        last_dt := str.tostring(year(lt)) + "-" + lmo + "-" + ldy + " " + lhr + ":" + lmi
 
     table.cell(hud, 0, 14, "TRADE HISTORY", bgcolor=W, text_color=GR, text_size=SZS)
     table.cell(hud, 1, 14, str.tostring(strat_total) + " trades", bgcolor=W, text_color=GR, text_size=SZS)
@@ -968,14 +982,14 @@ if show_hud
     table.cell(hud, 1, 23, last_dt,       bgcolor=W, text_color=BK, text_size=SZ)
 
 // ============================================================================
-// TRADE LOG PANEL - top left, toggleable, last 20 trades
+// TRADE LOG PANEL - uses strategy.closedtrades for accurate data
 // ============================================================================
 var table tlog = table.new(f_pos(tlog_pos_inp), 8, 22, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
 
 if show_trade_log and barstate.islast
     W2   = color.white
     BK2  = color.new(color.black, 0)
-    GR2  = color.new(color.gray, 20)
+    GR2  = color.new(color.gray, 30)
     HDR  = color.new(color.black, 10)
     SZS2 = size.normal
     SZT2 = size.small
@@ -989,52 +1003,59 @@ if show_trade_log and barstate.islast
     table.cell(tlog, 6, 0, "$",      bgcolor=HDR, text_color=W2, text_size=SZS2)
     table.cell(tlog, 7, 0, "DATE",   bgcolor=HDR, text_color=W2, text_size=SZS2)
 
-    tl_size  = array.size(tl_num)
-    max_rows = math.min(tl_size, 20)
+    ct       = strategy.closedtrades
+    max_rows = math.min(ct, 20)
 
     if max_rows > 0
         for idx = 0 to max_rows - 1
-            trow     = idx + 1
-            t_num    = str.tostring(array.get(tl_num,    idx))
-            t_dir    = array.get(tl_dir,    idx)
-            t_entry  = str.tostring(array.get(tl_entry,  idx), format.mintick)
-            t_exit   = str.tostring(array.get(tl_exit,   idx), format.mintick)
-            t_result = array.get(tl_result, idx)
-            t_pips   = array.get(tl_pips,   idx)
-            t_dollar = array.get(tl_dollar, idx)
-            t_date   = array.get(tl_date,   idx)
-            t_win    = t_pips >= 0
-            t_col    = t_win ? color.new(color.green, 0) : color.new(color.red, 0)
-            pip_str  = t_win ? "+" + str.tostring(math.round(t_pips)) : str.tostring(math.round(t_pips))
-            usd_abs  = math.abs(math.round(t_dollar, 2))
-            usd_str  = t_win ? "+$" + str.tostring(usd_abs) : "-$" + str.tostring(usd_abs)
-            dir_col  = t_dir == "BUY" ? color.new(color.green, 0) : color.new(color.red, 0)
-            res_col  = t_result == "SL" ? color.new(color.red, 0) : color.new(color.green, 0)
+            trow      = idx + 1
+            t_ep      = strategy.closedtrades.entry_price(idx)
+            t_xp      = strategy.closedtrades.exit_price(idx)
+            t_pnl     = strategy.closedtrades.profit(idx)
+            t_comm    = strategy.closedtrades.commission(idx)
+            t_net     = t_pnl - t_comm
+            t_is_long = strategy.closedtrades.size(idx) > 0
+            t_sig     = strategy.closedtrades.exit_comment(idx)
+            t_etime   = strategy.closedtrades.entry_time(idx)
+            t_move    = t_is_long ? (t_xp - t_ep) : (t_ep - t_xp)
+            t_pips    = t_move / pip_size
+            t_win     = t_net > 0
+            t_col     = t_win ? color.new(color.green, 0) : color.new(color.red, 0)
+            dir_str   = t_is_long ? "BUY" : "SELL"
+            dir_col   = t_is_long ? color.new(color.green, 0) : color.new(color.red, 0)
+            res_str   = na(t_sig) or t_sig == "" ? (t_win ? "TP" : "SL") : t_sig
+            res_col   = t_win ? color.new(color.green, 0) : color.new(color.red, 0)
+            pip_str   = t_pips >= 0 ? "+" + str.tostring(math.round(t_pips, 1)) : str.tostring(math.round(t_pips, 1))
+            usd_str   = t_net >= 0 ? "+$" + str.tostring(math.round(t_net, 2)) : "-$" + str.tostring(math.abs(math.round(t_net, 2)))
+            mo        = month(t_etime) < 10 ? "0" + str.tostring(month(t_etime)) : str.tostring(month(t_etime))
+            dy        = dayofmonth(t_etime) < 10 ? "0" + str.tostring(dayofmonth(t_etime)) : str.tostring(dayofmonth(t_etime))
+            hr        = hour(t_etime) < 10 ? "0" + str.tostring(hour(t_etime)) : str.tostring(hour(t_etime))
+            mi        = minute(t_etime) < 10 ? "0" + str.tostring(minute(t_etime)) : str.tostring(minute(t_etime))
+            t_edt     = mo + "-" + dy + " " + hr + ":" + mi
+            num_str   = str.tostring(ct - idx)
 
-            table.cell(tlog, 0, trow, t_num,    bgcolor=W2, text_color=BK2,    text_size=SZT2)
-            table.cell(tlog, 1, trow, t_dir,    bgcolor=W2, text_color=dir_col, text_size=SZT2)
-            table.cell(tlog, 2, trow, t_entry,  bgcolor=W2, text_color=BK2,    text_size=SZT2)
-            table.cell(tlog, 3, trow, t_exit,   bgcolor=W2, text_color=BK2,    text_size=SZT2)
-            table.cell(tlog, 4, trow, t_result, bgcolor=W2, text_color=res_col, text_size=SZT2)
-            table.cell(tlog, 5, trow, pip_str,  bgcolor=W2, text_color=t_col,  text_size=SZT2)
-            table.cell(tlog, 6, trow, usd_str,  bgcolor=W2, text_color=t_col,  text_size=SZT2)
-            table.cell(tlog, 7, trow, t_date,   bgcolor=W2, text_color=GR2,    text_size=SZT2)
+            table.cell(tlog, 0, trow, num_str,                             bgcolor=W2, text_color=BK2,     text_size=SZT2)
+            table.cell(tlog, 1, trow, dir_str,                             bgcolor=W2, text_color=dir_col,  text_size=SZT2)
+            table.cell(tlog, 2, trow, str.tostring(t_ep, format.mintick), bgcolor=W2, text_color=BK2,     text_size=SZT2)
+            table.cell(tlog, 3, trow, str.tostring(t_xp, format.mintick), bgcolor=W2, text_color=BK2,     text_size=SZT2)
+            table.cell(tlog, 4, trow, res_str,                             bgcolor=W2, text_color=res_col,  text_size=SZT2)
+            table.cell(tlog, 5, trow, pip_str,                             bgcolor=W2, text_color=t_col,   text_size=SZT2)
+            table.cell(tlog, 6, trow, usd_str,                             bgcolor=W2, text_color=t_col,   text_size=SZT2)
+            table.cell(tlog, 7, trow, t_edt,                               bgcolor=W2, text_color=GR2,     text_size=SZT2)
 
     tot_row     = max_rows + 1
-    net_pips2   = (gross_profit - gross_loss) / syminfo.mintick
-    net_usd2    = (gross_profit - gross_loss) / pip_size * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue)
-    tot_pip_str = net_pips2 >= 0 ? "+" + str.tostring(math.round(net_pips2)) : str.tostring(math.round(net_pips2))
-    tot_usd_abs = math.abs(math.round(net_usd2, 2))
-    tot_usd_str = net_usd2 >= 0 ? "+$" + str.tostring(tot_usd_abs) : "-$" + str.tostring(tot_usd_abs)
-    tot_col2    = net_usd2 >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
+    tot_net     = strategy.netprofit
+    tot_col2    = tot_net >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
+    tot_usd_str = tot_net >= 0 ? "+$" + str.tostring(math.round(tot_net, 2)) : "-$" + str.tostring(math.abs(math.round(tot_net, 2)))
+    tot_wl_str  = str.tostring(strategy.wintrades) + "W / " + str.tostring(strategy.losstrades) + "L"
 
-    table.cell(tlog, 0, tot_row, "TOTAL",   bgcolor=HDR, text_color=W2,     text_size=SZS2)
-    table.cell(tlog, 1, tot_row, str.tostring(trades) + " trades", bgcolor=HDR, text_color=W2, text_size=SZS2)
-    table.cell(tlog, 2, tot_row, "",         bgcolor=HDR, text_color=W2,     text_size=SZS2)
-    table.cell(tlog, 3, tot_row, "",         bgcolor=HDR, text_color=W2,     text_size=SZS2)
-    table.cell(tlog, 4, tot_row, str.tostring(wins) + "W / " + str.tostring(losses) + "L", bgcolor=HDR, text_color=W2, text_size=SZS2)
-    table.cell(tlog, 5, tot_row, tot_pip_str, bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
-    table.cell(tlog, 6, tot_row, tot_usd_str, bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
-    table.cell(tlog, 7, tot_row, "",          bgcolor=HDR, text_color=W2,     text_size=SZS2)
+    table.cell(tlog, 0, tot_row, "TOTAL",      bgcolor=HDR, text_color=W2,      text_size=SZS2)
+    table.cell(tlog, 1, tot_row, str.tostring(ct) + " trades", bgcolor=HDR, text_color=W2, text_size=SZS2)
+    table.cell(tlog, 2, tot_row, "",            bgcolor=HDR, text_color=W2,      text_size=SZS2)
+    table.cell(tlog, 3, tot_row, "",            bgcolor=HDR, text_color=W2,      text_size=SZS2)
+    table.cell(tlog, 4, tot_row, tot_wl_str,    bgcolor=HDR, text_color=W2,      text_size=SZS2)
+    table.cell(tlog, 5, tot_row, "",            bgcolor=HDR, text_color=W2,      text_size=SZS2)
+    table.cell(tlog, 6, tot_row, tot_usd_str,   bgcolor=HDR, text_color=tot_col2, text_size=SZS2)
+    table.cell(tlog, 7, tot_row, "",            bgcolor=HDR, text_color=W2,      text_size=SZS2)
 
 
