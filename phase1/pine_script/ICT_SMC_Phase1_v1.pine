@@ -11,7 +11,7 @@ indicator("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
      max_lines_count=500)
 
 // ============================================================================
-// CHART TF GUARD — This script must run on 5M chart
+// CHART TF GUARD - This script must run on 5M chart
 // Labels use xloc.bar_time so they are visible on ALL timeframes when viewed
 // but the script MUST be added on a 5M chart to detect entries correctly
 // ============================================================================
@@ -89,7 +89,7 @@ atr14    = ta.atr(14)
 
 f_pip_to_price(_pips) => _pips * pip_size
 
-// Timestamp — available globally for tooltips and HUD
+// Timestamp - available globally for tooltips and HUD
 ts_str = str.tostring(year) + "-" + (month < 10 ? "0" : "") + str.tostring(month) + "-" + (dayofmonth < 10 ? "0" : "") + str.tostring(dayofmonth) + " " + (hour < 10 ? "0" : "") + str.tostring(hour) + ":" + (minute < 10 ? "0" : "") + str.tostring(minute)
 
 // Hour in EST (UTC-5 standard, UTC-4 DST - TradingView uses exchange time)
@@ -136,6 +136,56 @@ h1_high  = f_htf_high("60")
 h1_low   = f_htf_low("60")
 
 // ============================================================================
+// ============================================================================
+// 5M TRADE DATA - always fetched at 5M resolution for trade detection
+// Structure runs on chart TF. Trades always detected on 5M.
+// Labels placed with xloc.bar_time so they appear on all TFs correctly.
+// ============================================================================
+m5_o     = request.security(syminfo.tickerid, "5", open,  barmerge.gaps_off, barmerge.lookahead_off)
+m5_h     = request.security(syminfo.tickerid, "5", high,  barmerge.gaps_off, barmerge.lookahead_off)
+m5_l     = request.security(syminfo.tickerid, "5", low,   barmerge.gaps_off, barmerge.lookahead_off)
+m5_c     = request.security(syminfo.tickerid, "5", close, barmerge.gaps_off, barmerge.lookahead_off)
+m5_t     = request.security(syminfo.tickerid, "5", time,  barmerge.gaps_off, barmerge.lookahead_off)
+m5_hr    = request.security(syminfo.tickerid, "5", hour(time, "America/New_York"), barmerge.gaps_off, barmerge.lookahead_off)
+
+// Trade Window - evaluated on 5M time
+tw_london = kz_london_on and (m5_hr >= kz_london_h1 and m5_hr < kz_london_h2)
+tw_ny     = kz_ny_on     and (m5_hr >= kz_ny_h1     and m5_hr < kz_ny_h2)
+in_kz_5m  = tw_london or tw_ny
+kz_5m_name = tw_london ? "London" : tw_ny ? "New York" : "Closed"
+
+// 5M structure for trade entry trigger only
+var float last_sh_5m_trade = na
+var float last_sl_5m_trade = na
+var int   struct_dir_trade  = 0
+var bool  mss_bull_trade    = false
+var bool  mss_bear_trade    = false
+
+mss_bull_trade := false
+mss_bear_trade := false
+
+m5_ph = ta.pivothigh(m5_h, str_lookback, str_lookback)
+m5_pl = ta.pivotlow(m5_l,  str_lookback, str_lookback)
+
+if not na(m5_ph)
+    last_sh_5m_trade := m5_ph
+if not na(m5_pl)
+    last_sl_5m_trade := m5_pl
+
+if not na(last_sh_5m_trade) and m5_c > last_sh_5m_trade and barstate.isconfirmed
+    if struct_dir_trade <= 0
+        mss_bull_trade := true
+    struct_dir_trade := 1
+
+if not na(last_sl_5m_trade) and m5_c < last_sl_5m_trade and barstate.isconfirmed
+    if struct_dir_trade >= 0
+        mss_bear_trade := true
+    struct_dir_trade := -1
+
+// 5M gap filter for trade entries
+m5_gap_up  = m5_l > m5_h[1]
+m5_gap_bar = m5_gap_up or m5_h < m5_l[1]
+
 // MARKET STRUCTURE ENGINE
 // Detects swing highs/lows, BOS, MSS on each timeframe
 // ============================================================================
@@ -524,8 +574,8 @@ disp_bear     = is_displaced and close < open and close <= (high - candle_range 
 // All must align: Bias + POI + MSS + Displacement + Trade Window + No Gap
 // ============================================================================
 // Entry: Bias + POI + MSS + Trade Window. Displacement removed - MSS candle is the displacement.
-long_entry_raw  = bias_bull and poi_bull and mss_bull_5m and in_kz and not gap_bar and barstate.isconfirmed
-short_entry_raw = bias_bear and poi_bear and mss_bear_5m and in_kz and not gap_bar and barstate.isconfirmed
+long_entry_raw  = bias_bull and poi_bull and mss_bull_trade and in_kz_5m and not m5_gap_bar and barstate.isconfirmed
+short_entry_raw = bias_bear and poi_bear and mss_bear_trade and in_kz_5m and not m5_gap_bar and barstate.isconfirmed
 
 // ============================================================================
 // TRADE STATE & MANAGEMENT
@@ -689,7 +739,7 @@ if not exited_this_bar and pos == -1 and short_sl_hit
 var int last_alert_bar = na
 
 if not exited_this_bar and pos == 0 and long_entry_raw
-    entry_price := close
+    entry_price := m5_c
     sl_price    := f_long_sl(active_ob_bot)
     risk        = entry_price - sl_price
     tp1_price   := entry_price + risk * tp1_rr
@@ -725,7 +775,7 @@ if not exited_this_bar and pos == 0 and long_entry_raw
         last_alert_bar := bar_index
 
 if not exited_this_bar and pos == 0 and short_entry_raw
-    entry_price := close
+    entry_price := m5_c
     sl_price    := f_short_sl(active_bear_ob_top)
     risk        = sl_price - entry_price
     tp1_price   := entry_price - risk * tp1_rr
@@ -827,12 +877,12 @@ h1_str   = h1_struct  == 1 ? "BULLISH" : h1_struct  == -1 ? "BEARISH" : "FLAT"
 d_col    = daily_struct == 1 ? color.new(color.green, 0) : daily_struct == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
 h4_col   = h4_struct  == 1 ? color.new(color.green, 0) : h4_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
 h1_col   = h1_struct  == 1 ? color.new(color.green, 0) : h1_struct  == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
-kz_str   = in_london ? "LONDON" : in_ny ? "NEW YORK" : "CLOSED"
-kz_col   = in_kz ? color.new(color.green, 0) : color.new(color.red, 0)
+kz_str   = tw_london ? "LONDON" : tw_ny ? "NEW YORK" : "CLOSED"
+kz_col   = in_kz_5m ? color.new(color.green, 0) : color.new(color.red, 0)
 wr_col   = win_rate >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
 pnl_col  = net_pnl >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
-sig_all_b = bias_bull and poi_bull and mss_bull_5m and in_kz
-sig_all_s = bias_bear and poi_bear and mss_bear_5m and in_kz
+sig_all_b = bias_bull and poi_bull and mss_bull_trade and in_kz_5m
+sig_all_s = bias_bear and poi_bear and mss_bear_trade and in_kz_5m
 sig_txt   = sig_all_b ? "LONG SIGNAL READY" : sig_all_s ? "SHORT SIGNAL READY" : "No signal yet"
 sig_col   = sig_all_b ? color.new(color.green, 0) : sig_all_s ? color.new(color.red, 0) : color.new(color.gray, 0)
 
@@ -924,5 +974,6 @@ if show_hud
     // Row 19 - Max DD
     table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
     table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+
 
 
