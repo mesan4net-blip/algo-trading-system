@@ -538,6 +538,19 @@ disp_bull     = is_displaced and close > open and close >= (low + candle_range *
 disp_bear     = is_displaced and close < open and close <= (high - candle_range * 0.6)
 
 // ============================================================================
+
+// ============================================================================
+// DYNAMIC LOT SIZE CALCULATION
+// ============================================================================
+f_calc_lot(_entry, _sl) =>
+    float sl_dist  = math.abs(_entry - _sl)
+    float sl_pips  = sl_dist / pip_size
+    float pip_val  = syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue
+    float risk_amt = current_capital * (risk_pct / 100.0)
+    float raw_lot  = sl_pips > 0 ? risk_amt / (sl_pips * pip_val) : 0.0
+    float lot      = math.floor(raw_lot * 100.0) / 100.0
+    lot
+
 // ENTRY CONDITIONS
 // All must align: Bias + POI + MSS + Displacement + Trade Window + No Gap
 // ============================================================================
