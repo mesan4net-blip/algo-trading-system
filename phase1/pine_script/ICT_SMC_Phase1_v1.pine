@@ -147,11 +147,6 @@ h1_low   = f_htf_low(htf1_in)
 // Labels placed with xloc.bar_time so they appear on all TFs correctly.
 // ============================================================================
 // TTF (default: 5M) - Trade detection data
-open  = request.security(syminfo.tickerid, ttf_in, open,  barmerge.gaps_off, barmerge.lookahead_off)
-high  = request.security(syminfo.tickerid, ttf_in, high,  barmerge.gaps_off, barmerge.lookahead_off)
-low  = request.security(syminfo.tickerid, ttf_in, low,   barmerge.gaps_off, barmerge.lookahead_off)
-close  = request.security(syminfo.tickerid, ttf_in, close, barmerge.gaps_off, barmerge.lookahead_off)
-highr = request.security(syminfo.tickerid, ttf_in, hour(time, "America/New_York"), barmerge.gaps_off, barmerge.lookahead_off)
 
 // Trade Window - evaluated on 5M time
 tw_london = kz_london_on and (highr >= kz_london_h1 and highr < kz_london_h2)
