@@ -812,6 +812,15 @@ plot(pos != 0 and not na(trail_sl) ? trail_sl : na,
      linewidth=2, style=plot.style_stepline)
 
 // ============================================================================
+// ============================================================================
+// CHART TF WARNING - shows on chart if wrong TF is loaded
+// ============================================================================
+var label tf_warn_lbl = na
+if barstate.islast
+    label.delete(tf_warn_lbl)
+    if timeframe.period != ttf_in
+        tf_warn_lbl := label.new(bar_index, high, "WRONG TIMEFRAME\nSet chart to TTF: " + ttf_in + "\nCurrent: " + timeframe.period, style=label.style_label_left, color=color.new(color.red, 0), textcolor=color.white, size=size.large)
+
 // BIAS LABEL (top right)
 // ============================================================================
 var label bias_lbl = na
