@@ -90,11 +90,6 @@ bar_hour = hour(time, "America/New_York")
 bar_min  = minute(time, "America/New_York")
 
 // Trade Window detection
-in_london = kz_london_on and (m5_hour >= kz_london_h1 and m5_hour < kz_london_h2)
-in_ny     = kz_ny_on     and (m5_hour >= kz_ny_h1     and m5_hour < kz_ny_h2)
-in_kz     = in_london or in_ny
-kz_name   = in_london ? "London" : in_ny ? "New York" : "Closed"
-
 // Gap filter (same as Script 1 - no entry on gap bars)
 gap_up   = bar_index > 0 and m5_low  > m5_high[1]
 gap_dn   = bar_index > 0 and m5_high < m5_low[1]
@@ -137,6 +132,12 @@ m5_low   = request.security(syminfo.tickerid, "5", low,   barmerge.gaps_off, bar
 m5_close = request.security(syminfo.tickerid, "5", close, barmerge.gaps_off, barmerge.lookahead_off)
 m5_time  = request.security(syminfo.tickerid, "5", time,  barmerge.gaps_off, barmerge.lookahead_off)
 m5_hour  = request.security(syminfo.tickerid, "5", hour(time, "America/New_York"),  barmerge.gaps_off, barmerge.lookahead_off)
+
+// Trade Window detection — uses 5M hour so it works on any chart TF
+in_london = kz_london_on and (m5_hour >= kz_london_h1 and m5_hour < kz_london_h2)
+in_ny     = kz_ny_on     and (m5_hour >= kz_ny_h1     and m5_hour < kz_ny_h2)
+in_kz     = in_london or in_ny
+kz_name   = in_london ? "London" : in_ny ? "New York" : "Closed" 
 
 // ============================================================================
 // MARKET STRUCTURE ENGINE
