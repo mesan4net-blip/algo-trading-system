@@ -1,6 +1,6 @@
 // ============================================================================
 // ICT/SMC ALGO TRADING SYSTEM - PHASE 1
-// Strategy: Top-Down Bias + OB/FVG/BOS/MSS + Kill Zone Entry
+// Strategy: Top-Down Bias + OB/FVG/BOS/MSS + Trade Window Entry
 // Chart TF: 5M | Higher TFs: 1H, 4H, Daily via request.security()
 // Author: Built for mesan4net-blip algo trading system
 // Version: 1.0
@@ -14,15 +14,15 @@ indicator("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
 // INPUTS
 // ============================================================================
 
-// --- Kill Zones ---
-grp_kz = "Kill Zones"
-kz_london_on  = input.bool(true,  "London Kill Zone",          group=grp_kz)
+// --- Trade Windows ---
+grp_kz = "Trade Windows"
+kz_london_on  = input.bool(true,  "London Trade Window",          group=grp_kz)
 kz_london_h1  = input.int(2,      "London Start Hour (EST)",   group=grp_kz, minval=0, maxval=23)
 kz_london_h2  = input.int(5,      "London End Hour (EST)",     group=grp_kz, minval=0, maxval=23)
-kz_ny_on      = input.bool(true,  "NY Kill Zone",              group=grp_kz)
+kz_ny_on      = input.bool(true,  "NY Trade Window",              group=grp_kz)
 kz_ny_h1      = input.int(8,      "NY Start Hour (EST)",       group=grp_kz, minval=0, maxval=23)
 kz_ny_h2      = input.int(11,     "NY End Hour (EST)",         group=grp_kz, minval=0, maxval=23)
-kz_bg_transp  = input.int(90,     "Kill Zone BG Transparency", group=grp_kz, minval=50, maxval=99)
+kz_bg_transp  = input.int(90,     "Trade Window BG Transparency", group=grp_kz, minval=50, maxval=99)
 kz_london_col = input.color(color.new(color.blue,   90), "London Color", group=grp_kz)
 kz_ny_col     = input.color(color.new(color.orange, 90), "NY Color",     group=grp_kz)
 
@@ -86,11 +86,11 @@ f_pip_to_price(_pips) => _pips * pip_size
 bar_hour = hour(time, "America/New_York")
 bar_min  = minute(time, "America/New_York")
 
-// Kill zone detection
+// Trade Window detection
 in_london = kz_london_on and (bar_hour >= kz_london_h1 and bar_hour < kz_london_h2)
 in_ny     = kz_ny_on     and (bar_hour >= kz_ny_h1     and bar_hour < kz_ny_h2)
 in_kz     = in_london or in_ny
-kz_name   = in_london ? "London" : in_ny ? "NY" : "Outside KZ"
+kz_name   = in_london ? "London" : in_ny ? "New York" : "Closed"
 
 // Gap filter (same as Script 1 - no entry on gap bars)
 gap_up   = bar_index > 0 and low  > high[1]
@@ -511,7 +511,7 @@ disp_bear     = is_displaced and close < open and close <= (high - candle_range 
 
 // ============================================================================
 // ENTRY CONDITIONS
-// All must align: Bias + POI + MSS + Displacement + Kill Zone + No Gap
+// All must align: Bias + POI + MSS + Displacement + Trade Window + No Gap
 // ============================================================================
 long_entry_raw  = bias_bull and poi_bull and mss_bull_5m and disp_bull and in_kz and not gap_bar and barstate.isconfirmed
 short_entry_raw = bias_bear and poi_bear and mss_bear_5m and disp_bear and in_kz and not gap_bar and barstate.isconfirmed
@@ -695,7 +695,7 @@ if not exited_this_bar and pos == 0 and long_entry_raw
 
     if show_entry_labels
         label.new(bar_index, low - atr14 * 0.5,
-                  "^ LONG\n" + str.tostring(close, format.mintick) + "\nKZ: " + kz_name,
+                  "^ LONG\n" + str.tostring(close, format.mintick) + "\nWindow: " + kz_name,
                   style=label.style_label_up, color=color.new(color.blue, 0),
                   textcolor=color.white, size=size.normal)
 
@@ -732,7 +732,7 @@ if not exited_this_bar and pos == 0 and short_entry_raw
 
     if show_entry_labels
         label.new(bar_index, high + atr14 * 0.5,
-                  "v SHORT\n" + str.tostring(close, format.mintick) + "\nKZ: " + kz_name,
+                  "v SHORT\n" + str.tostring(close, format.mintick) + "\nWindow: " + kz_name,
                   style=label.style_label_down, color=color.new(color.red, 20),
                   textcolor=color.white, size=size.normal)
 
@@ -773,10 +773,10 @@ if pos == -1 and tp1_hit
         trail_sl := candidate
 
 // ============================================================================
-// KILL ZONE BACKGROUND
+// TRADE WINDOW BACKGROUND
 // ============================================================================
-bgcolor(in_london and kz_london_on ? kz_london_col : na, title="London KZ")
-bgcolor(in_ny     and kz_ny_on     ? kz_ny_col     : na, title="NY KZ")
+bgcolor(in_london and kz_london_on ? kz_london_col : na, title="London Window")
+bgcolor(in_ny     and kz_ny_on     ? kz_ny_col     : na, title="NY Window")
 
 // ============================================================================
 // TRAILING SL PLOT
@@ -840,8 +840,8 @@ if show_hud
     table.cell(hud, 0, 0, "ICT / SMC  Phase 1", bgcolor=W, text_color=BK, text_size=size.large)
     table.cell(hud, 1, 0, "v1.0",               bgcolor=W, text_color=GR,  text_size=size.large)
 
-    // Row 1 — Kill Zone
-    table.cell(hud, 0, 1, "Kill Zone", bgcolor=W, text_color=BK,    text_size=SZ)
+    // Row 1 — Trade Window
+    table.cell(hud, 0, 1, "Trade Window", bgcolor=W, text_color=BK,    text_size=SZ)
     table.cell(hud, 1, 1, kz_str,      bgcolor=W, text_color=kz_col, text_size=SZ)
 
     // Row 2 — Section header
