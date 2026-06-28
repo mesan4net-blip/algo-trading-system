@@ -801,42 +801,92 @@ if show_bias_label and barstate.islast
 // ============================================================================
 // HUD TABLE
 // ============================================================================
-win_rate   = (wins + losses) > 0 ? (float(wins) / float(wins + losses)) * 100.0 : 0.0
-pl_ratio   = gross_loss > 0 ? gross_profit / gross_loss : 0.0
-net_pnl    = gross_profit - gross_loss
+win_rate = (wins + losses) > 0 ? (float(wins) / float(wins + losses)) * 100.0 : 0.0
+pl_ratio = gross_loss > 0 ? gross_profit / gross_loss : 0.0
+net_pnl  = gross_profit - gross_loss
 
-var table hud = table.new(position.bottom_right, 2, 7,
-                          frame_color=color.new(color.black, 50), frame_width=1,
-                          border_color=color.new(color.gray, 50), border_width=1)
+pos_txt   = pos == 1  ? "LONG  " : pos == -1 ? "SHORT " : "FLAT  "
+pos_col   = pos == 1  ? color.new(color.lime, 0) : pos == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)
+pos_bg    = pos == 1  ? color.new(color.green, 60) : pos == -1 ? color.new(color.red, 60) : color.new(color.gray, 70)
+entry_txt = pos != 0  ? str.tostring(entry_price, format.mintick) : "-"
+sl_txt    = pos != 0  ? str.tostring(trail_sl, format.mintick) : "-"
+tp1_txt   = pos != 0  ? str.tostring(tp1_price, format.mintick) : "-"
+tp2_txt   = pos != 0  ? str.tostring(tp2_price, format.mintick) : "-"
+tp1_done  = tp1_hit ? "HIT" : "OPEN"
+kz_col    = in_london ? color.new(color.blue, 30) : in_ny ? color.new(color.orange, 30) : color.new(color.gray, 60)
+bias_txt  = bias_bull ? "BULL" : bias_bear ? "BEAR" : "NONE"
+bias_col  = bias_bull ? color.new(color.lime, 0) : bias_bear ? color.new(color.red, 0) : color.new(color.gray, 0)
+bias_bg   = bias_bull ? color.new(color.green, 60) : bias_bear ? color.new(color.red, 60) : color.new(color.gray, 70)
+
+// 3-column HUD: Label | Value | Extra
+var table hud = table.new(position.bottom_right, 3, 12,
+                          frame_color=color.new(color.black, 20), frame_width=2,
+                          border_color=color.new(color.gray, 40), border_width=1)
 
 if show_hud
-    hud_bg = color.new(color.black, 70)
-    hud_txt = color.white
+    hud_bg    = color.new(color.black, 60)
+    hdr_bg    = color.new(color.navy, 10)
+    hud_txt   = color.white
+    lbl_txt   = color.new(color.silver, 0)
+    sz        = size.normal
 
-    table.cell(hud, 0, 0, "ICT Phase 1",   bgcolor=color.new(color.blue, 30), text_color=hud_txt, text_size=size.small)
-    table.cell(hud, 1, 0, kz_name,          bgcolor=color.new(color.blue, 30), text_color=hud_txt, text_size=size.small)
+    // Row 0 — Header
+    table.cell(hud, 0, 0, "ICT/SMC", bgcolor=hdr_bg, text_color=color.white, text_size=size.large)
+    table.cell(hud, 1, 0, "PHASE 1", bgcolor=hdr_bg, text_color=color.new(color.yellow, 0), text_size=size.large)
+    table.cell(hud, 2, 0, kz_name,   bgcolor=kz_col, text_color=color.white, text_size=size.large)
 
-    table.cell(hud, 0, 1, "Trades",  bgcolor=hud_bg, text_color=hud_txt, text_size=size.small)
-    table.cell(hud, 1, 1, str.tostring(trades), bgcolor=hud_bg, text_color=hud_txt, text_size=size.small)
+    // Row 1 — Position
+    table.cell(hud, 0, 1, "POSITION", bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 1, pos_txt,    bgcolor=pos_bg, text_color=pos_col, text_size=size.large)
+    table.cell(hud, 2, 1, "TP1: " + tp1_done, bgcolor=hud_bg, text_color=tp1_hit ? color.lime : color.gray, text_size=sz)
 
-    table.cell(hud, 0, 2, "Win %",   bgcolor=hud_bg, text_color=hud_txt, text_size=size.small)
-    table.cell(hud, 1, 2, str.tostring(win_rate, "#.0") + "%",
-               bgcolor=hud_bg, text_color=win_rate >= 50 ? color.lime : color.red, text_size=size.small)
+    // Row 2 — Entry
+    table.cell(hud, 0, 2, "ENTRY",   bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 2, entry_txt, bgcolor=hud_bg, text_color=color.white, text_size=sz)
+    table.cell(hud, 2, 2, "BIAS: " + bias_txt, bgcolor=bias_bg, text_color=bias_col, text_size=sz)
 
-    table.cell(hud, 0, 3, "P/L Ratio", bgcolor=hud_bg, text_color=hud_txt, text_size=size.small)
-    table.cell(hud, 1, 3, str.tostring(pl_ratio, "#.00") + ":1",
-               bgcolor=hud_bg, text_color=pl_ratio >= 1 ? color.lime : color.red, text_size=size.small)
+    // Row 3 — Stop Loss
+    table.cell(hud, 0, 3, "STOP",   bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 3, sl_txt,   bgcolor=hud_bg, text_color=color.new(color.red, 0), text_size=sz)
+    table.cell(hud, 2, 3, "D: " + (daily_struct == 1 ? "^ BULL" : daily_struct == -1 ? "v BEAR" : "- FLAT"), bgcolor=hud_bg, text_color=daily_struct == 1 ? color.lime : daily_struct == -1 ? color.red : color.gray, text_size=sz)
 
-    table.cell(hud, 0, 4, "Net P&L",  bgcolor=hud_bg, text_color=hud_txt, text_size=size.small)
-    table.cell(hud, 1, 4, str.tostring(net_pnl, format.mintick),
-               bgcolor=hud_bg, text_color=net_pnl >= 0 ? color.lime : color.red, text_size=size.small)
+    // Row 4 — TP1
+    table.cell(hud, 0, 4, "TP1",   bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 4, tp1_txt, bgcolor=hud_bg, text_color=color.new(color.lime, 0), text_size=sz)
+    table.cell(hud, 2, 4, "4H: " + (h4_struct == 1 ? "^ BULL" : h4_struct == -1 ? "v BEAR" : "- FLAT"), bgcolor=hud_bg, text_color=h4_struct == 1 ? color.lime : h4_struct == -1 ? color.red : color.gray, text_size=sz)
 
-    table.cell(hud, 0, 5, "Max DD",   bgcolor=hud_bg, text_color=hud_txt, text_size=size.small)
-    table.cell(hud, 1, 5, str.tostring(max_dd, format.mintick),
-               bgcolor=hud_bg, text_color=color.orange, text_size=size.small)
+    // Row 5 — TP2
+    table.cell(hud, 0, 5, "TP2",   bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 5, tp2_txt, bgcolor=hud_bg, text_color=color.new(color.lime, 0), text_size=sz)
+    table.cell(hud, 2, 5, "1H: " + (h1_struct == 1 ? "^ BULL" : h1_struct == -1 ? "v BEAR" : "- FLAT"), bgcolor=hud_bg, text_color=h1_struct == 1 ? color.lime : h1_struct == -1 ? color.red : color.gray, text_size=sz)
 
-    table.cell(hud, 0, 6, "Bias",     bgcolor=hud_bg, text_color=hud_txt, text_size=size.small)
-    table.cell(hud, 1, 6, bias_bull ? "BULL" : bias_bear ? "BEAR" : "NONE",
-               bgcolor=hud_bg,
-               text_color=bias_bull ? color.lime : bias_bear ? color.red : color.gray,
-               text_size=size.small)
+    // Row 6 — Divider
+    table.cell(hud, 0, 6, "------------", bgcolor=hud_bg, text_color=color.new(color.gray, 50), text_size=size.small)
+    table.cell(hud, 1, 6, "STATS",        bgcolor=hud_bg, text_color=color.new(color.silver, 0), text_size=size.small)
+    table.cell(hud, 2, 6, "------------", bgcolor=hud_bg, text_color=color.new(color.gray, 50), text_size=size.small)
+
+    // Row 7 — Trades
+    table.cell(hud, 0, 7, "TRADES",         bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 7, str.tostring(trades), bgcolor=hud_bg, text_color=color.white, text_size=sz)
+    table.cell(hud, 2, 7, str.tostring(wins) + "W / " + str.tostring(losses) + "L", bgcolor=hud_bg, text_color=color.white, text_size=sz)
+
+    // Row 8 — Win Rate
+    table.cell(hud, 0, 8, "WIN RATE", bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 8, str.tostring(win_rate, "#.0") + "%", bgcolor=hud_bg, text_color=win_rate >= 50 ? color.lime : color.red, text_size=sz)
+    table.cell(hud, 2, 8, "P/L: " + str.tostring(pl_ratio, "#.00") + ":1", bgcolor=hud_bg, text_color=pl_ratio >= 1 ? color.lime : color.red, text_size=sz)
+
+    // Row 9 — Net P&L
+    table.cell(hud, 0, 9, "NET P&L", bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 9, str.tostring(net_pnl, format.mintick), bgcolor=hud_bg, text_color=net_pnl >= 0 ? color.lime : color.red, text_size=sz)
+    table.cell(hud, 2, 9, "DD: " + str.tostring(max_dd, format.mintick), bgcolor=hud_bg, text_color=color.orange, text_size=sz)
+
+    // Row 10 — Gross
+    table.cell(hud, 0, 10, "GROSS +", bgcolor=hud_bg, text_color=lbl_txt, text_size=sz)
+    table.cell(hud, 1, 10, str.tostring(gross_profit, format.mintick), bgcolor=hud_bg, text_color=color.lime, text_size=sz)
+    table.cell(hud, 2, 10, "GROSS -: " + str.tostring(gross_loss, format.mintick), bgcolor=hud_bg, text_color=color.red, text_size=sz)
+
+    // Row 11 — Kill Zone status
+    table.cell(hud, 0, 11, "KILL ZONE", bgcolor=kz_col, text_color=color.white, text_size=sz)
+    table.cell(hud, 1, 11, in_kz ? "ACTIVE" : "CLOSED", bgcolor=kz_col, text_color=in_kz ? color.lime : color.red, text_size=sz)
+    table.cell(hud, 2, 11, kz_name, bgcolor=kz_col, text_color=color.white, text_size=sz)
+
