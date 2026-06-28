@@ -243,7 +243,7 @@ if not na(last_sl_1h) and h1_close < last_sl_1h
 // Daily sets bias -> 4H confirms -> 1H activates -> 5M triggers
 // ============================================================================
 // Bias: 4H + 1H must agree (trading bias).
-// Daily acts as a filter — if Daily is bearish, only allow short bias. If bullish, only long.
+// Daily acts as a filter - if Daily is bearish, only allow short bias. If bullish, only long.
 // If Daily is flat/0, allow 4H+1H to decide freely.
 bias_bull = h4_struct == 1 and h1_struct == 1 and daily_struct >= 0
 bias_bear = h4_struct == -1 and h1_struct == -1 and daily_struct <= 0
@@ -398,19 +398,19 @@ if show_fvg and barstate.islast
 // ============================================================================
 // ============================================================================
 // MARKET STRUCTURE LABELS
-// MSS = your entry trigger — bold, clear, with vertical spike
-// BOS = continuation context — subtle dashed line only, no label clutter
+// MSS = your entry trigger - bold, clear, with vertical spike
+// BOS = continuation context - subtle dashed line only, no label clutter
 // CHoCH = off by default
 // ============================================================================
 
-// BOS — dashed line only, no floating label
+// BOS - dashed line only, no floating label
 if show_bos and bos_bull_5m and not na(last_sh_5m) and not na(last_sh_5m_bar)
     line.new(last_sh_5m_bar, last_sh_5m, bar_index, last_sh_5m, color=color.new(color.green, 60), width=1, style=line.style_dashed)
 
 if show_bos and bos_bear_5m and not na(last_sl_5m) and not na(last_sl_5m_bar)
     line.new(last_sl_5m_bar, last_sl_5m, bar_index, last_sl_5m, color=color.new(color.red, 60), width=1, style=line.style_dashed)
 
-// MSS — solid bold line + label at right end + vertical spike on candle
+// MSS - solid bold line + label at right end + vertical spike on candle
 if show_mss and mss_bull_5m and not na(last_sh_5m) and not na(last_sh_5m_bar)
     line.new(last_sh_5m_bar, last_sh_5m, bar_index + 3, last_sh_5m, color=color.new(color.lime, 0), width=2, style=line.style_solid)
     label.new(bar_index + 3, last_sh_5m, "MSS", style=label.style_label_left, color=color.new(color.lime, 0), textcolor=color.black, size=size.small)
@@ -421,7 +421,7 @@ if show_mss and mss_bear_5m and not na(last_sl_5m) and not na(last_sl_5m_bar)
     label.new(bar_index + 3, last_sl_5m, "MSS", style=label.style_label_left, color=color.new(color.orange, 0), textcolor=color.black, size=size.small)
     line.new(bar_index, high + atr14 * 0.2, bar_index, high + atr14 * 1.0, color=color.new(color.orange, 0), width=2)
 
-// CHoCH — off by default, tiny if enabled
+// CHoCH - off by default, tiny if enabled
 choch_bull = struct_dir_5m == -1 and not na(last_sl_5m) and low < last_sl_5m and close > last_sl_5m
 choch_bear = struct_dir_5m == 1  and not na(last_sh_5m) and high > last_sh_5m and close < last_sh_5m
 
@@ -512,7 +512,7 @@ disp_bear     = is_displaced and close < open and close <= (high - candle_range 
 // ENTRY CONDITIONS
 // All must align: Bias + POI + MSS + Displacement + Trade Window + No Gap
 // ============================================================================
-// Entry: Bias + POI + MSS + Trade Window. Displacement removed — MSS candle is the displacement.
+// Entry: Bias + POI + MSS + Trade Window. Displacement removed - MSS candle is the displacement.
 long_entry_raw  = bias_bull and poi_bull and mss_bull_5m and in_kz and not gap_bar and barstate.isconfirmed
 short_entry_raw = bias_bear and poi_bear and mss_bear_5m and in_kz and not gap_bar and barstate.isconfirmed
 
@@ -580,7 +580,8 @@ bool exited_this_bar = false
 if pos == 1 and long_tp2_hit
     var float _pnl_ltp2 = tp2_price - entry_price
     if show_entry_labels
-        label.new(bar_index, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=_pnl_ltp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large)
+        close_tt_ltp2 = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    TP2 Hit" + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(tp2_price, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ltp2, format.mintick) + "\n" + "Result:      " + (_pnl_ltp2 >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
+        label.new(bar_index, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=_pnl_ltp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ltp2)
     equity += _pnl_ltp2
     trades += 1
     if _pnl_ltp2 >= 0
@@ -599,7 +600,8 @@ if pos == 1 and long_tp2_hit
 if pos == -1 and short_tp2_hit
     var float _pnl_stp2 = entry_price - tp2_price
     if show_entry_labels
-        label.new(bar_index, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=_pnl_stp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large)
+        close_tt_stp2 = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    TP2 Hit" + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(tp2_price, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_stp2, format.mintick) + "\n" + "Result:      " + (_pnl_stp2 >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
+        label.new(bar_index, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=_pnl_stp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_stp2)
     equity += _pnl_stp2
     trades += 1
     if _pnl_stp2 >= 0
@@ -620,19 +622,22 @@ if not exited_this_bar and pos == 1 and long_tp1_hit
     tp1_hit  := true
     trail_sl := entry_price   // Move SL to BE
     if show_entry_labels
-        label.new(bar_index, high + atr14 * 0.8, "TP1", style=label.style_label_down, color=color.new(color.green, 20), textcolor=color.white, size=size.small)
+        tp1_tt_l = "TP1 HIT - LONG" + "\n" + "Entry: " + str.tostring(entry_price, format.mintick) + "\n" + "TP1:    " + str.tostring(tp1_price, format.mintick) + "\n" + "SL now at breakeven" + "\n" + "Trailing runner to TP2: " + str.tostring(tp2_price, format.mintick)
+        label.new(bar_index, high + atr14 * 0.8, "TP1", style=label.style_label_down, color=color.new(color.green, 20), textcolor=color.white, size=size.small, tooltip=tp1_tt_l)
 
 if not exited_this_bar and pos == -1 and short_tp1_hit
     tp1_hit  := true
     trail_sl := entry_price   // Move SL to BE
     if show_entry_labels
-        label.new(bar_index, low - atr14 * 0.8, "TP1", style=label.style_label_up, color=color.new(color.green, 20), textcolor=color.white, size=size.small)
+        tp1_tt_s = "TP1 HIT - SHORT" + "\n" + "Entry: " + str.tostring(entry_price, format.mintick) + "\n" + "TP1:    " + str.tostring(tp1_price, format.mintick) + "\n" + "SL now at breakeven" + "\n" + "Trailing runner to TP2: " + str.tostring(tp2_price, format.mintick)
+        label.new(bar_index, low - atr14 * 0.8, "TP1", style=label.style_label_up, color=color.new(color.green, 20), textcolor=color.white, size=size.small, tooltip=tp1_tt_s)
 
 // SL hit
 if not exited_this_bar and pos == 1 and long_sl_hit
     var float _pnl_lsl = trail_sl - entry_price
     if show_entry_labels
-        label.new(bar_index, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=color.new(color.black, 0), textcolor=color.white, size=size.large)
+        close_tt_lsl = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_lsl, format.mintick) + "\n" + "Result:      LOSS" + "\n" + "Time: " + ts_str
+        label.new(bar_index, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_lsl)
     equity += _pnl_lsl
     trades += 1
     if _pnl_lsl >= 0
@@ -651,7 +656,8 @@ if not exited_this_bar and pos == 1 and long_sl_hit
 if not exited_this_bar and pos == -1 and short_sl_hit
     var float _pnl_ssl = entry_price - trail_sl
     if show_entry_labels
-        label.new(bar_index, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=color.new(color.black, 0), textcolor=color.white, size=size.large)
+        close_tt_ssl = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ssl, format.mintick) + "\n" + "Result:      LOSS" + "\n" + "Time: " + ts_str
+        label.new(bar_index, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ssl)
     equity += _pnl_ssl
     trades += 1
     if _pnl_ssl >= 0
@@ -682,7 +688,8 @@ if not exited_this_bar and pos == 0 and long_entry_raw
     entry_bar   := bar_index
 
     if show_entry_labels
-        label.new(bar_index, low - atr14 * 1.5, "BUY", style=label.style_label_up, color=color.new(color.blue, 0), textcolor=color.white, size=size.large)
+        buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "Daily:       " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "4H:           " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "1H:           " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
+        label.new(bar_index, low - atr14 * 1.5, "BUY", style=label.style_label_up, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=buy_tt)
 
     if show_sl_line
         line.new(bar_index, sl_price, bar_index + 20, sl_price,
@@ -716,7 +723,8 @@ if not exited_this_bar and pos == 0 and short_entry_raw
     entry_bar   := bar_index
 
     if show_entry_labels
-        label.new(bar_index, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large)
+        sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "Daily:       " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "4H:           " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "1H:           " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
+        label.new(bar_index, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=sell_tt)
 
     if show_sl_line
         line.new(bar_index, sl_price, bar_index + 20, sl_price,
@@ -786,7 +794,7 @@ if show_bias_label and barstate.islast
 // ============================================================================
 // ============================================================================
 // ============================================================================
-// HUD TABLE — White background, colored text only, with trade log
+// HUD TABLE - White background, colored text only, with trade log
 // ============================================================================
 win_rate = (wins + losses) > 0 ? (float(wins) / float(wins + losses)) * 100.0 : 0.0
 net_pnl  = gross_profit - gross_loss
@@ -826,82 +834,83 @@ SZS = size.small
 var table hud = table.new(position.bottom_right, 2, 20, frame_color=color.new(color.gray, 50), frame_width=1, border_color=color.new(color.gray, 70), border_width=1)
 
 if show_hud
-    // Row 0 — Title + timestamp
+    // Row 0 - Title + timestamp
     table.cell(hud, 0, 0, "ICT / SMC  Phase 1", bgcolor=W, text_color=BK, text_size=size.large)
     table.cell(hud, 1, 0, ts_str,                bgcolor=W, text_color=GR, text_size=SZS)
 
-    // Row 1 — Trade Window
+    // Row 1 - Trade Window
     table.cell(hud, 0, 1, "Trade Window", bgcolor=W, text_color=BK,    text_size=SZ)
     table.cell(hud, 1, 1, kz_str,         bgcolor=W, text_color=kz_col, text_size=SZ)
 
-    // Row 2 — Section
+    // Row 2 - Section
     table.cell(hud, 0, 2, "OPEN POSITION", bgcolor=W, text_color=GR, text_size=SZS)
     table.cell(hud, 1, 2, "",              bgcolor=W, text_color=GR, text_size=SZS)
 
-    // Row 3 — Direction
+    // Row 3 - Direction
     table.cell(hud, 0, 3, "Direction", bgcolor=W, text_color=BK,   text_size=SZ)
     table.cell(hud, 1, 3, p_dir,       bgcolor=W, text_color=p_col, text_size=size.large)
 
-    // Row 4 — Entry
+    // Row 4 - Entry
     table.cell(hud, 0, 4, "Entry",  bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 4, p_entry,  bgcolor=W, text_color=BK, text_size=SZ)
 
-    // Row 5 — Stop Loss
+    // Row 5 - Stop Loss
     table.cell(hud, 0, 5, "Stop Loss", bgcolor=W, text_color=BK,                      text_size=SZ)
     table.cell(hud, 1, 5, p_sl,        bgcolor=W, text_color=color.new(color.red, 0), text_size=SZ)
 
-    // Row 6 — TP1
+    // Row 6 - TP1
     table.cell(hud, 0, 6, "TP1",  bgcolor=W, text_color=BK,                        text_size=SZ)
     table.cell(hud, 1, 6, p_tp1,  bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
-    // Row 7 — TP2
+    // Row 7 - TP2
     table.cell(hud, 0, 7, "TP2",  bgcolor=W, text_color=BK,                        text_size=SZ)
     table.cell(hud, 1, 7, p_tp2,  bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
-    // Row 8 — Status
+    // Row 8 - Status
     table.cell(hud, 0, 8, "Status", bgcolor=W, text_color=BK,     text_size=SZS)
     table.cell(hud, 1, 8, p_stat,   bgcolor=W, text_color=p_statc, text_size=SZS)
 
-    // Row 9 — Section
+    // Row 9 - Section
     table.cell(hud, 0, 9, "BIAS STACK", bgcolor=W, text_color=GR, text_size=SZS)
     table.cell(hud, 1, 9, "",            bgcolor=W, text_color=GR, text_size=SZS)
 
-    // Row 10 — Daily
+    // Row 10 - Daily
     table.cell(hud, 0, 10, "Daily",  bgcolor=W, text_color=BK,   text_size=SZ)
     table.cell(hud, 1, 10, d_str,    bgcolor=W, text_color=d_col, text_size=SZ)
 
-    // Row 11 — 4H
+    // Row 11 - 4H
     table.cell(hud, 0, 11, "4 Hour", bgcolor=W, text_color=BK,    text_size=SZ)
     table.cell(hud, 1, 11, h4_str,   bgcolor=W, text_color=h4_col, text_size=SZ)
 
-    // Row 12 — 1H
+    // Row 12 - 1H
     table.cell(hud, 0, 12, "1 Hour", bgcolor=W, text_color=BK,    text_size=SZ)
     table.cell(hud, 1, 12, h1_str,   bgcolor=W, text_color=h1_col, text_size=SZ)
 
-    // Row 13 — Signal
+    // Row 13 - Signal
     table.cell(hud, 0, 13, "Signal", bgcolor=W, text_color=BK,    text_size=SZ)
     table.cell(hud, 1, 13, sig_txt,  bgcolor=W, text_color=sig_col, text_size=SZ)
 
-    // Row 14 — Section
+    // Row 14 - Section
     table.cell(hud, 0, 14, "TRADE HISTORY", bgcolor=W, text_color=GR, text_size=SZS)
     table.cell(hud, 1, 14, str.tostring(trades) + " trades", bgcolor=W, text_color=GR, text_size=SZS)
 
-    // Row 15 — Win Rate
+    // Row 15 - Win Rate
     table.cell(hud, 0, 15, "Win Rate", bgcolor=W, text_color=BK,   text_size=SZ)
     table.cell(hud, 1, 15, str.tostring(win_rate, "#.0") + "%  (" + str.tostring(wins) + "W / " + str.tostring(losses) + "L)", bgcolor=W, text_color=wr_col, text_size=SZ)
 
-    // Row 16 — Net P&L
+    // Row 16 - Net P&L
     table.cell(hud, 0, 16, "Net P&L", bgcolor=W, text_color=BK,    text_size=SZ)
     table.cell(hud, 1, 16, str.tostring(net_pnl, format.mintick),   bgcolor=W, text_color=pnl_col, text_size=SZ)
 
-    // Row 17 — Gross Profit
+    // Row 17 - Gross Profit
     table.cell(hud, 0, 17, "Gross Profit", bgcolor=W, text_color=BK,                        text_size=SZ)
     table.cell(hud, 1, 17, str.tostring(gross_profit, format.mintick), bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
-    // Row 18 — Gross Loss
+    // Row 18 - Gross Loss
     table.cell(hud, 0, 18, "Gross Loss", bgcolor=W, text_color=BK,                      text_size=SZ)
     table.cell(hud, 1, 18, str.tostring(gross_loss,   format.mintick), bgcolor=W, text_color=color.new(color.red, 0),   text_size=SZ)
 
-    // Row 19 — Max DD
+    // Row 19 - Max DD
     table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
     table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+
