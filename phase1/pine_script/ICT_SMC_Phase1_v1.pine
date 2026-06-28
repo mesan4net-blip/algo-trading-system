@@ -599,12 +599,6 @@ f_trail_short() =>
     best
 
 // Exit conditions
-long_sl_hit   = pos == 1  and not na(trail_sl) and low <= trail_sl
-short_sl_hit  = pos == -1 and not na(trail_sl) and high >= trail_sl
-long_tp1_hit  = pos == 1  and not tp1_hit and not na(tp1_price) and high >= tp1_price
-short_tp1_hit = pos == -1 and not tp1_hit and not na(tp1_price) and low <= tp1_price
-long_tp2_hit  = pos == 1  and tp1_hit and not na(tp2_price) and high >= tp2_price
-short_tp2_hit = pos == -1 and tp1_hit and not na(tp2_price) and low <= tp2_price
 
 // HUD variables
 var float gross_profit   = 0.0
@@ -643,195 +637,12 @@ f_date_str() =>
 // ============================================================================
 // ENGINE - Exits first, then entries
 // ============================================================================
-bool exited_this_bar = false
 
 // --- EXITS ---
 
 // TP2 hit (full close on runner)
-if pos == 1 and long_tp2_hit
-    float _pnl_ltp2 = tp2_price - entry_price
-    if show_entry_labels
-        close_tt_ltp2 = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    TP2 Hit" + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(tp2_price, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ltp2, format.mintick) + "\n" + "Result:      " + (_pnl_ltp2 >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
-        label.new(time, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=_pnl_ltp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ltp2, xloc=xloc.bar_time)
-    equity += _pnl_ltp2
-    trades += 1
-    if _pnl_ltp2 >= 0
-        gross_profit += _pnl_ltp2
-        wins += 1
-    else
-        gross_loss += math.abs(_pnl_ltp2)
-        losses += 1
-    peak_equity := math.max(peak_equity, equity)
-    max_dd := math.max(max_dd, peak_equity - equity)
-    array.unshift(tl_num,    trades)
-    array.unshift(tl_dir,    "BUY")
-    array.unshift(tl_entry,  entry_price)
-    array.unshift(tl_exit,   tp2_price)
-    array.unshift(tl_result, "TP2")
-    array.unshift(tl_pips,   _pnl_ltp2 / pip_size)
-    array.unshift(tl_dollar, (_pnl_ltp2 / pip_size) * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue) * trade_lot_size)
-    array.unshift(tl_date,   f_date_str())
-    if array.size(tl_num) > 20
-        array.pop(tl_num)
-        array.pop(tl_dir)
-        array.pop(tl_entry)
-        array.pop(tl_exit)
-        array.pop(tl_result)
-        array.pop(tl_pips)
-        array.pop(tl_dollar)
-        array.pop(tl_lots)
-        array.pop(tl_date)
-    if array.get(first_trade_arr, 0) == "---"
-        array.set(first_trade_arr, 0, f_date_str())
-    array.set(last_trade_arr, 0, f_date_str())
-
-    pos          := 0
-    trail_sl     := na
-    tp1_hit      := false
-    exited_this_bar := true
-
-if pos == -1 and short_tp2_hit
-    float _pnl_stp2 = entry_price - tp2_price
-    if show_entry_labels
-        close_tt_stp2 = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    TP2 Hit" + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(tp2_price, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_stp2, format.mintick) + "\n" + "Result:      " + (_pnl_stp2 >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
-        label.new(time, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=_pnl_stp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_stp2, xloc=xloc.bar_time)
-    equity += _pnl_stp2
-    trades += 1
-    if _pnl_stp2 >= 0
-        gross_profit += _pnl_stp2
-        wins += 1
-    else
-        gross_loss += math.abs(_pnl_stp2)
-        losses += 1
-    peak_equity := math.max(peak_equity, equity)
-    max_dd := math.max(max_dd, peak_equity - equity)
-    array.unshift(tl_num,    trades)
-    array.unshift(tl_dir,    "SELL")
-    array.unshift(tl_entry,  entry_price)
-    array.unshift(tl_exit,   tp2_price)
-    array.unshift(tl_result, "TP2")
-    array.unshift(tl_pips,   _pnl_stp2 / pip_size)
-    array.unshift(tl_dollar, (_pnl_stp2 / pip_size) * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue) * trade_lot_size)
-    array.unshift(tl_date,   f_date_str())
-    if array.size(tl_num) > 20
-        array.pop(tl_num)
-        array.pop(tl_dir)
-        array.pop(tl_entry)
-        array.pop(tl_exit)
-        array.pop(tl_result)
-        array.pop(tl_pips)
-        array.pop(tl_dollar)
-        array.pop(tl_lots)
-        array.pop(tl_date)
-    if array.get(first_trade_arr, 0) == "---"
-        array.set(first_trade_arr, 0, f_date_str())
-    array.set(last_trade_arr, 0, f_date_str())
-
-    pos          := 0
-    trail_sl     := na
-    tp1_hit      := false
-    exited_this_bar := true
-
 // TP1 hit (partial - move SL to BE, continue trailing)
-if not exited_this_bar and pos == 1 and long_tp1_hit
-    tp1_hit  := true
-    trail_sl := entry_price   // Move SL to BE
-    if show_entry_labels
-        tp1_tt_l = "TP1 HIT - LONG" + "\n" + "Entry: " + str.tostring(entry_price, format.mintick) + "\n" + "TP1:    " + str.tostring(tp1_price, format.mintick) + "\n" + "SL now at breakeven" + "\n" + "Trailing runner to TP2: " + str.tostring(tp2_price, format.mintick)
-        label.new(time, high + atr14 * 0.8, "TP1", style=label.style_label_down, color=color.new(color.green, 20), textcolor=color.white, size=size.small, tooltip=tp1_tt_l, xloc=xloc.bar_time)
-
-if not exited_this_bar and pos == -1 and short_tp1_hit
-    tp1_hit  := true
-    trail_sl := entry_price   // Move SL to BE
-    if show_entry_labels
-        tp1_tt_s = "TP1 HIT - SHORT" + "\n" + "Entry: " + str.tostring(entry_price, format.mintick) + "\n" + "TP1:    " + str.tostring(tp1_price, format.mintick) + "\n" + "SL now at breakeven" + "\n" + "Trailing runner to TP2: " + str.tostring(tp2_price, format.mintick)
-        label.new(time, low - atr14 * 0.8, "TP1", style=label.style_label_up, color=color.new(color.green, 20), textcolor=color.white, size=size.small, tooltip=tp1_tt_s, xloc=xloc.bar_time)
-
 // SL hit
-if not exited_this_bar and pos == 1 and long_sl_hit
-    float _pnl_lsl = trail_sl - entry_price
-    if show_entry_labels
-        close_tt_lsl = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_lsl, format.mintick) + "\n" + "Result:      " + (_pnl_lsl >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
-        label.new(time, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=_pnl_lsl >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_lsl, xloc=xloc.bar_time)
-    equity += _pnl_lsl
-    trades += 1
-    if _pnl_lsl >= 0
-        gross_profit += _pnl_lsl
-        wins += 1
-    else
-        gross_loss += math.abs(_pnl_lsl)
-        losses += 1
-    peak_equity := math.max(peak_equity, equity)
-    max_dd := math.max(max_dd, peak_equity - equity)
-    array.unshift(tl_num,    trades)
-    array.unshift(tl_dir,    "BUY")
-    array.unshift(tl_entry,  entry_price)
-    array.unshift(tl_exit,   trail_sl)
-    array.unshift(tl_result, "SL")
-    array.unshift(tl_pips,   _pnl_lsl / pip_size)
-    array.unshift(tl_dollar, (_pnl_lsl / pip_size) * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue) * trade_lot_size)
-    array.unshift(tl_date,   f_date_str())
-    if array.size(tl_num) > 20
-        array.pop(tl_num)
-        array.pop(tl_dir)
-        array.pop(tl_entry)
-        array.pop(tl_exit)
-        array.pop(tl_result)
-        array.pop(tl_pips)
-        array.pop(tl_dollar)
-        array.pop(tl_lots)
-        array.pop(tl_date)
-    if array.get(first_trade_arr, 0) == "---"
-        array.set(first_trade_arr, 0, f_date_str())
-    array.set(last_trade_arr, 0, f_date_str())
-
-    pos          := 0
-    trail_sl     := na
-    tp1_hit      := false
-    exited_this_bar := true
-
-if not exited_this_bar and pos == -1 and short_sl_hit
-    float _pnl_ssl = entry_price - trail_sl
-    if show_entry_labels
-        close_tt_ssl = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ssl, format.mintick) + "\n" + "Result:      " + (_pnl_ssl >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
-        label.new(time, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=_pnl_ssl >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ssl, xloc=xloc.bar_time)
-    equity += _pnl_ssl
-    trades += 1
-    if _pnl_ssl >= 0
-        gross_profit += _pnl_ssl
-        wins += 1
-    else
-        gross_loss += math.abs(_pnl_ssl)
-        losses += 1
-    peak_equity := math.max(peak_equity, equity)
-    max_dd := math.max(max_dd, peak_equity - equity)
-    array.unshift(tl_num,    trades)
-    array.unshift(tl_dir,    "SELL")
-    array.unshift(tl_entry,  entry_price)
-    array.unshift(tl_exit,   trail_sl)
-    array.unshift(tl_result, "SL")
-    array.unshift(tl_pips,   _pnl_ssl / pip_size)
-    array.unshift(tl_dollar, (_pnl_ssl / pip_size) * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue) * trade_lot_size)
-    array.unshift(tl_date,   f_date_str())
-    if array.size(tl_num) > 20
-        array.pop(tl_num)
-        array.pop(tl_dir)
-        array.pop(tl_entry)
-        array.pop(tl_exit)
-        array.pop(tl_result)
-        array.pop(tl_pips)
-        array.pop(tl_dollar)
-        array.pop(tl_lots)
-        array.pop(tl_date)
-    if array.get(first_trade_arr, 0) == "---"
-        array.set(first_trade_arr, 0, f_date_str())
-    array.set(last_trade_arr, 0, f_date_str())
-
-    pos          := 0
-    trail_sl     := na
-    tp1_hit      := false
-    exited_this_bar := true
-
 // --- ENTRIES ---
 var int last_alert_bar = na
 
@@ -846,12 +657,10 @@ if not exited_this_bar and pos == 0 and long_entry_raw
     if not trade_skipped
         trail_sl    := sl_price
         tp1_hit     := false
-        pos         := 1
         entry_bar   := bar_index
         entry_time  := time
         strategy.entry("Long", strategy.long, qty=trade_lot_size)
-        strategy.exit("Long TP1", "Long", qty_percent=50, limit=tp1_price, stop=sl_price, comment="TP1")
-        strategy.exit("Long TP2", "Long", qty_percent=100, limit=tp2_price, stop=sl_price, comment="TP2")
+        strategy.exit("Long Exit", "Long", qty_percent=50, profit=math.round((tp1_price - entry_price) / syminfo.mintick), loss=math.round((entry_price - sl_price) / syminfo.mintick), comment="TP1/SL")
 
     if show_entry_labels
         buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
@@ -888,12 +697,10 @@ if not exited_this_bar and pos == 0 and short_entry_raw
     if not trade_skipped
         trail_sl   := sl_price
         tp1_hit    := false
-        pos        := -1
         entry_bar  := bar_index
         entry_time := time
         strategy.entry("Short", strategy.short, qty=trade_lot_size)
-        strategy.exit("Short TP1", "Short", qty_percent=50, limit=tp1_price, stop=sl_price, comment="TP1")
-        strategy.exit("Short TP2", "Short", qty_percent=100, limit=tp2_price, stop=sl_price, comment="TP2")
+        strategy.exit("Short Exit", "Short", qty_percent=50, profit=math.round((entry_price - tp1_price) / syminfo.mintick), loss=math.round((sl_price - entry_price) / syminfo.mintick), comment="TP1/SL")
     if show_entry_labels and not trade_skipped
         sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
         label.new(time, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=sell_tt, xloc=xloc.bar_time)
@@ -1062,25 +869,28 @@ if show_hud
     table.cell(hud, 0, 14, "TRADE HISTORY", bgcolor=W, text_color=GR, text_size=SZS)
     table.cell(hud, 1, 14, str.tostring(trades) + " trades", bgcolor=W, text_color=GR, text_size=SZS)
 
-    // Row 15 - Win Rate
-    table.cell(hud, 0, 15, "Win Rate", bgcolor=W, text_color=BK,   text_size=SZ)
-    table.cell(hud, 1, 15, str.tostring(win_rate, "#.0") + "%  (" + str.tostring(wins) + "W / " + str.tostring(losses) + "L)", bgcolor=W, text_color=wr_col, text_size=SZ)
+    // Row 15 - Win Rate (from strategy)
+    strat_wr   = strategy.wintrades + strategy.losstrades > 0 ? strategy.wintrades / (strategy.wintrades + strategy.losstrades) * 100 : 0.0
+    strat_wr_c = strat_wr >= 50 ? color.new(color.green, 0) : color.new(color.red, 0)
+    table.cell(hud, 0, 15, "Win Rate", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 15, str.tostring(strat_wr, "#.0") + "%  (" + str.tostring(strategy.wintrades) + "W / " + str.tostring(strategy.losstrades) + "L)", bgcolor=W, text_color=strat_wr_c, text_size=SZ)
 
-    // Row 16 - Net P&L
-    table.cell(hud, 0, 16, "Net P&L", bgcolor=W, text_color=BK,    text_size=SZ)
-    table.cell(hud, 1, 16, str.tostring(net_pnl, format.mintick),   bgcolor=W, text_color=pnl_col, text_size=SZ)
+    // Row 16 - Net P&L (from strategy)
+    strat_pnl_c = strategy.netprofit >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
+    table.cell(hud, 0, 16, "Net P&L ($)", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 16, "$" + str.tostring(math.round(strategy.netprofit, 2)), bgcolor=W, text_color=strat_pnl_c, text_size=SZ)
 
     // Row 17 - Gross Profit
-    table.cell(hud, 0, 17, "Gross Profit", bgcolor=W, text_color=BK,                        text_size=SZ)
-    table.cell(hud, 1, 17, str.tostring(gross_profit, format.mintick), bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
+    table.cell(hud, 0, 17, "Gross Profit", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 17, "$" + str.tostring(math.round(strategy.grossprofit, 2)), bgcolor=W, text_color=color.new(color.green, 0), text_size=SZ)
 
     // Row 18 - Gross Loss
-    table.cell(hud, 0, 18, "Gross Loss", bgcolor=W, text_color=BK,                      text_size=SZ)
-    table.cell(hud, 1, 18, str.tostring(gross_loss,   format.mintick), bgcolor=W, text_color=color.new(color.red, 0),   text_size=SZ)
+    table.cell(hud, 0, 18, "Gross Loss", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 18, "$" + str.tostring(math.round(strategy.grossloss, 2)), bgcolor=W, text_color=color.new(color.red, 0), text_size=SZ)
 
     // Row 19 - Max DD
-    table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
-    table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+    table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 19, "$" + str.tostring(math.round(strategy.max_drawdown, 2)), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
 
     // Row 20 - Date Range header
     table.cell(hud, 0, 20, "DATE RANGE", bgcolor=W, text_color=GR, text_size=SZS)
