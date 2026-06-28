@@ -242,8 +242,9 @@ if not na(last_sl_1h) and h1_close < last_sl_1h
 // TOP-DOWN BIAS
 // Daily sets bias -> 4H confirms -> 1H activates -> 5M triggers
 // ============================================================================
-bias_bull = daily_struct == 1 and h4_struct == 1 and h1_struct == 1
-bias_bear = daily_struct == -1 and h4_struct == -1 and h1_struct == -1
+// Bias: Daily + 4H must agree. 1H must not be opposite (can be flat).
+bias_bull = daily_struct == 1 and h4_struct == 1 and h1_struct >= 0
+bias_bear = daily_struct == -1 and h4_struct == -1 and h1_struct <= 0
 
 // ============================================================================
 // ORDER BLOCK DETECTION (5M chart)
@@ -513,8 +514,9 @@ disp_bear     = is_displaced and close < open and close <= (high - candle_range 
 // ENTRY CONDITIONS
 // All must align: Bias + POI + MSS + Displacement + Trade Window + No Gap
 // ============================================================================
-long_entry_raw  = bias_bull and poi_bull and mss_bull_5m and disp_bull and in_kz and not gap_bar and barstate.isconfirmed
-short_entry_raw = bias_bear and poi_bear and mss_bear_5m and disp_bear and in_kz and not gap_bar and barstate.isconfirmed
+// Entry: Bias + POI + MSS + Trade Window. Displacement removed — MSS candle is the displacement.
+long_entry_raw  = bias_bull and poi_bull and mss_bull_5m and in_kz and not gap_bar and barstate.isconfirmed
+short_entry_raw = bias_bear and poi_bear and mss_bear_5m and in_kz and not gap_bar and barstate.isconfirmed
 
 // ============================================================================
 // TRADE STATE & MANAGEMENT
@@ -853,7 +855,7 @@ BK = color.new(color.black, 0)
 GR = color.new(color.gray, 0)
 SZ = size.normal
 
-var table hud = table.new(position.bottom_right, 2, 28, frame_color=W, frame_width=1, border_color=color.new(color.gray, 60), border_width=1)
+var table hud = table.new(position.bottom_right, 2, 22, frame_color=W, frame_width=1, border_color=color.new(color.gray, 60), border_width=1)
 
 if show_hud
     // Row 0 — Title
@@ -936,19 +938,16 @@ if show_hud
     table.cell(hud, 0, 19, "MSS on 5M", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 19, chk_mss_b + "  /  " + chk_mss_s, bgcolor=W, text_color=mss_bull_5m ? chk_mss_cb : chk_mss_cs, text_size=SZ)
 
-    // Row 20 — Displacement
-    table.cell(hud, 0, 20, "Displacement", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 20, chk_disp_b + "  /  " + chk_disp_s, bgcolor=W, text_color=disp_bull ? chk_disp_cb : chk_disp_cs, text_size=SZ)
-
-    // Row 21 — Trade Window
-    table.cell(hud, 0, 21, "Trade Window", bgcolor=W, text_color=BK,  text_size=SZ)
-    table.cell(hud, 1, 21, chk_kz,         bgcolor=W, text_color=chk_kz_c, text_size=SZ)
+    // Row 20 — Trade Window
+    table.cell(hud, 0, 20, "Trade Window", bgcolor=W, text_color=BK,  text_size=SZ)
+    table.cell(hud, 1, 20, chk_kz,         bgcolor=W, text_color=chk_kz_c, text_size=SZ)
 
     // Row 22 — Ready signal
-    all_bull = bias_bull and poi_bull and mss_bull_5m and disp_bull and in_kz
-    all_bear = bias_bear and poi_bear and mss_bear_5m and disp_bear and in_kz
+    all_bull = bias_bull and poi_bull and mss_bull_5m and in_kz
+    all_bear = bias_bear and poi_bear and mss_bear_5m and in_kz
     sig_txt  = all_bull ? "LONG SIGNAL READY" : all_bear ? "SHORT SIGNAL READY" : "No signal yet"
     sig_col  = all_bull ? color.new(color.green, 0) : all_bear ? color.new(color.red, 0) : color.new(color.gray, 0)
-    table.cell(hud, 0, 22, "Signal", bgcolor=W, text_color=BK,     text_size=SZ)
-    table.cell(hud, 1, 22, sig_txt,  bgcolor=W, text_color=sig_col, text_size=size.large)
+    table.cell(hud, 0, 21, "Signal", bgcolor=W, text_color=BK,     text_size=SZ)
+    table.cell(hud, 1, 21, sig_txt,  bgcolor=W, text_color=sig_col, text_size=size.large)
+
 
