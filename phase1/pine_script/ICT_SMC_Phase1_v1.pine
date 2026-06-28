@@ -83,11 +83,16 @@ grp_hud = "HUD Panel"
 show_hud     = input.bool(true, "Show HUD Panel",  group=grp_hud)
 hud_pos_inp  = input.string("Bottom Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
 
+// --- Risk Management ---
+grp_risk2 = "Risk Management"
+initial_capital = input.float(10000.0, "Initial Capital ($)",   group=grp_risk2, minval=100, step=100)
+risk_pct        = input.float(1.0,     "Risk Per Trade (%)",    group=grp_risk2, minval=0.1, maxval=10, step=0.1)
+min_lot         = input.float(0.01,    "Minimum Lot Size",      group=grp_risk2, minval=0.01, step=0.01)
+
 // --- Trade Log Panel ---
 grp_tlog = "Trade Log Panel"
 show_trade_log  = input.bool(true,  "Show Trade Log Panel",  group=grp_tlog)
 tlog_pos_inp    = input.string("Top Left", "Trade Log Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_tlog)
-lot_size        = input.float(1.0,  "Lot Size (for $ P&L)",  group=grp_tlog, minval=0.01, step=0.01)
 
 // --- Alerts ---
 grp_alert = "Alerts / Webhook"
@@ -583,14 +588,17 @@ long_tp2_hit  = pos == 1  and tp1_hit and not na(tp2_price) and high >= tp2_pric
 short_tp2_hit = pos == -1 and tp1_hit and not na(tp2_price) and low <= tp2_price
 
 // HUD variables
-var float gross_profit = 0.0
-var float gross_loss   = 0.0
-var int   wins         = 0
-var int   losses       = 0
-var int   trades       = 0
-var float peak_equity  = 0.0
-var float equity       = 0.0
-var float max_dd       = 0.0
+var float gross_profit   = 0.0
+var float gross_loss     = 0.0
+var int   wins           = 0
+var int   losses         = 0
+var int   trades         = 0
+var float peak_equity    = 0.0
+var float equity         = 0.0
+var float max_dd         = 0.0
+var float current_capital = initial_capital
+var float trade_lot_size  = 0.0
+var bool  trade_skipped   = false
 
 // Trade log arrays - stores last 20 completed trades
 var int[]    tl_num    = array.new_int()
@@ -600,6 +608,7 @@ var float[]  tl_exit   = array.new_float()
 var string[] tl_result = array.new_string()
 var float[]  tl_pips   = array.new_float()
 var float[]  tl_dollar = array.new_float()
+var float[]  tl_lots   = array.new_float()
 var string[] tl_date   = array.new_string()
 
 // Date range tracking
@@ -643,8 +652,8 @@ if pos == 1 and long_tp2_hit
     array.unshift(tl_entry,  entry_price)
     array.unshift(tl_exit,   tp2_price)
     array.unshift(tl_result, "TP2")
-    array.unshift(tl_pips,   _pnl_ltp2 / syminfo.mintick)
-    array.unshift(tl_dollar, _pnl_ltp2 * syminfo.pointvalue * lot_size)
+    array.unshift(tl_pips,   _pnl_ltp2 / pip_size)
+    array.unshift(tl_dollar, (_pnl_ltp2 / pip_size) * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue) * trade_lot_size)
     array.unshift(tl_date,   f_date_str())
     if array.size(tl_num) > 20
         array.pop(tl_num)
@@ -654,6 +663,7 @@ if pos == 1 and long_tp2_hit
         array.pop(tl_result)
         array.pop(tl_pips)
         array.pop(tl_dollar)
+        array.pop(tl_lots)
         array.pop(tl_date)
     if array.get(first_trade_arr, 0) == "---"
         array.set(first_trade_arr, 0, f_date_str())
@@ -684,8 +694,8 @@ if pos == -1 and short_tp2_hit
     array.unshift(tl_entry,  entry_price)
     array.unshift(tl_exit,   tp2_price)
     array.unshift(tl_result, "TP2")
-    array.unshift(tl_pips,   _pnl_stp2 / syminfo.mintick)
-    array.unshift(tl_dollar, _pnl_stp2 * syminfo.pointvalue * lot_size)
+    array.unshift(tl_pips,   _pnl_stp2 / pip_size)
+    array.unshift(tl_dollar, (_pnl_stp2 / pip_size) * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue) * trade_lot_size)
     array.unshift(tl_date,   f_date_str())
     if array.size(tl_num) > 20
         array.pop(tl_num)
@@ -695,6 +705,7 @@ if pos == -1 and short_tp2_hit
         array.pop(tl_result)
         array.pop(tl_pips)
         array.pop(tl_dollar)
+        array.pop(tl_lots)
         array.pop(tl_date)
     if array.get(first_trade_arr, 0) == "---"
         array.set(first_trade_arr, 0, f_date_str())
@@ -741,8 +752,8 @@ if not exited_this_bar and pos == 1 and long_sl_hit
     array.unshift(tl_entry,  entry_price)
     array.unshift(tl_exit,   trail_sl)
     array.unshift(tl_result, "SL")
-    array.unshift(tl_pips,   _pnl_lsl / syminfo.mintick)
-    array.unshift(tl_dollar, _pnl_lsl * syminfo.pointvalue * lot_size)
+    array.unshift(tl_pips,   _pnl_lsl / pip_size)
+    array.unshift(tl_dollar, (_pnl_lsl / pip_size) * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue) * trade_lot_size)
     array.unshift(tl_date,   f_date_str())
     if array.size(tl_num) > 20
         array.pop(tl_num)
@@ -752,6 +763,7 @@ if not exited_this_bar and pos == 1 and long_sl_hit
         array.pop(tl_result)
         array.pop(tl_pips)
         array.pop(tl_dollar)
+        array.pop(tl_lots)
         array.pop(tl_date)
     if array.get(first_trade_arr, 0) == "---"
         array.set(first_trade_arr, 0, f_date_str())
@@ -782,8 +794,8 @@ if not exited_this_bar and pos == -1 and short_sl_hit
     array.unshift(tl_entry,  entry_price)
     array.unshift(tl_exit,   trail_sl)
     array.unshift(tl_result, "SL")
-    array.unshift(tl_pips,   _pnl_ssl / syminfo.mintick)
-    array.unshift(tl_dollar, _pnl_ssl * syminfo.pointvalue * lot_size)
+    array.unshift(tl_pips,   _pnl_ssl / pip_size)
+    array.unshift(tl_dollar, (_pnl_ssl / pip_size) * (syminfo.type == "forex" ? syminfo.pointvalue * 10.0 : syminfo.pointvalue) * trade_lot_size)
     array.unshift(tl_date,   f_date_str())
     if array.size(tl_num) > 20
         array.pop(tl_num)
@@ -793,6 +805,7 @@ if not exited_this_bar and pos == -1 and short_sl_hit
         array.pop(tl_result)
         array.pop(tl_pips)
         array.pop(tl_dollar)
+        array.pop(tl_lots)
         array.pop(tl_date)
     if array.get(first_trade_arr, 0) == "---"
         array.set(first_trade_arr, 0, f_date_str())
@@ -807,16 +820,19 @@ if not exited_this_bar and pos == -1 and short_sl_hit
 var int last_alert_bar = na
 
 if not exited_this_bar and pos == 0 and long_entry_raw
-    entry_price := close
-    sl_price    := f_long_sl(active_ob_bot)
-    risk        = entry_price - sl_price
-    tp1_price   := entry_price + risk * tp1_rr
-    tp2_price   := entry_price + risk * tp2_rr
-    trail_sl    := sl_price
-    tp1_hit     := false
-    pos         := 1
-    entry_bar   := bar_index
-    entry_time  := time
+    entry_price     := close
+    sl_price        := f_long_sl(active_ob_bot)
+    risk             = entry_price - sl_price
+    tp1_price       := entry_price + risk * tp1_rr
+    tp2_price       := entry_price + risk * tp2_rr
+    trade_lot_size  := f_calc_lot(entry_price, sl_price)
+    trade_skipped   := trade_lot_size < min_lot
+    if not trade_skipped
+        trail_sl    := sl_price
+        tp1_hit     := false
+        pos         := 1
+        entry_bar   := bar_index
+        entry_time  := time
 
     if show_entry_labels
         buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
