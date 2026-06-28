@@ -10,7 +10,7 @@ strategy("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
      overlay=true, max_bars_back=5000, max_labels_count=500, max_boxes_count=500,
      max_lines_count=500, initial_capital=10000, default_qty_type=strategy.fixed,
      default_qty_value=1, pyramiding=0, commission_type=strategy.commission.percent,
-     commission_value=0.005, slippage=1, calc_on_every_tick=false)
+     commission_value=0.005, slippage=0, calc_on_every_tick=false)
 
 // ============================================================================
 // INPUTS
@@ -645,6 +645,16 @@ f_date_str() =>
 // TP2 hit (full close on runner)
 // TP1 hit (partial - move SL to BE, continue trailing)
 // SL hit
+// --- TRADE FLAG VARIABLES ---
+// OB = Open Buy, CB = Close Buy, OS = Open Sell, CS = Close Sell
+// Simple price comparison determines TP or SL on close
+var float ob_open_price = na
+var float ob_sl_price   = na
+var float ob_tp_price   = na
+var float os_open_price = na
+var float os_sl_price   = na
+var float os_tp_price   = na
+
 // --- ENTRIES ---
 var int last_alert_bar = na
 
@@ -661,12 +671,10 @@ if pos == 0 and long_entry_raw
         tp1_hit     := false
         entry_bar   := bar_index
         entry_time  := time
-        long_tp1_ticks = math.round((tp1_price - entry_price) / syminfo.mintick)
-        long_tp2_ticks = math.round((tp2_price - entry_price) / syminfo.mintick)
-        long_sl_ticks  = math.round((entry_price - sl_price)  / syminfo.mintick)
-        contract_mult = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" ? 100.0 : 100000.0
-        strategy.entry("Long", strategy.long, qty=math.round(trade_lot_size * contract_mult))
-        strategy.exit("Long Exit", "Long", profit=long_tp2_ticks, loss=long_sl_ticks, comment="TP2/SL")
+        ob_open_price := entry_price
+        ob_sl_price   := sl_price
+        ob_tp_price   := tp2_price
+        strategy.entry("OB", strategy.long, qty=trade_lot_size, comment="OB")
 
     if show_entry_labels
         buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
@@ -705,12 +713,10 @@ if pos == 0 and short_entry_raw
         tp1_hit    := false
         entry_bar  := bar_index
         entry_time := time
-        short_tp1_ticks = math.round((entry_price - tp1_price) / syminfo.mintick)
-        short_tp2_ticks = math.round((entry_price - tp2_price) / syminfo.mintick)
-        short_sl_ticks  = math.round((sl_price - entry_price)  / syminfo.mintick)
-        contract_mult2 = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" ? 100.0 : 100000.0
-        strategy.entry("Short", strategy.short, qty=math.round(trade_lot_size * contract_mult2))
-        strategy.exit("Short Exit", "Short", profit=short_tp2_ticks, loss=short_sl_ticks, comment="TP2/SL")
+        os_open_price := entry_price
+        os_sl_price   := sl_price
+        os_tp_price   := tp2_price
+        strategy.entry("OS", strategy.short, qty=trade_lot_size, comment="OS")
     if show_entry_labels and not trade_skipped
         sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
         label.new(time, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=sell_tt, xloc=xloc.bar_time)
@@ -759,6 +765,44 @@ if pos == -1 and tp1_hit
 // ============================================================================
 bgcolor(in_london and kz_london_on ? kz_london_col : na, title="London Window")
 bgcolor(in_ny     and kz_ny_on     ? kz_ny_col     : na, title="NY Window")
+
+// ============================================================================
+// CLOSE CONDITIONS - flag-based price comparison
+// CB (Close Buy):  CB_price vs OB_open_price
+//   CB > OB_open  = profit = TP
+//   CB < OB_open  = loss   = SL
+// CS (Close Sell): CS_price vs OS_open_price
+//   CS < OS_open  = profit = TP
+//   CS > OS_open  = loss   = SL
+// ============================================================================
+ob_is_open = strategy.position_size > 0
+os_is_open = strategy.position_size < 0
+
+if ob_is_open and not na(ob_tp_price) and not na(ob_sl_price)
+    cb_price = close
+    if cb_price >= ob_tp_price
+        strategy.close("OB", comment="CB-TP")
+        ob_open_price := na
+        ob_sl_price   := na
+        ob_tp_price   := na
+    else if cb_price <= ob_sl_price
+        strategy.close("OB", comment="CB-SL")
+        ob_open_price := na
+        ob_sl_price   := na
+        ob_tp_price   := na
+
+if os_is_open and not na(os_tp_price) and not na(os_sl_price)
+    cs_price = close
+    if cs_price <= os_tp_price
+        strategy.close("OS", comment="CS-TP")
+        os_open_price := na
+        os_sl_price   := na
+        os_tp_price   := na
+    else if cs_price >= os_sl_price
+        strategy.close("OS", comment="CS-SL")
+        os_open_price := na
+        os_sl_price   := na
+        os_tp_price   := na
 
 // ============================================================================
 // TRAILING SL PLOT
