@@ -81,6 +81,12 @@ grp_alert = "Alerts / Webhook"
 alert_on_entry = input.bool(true, "Fire Alert on Entry Signal", group=grp_alert)
 
 // ============================================================================
+// TTF GUARD - must be after inputs so ttf_in is declared
+// ============================================================================
+if barstate.isfirst and timeframe.period != ttf_in
+    runtime.error("Set chart to TTF (" + ttf_in + "). Structure + trades must run on same TF.")
+
+// ============================================================================
 // CONSTANTS & HELPERS
 // ============================================================================
 pip_size = syminfo.mintick * (syminfo.type == "forex" ? 10 : 1)
@@ -200,8 +206,8 @@ f_swing_low(_low, _n) =>
     pl
 
 // 5M structure (chart TF)
-swing_h_5m = f_swing_high(high, str_lookback)
-swing_l_5m = f_swing_low(low,   str_lookback)
+swing_h_5m = f_swing_high(m5_h, str_lookback)
+swing_l_5m = f_swing_low(m5_l,  str_lookback)
 
 // Track last confirmed swing high/low on 5M
 var float last_sh_5m = na
@@ -230,7 +236,7 @@ mss_bull_5m := false
 mss_bear_5m := false
 
 // Bullish BOS: close above last swing high (structure was bearish or neutral)
-if not na(last_sh_5m) and close > last_sh_5m and barstate.isconfirmed
+if not na(last_sh_5m) and m5_c > last_sh_5m and barstate.isconfirmed
     if struct_dir_5m <= 0
         mss_bull_5m   := true   // Was bearish -> shift = MSS
     else
@@ -238,7 +244,7 @@ if not na(last_sh_5m) and close > last_sh_5m and barstate.isconfirmed
     struct_dir_5m := 1
 
 // Bearish BOS: close below last swing low
-if not na(last_sl_5m) and close < last_sl_5m and barstate.isconfirmed
+if not na(last_sl_5m) and m5_c < last_sl_5m and barstate.isconfirmed
     if struct_dir_5m >= 0
         mss_bear_5m   := true   // Was bullish -> shift = MSS
     else
@@ -359,12 +365,12 @@ if (bos_bear_5m or mss_bear_5m) and barstate.isconfirmed
 // Invalidate OBs when price closes through them
 if array.size(ob_bull_valid) > 0
     for i = 0 to array.size(ob_bull_valid) - 1
-        if array.get(ob_bull_valid, i) and close < array.get(ob_bull_bot, i)
+        if array.get(ob_bull_valid, i) and m5_c < array.get(ob_bull_bot, i)
             array.set(ob_bull_valid, i, false)
 
 if array.size(ob_bear_valid) > 0
     for i = 0 to array.size(ob_bear_valid) - 1
-        if array.get(ob_bear_valid, i) and close > array.get(ob_bear_top, i)
+        if array.get(ob_bear_valid, i) and m5_c > array.get(ob_bear_top, i)
             array.set(ob_bear_valid, i, false)
 
 // Draw OB boxes
@@ -401,12 +407,12 @@ var int[]   fvg_bear_bar   = array.new_int()
 var bool[]  fvg_bear_valid = array.new_bool()
 
 // Bullish FVG: gap between bar[2] high and bar[0] low, middle candle is bullish
-bull_fvg_cond = low > high[2] and close[1] > open[1]
-bear_fvg_cond = high < low[2] and close[1] < open[1]
+bull_fvg_cond = m5_l > m5_h[2] and m5_c[1] > m5_o[1]
+bear_fvg_cond = m5_h < m5_l[2] and m5_c[1] < m5_o[1]
 
 if bull_fvg_cond and barstate.isconfirmed
-    array.unshift(fvg_bull_top,   low)
-    array.unshift(fvg_bull_bot,   high[2])
+    array.unshift(fvg_bull_top,   m5_l)
+    array.unshift(fvg_bull_bot,   m5_h[2])
     array.unshift(fvg_bull_bar,   bar_index - 1)
     array.unshift(fvg_bull_valid, true)
     while array.size(fvg_bull_top) > fvg_max
@@ -416,8 +422,8 @@ if bull_fvg_cond and barstate.isconfirmed
         array.pop(fvg_bull_valid)
 
 if bear_fvg_cond and barstate.isconfirmed
-    array.unshift(fvg_bear_top,   low[2])
-    array.unshift(fvg_bear_bot,   high)
+    array.unshift(fvg_bear_top,   m5_l[2])
+    array.unshift(fvg_bear_bot,   m5_h)
     array.unshift(fvg_bear_bar,   bar_index - 1)
     array.unshift(fvg_bear_valid, true)
     while array.size(fvg_bear_top) > fvg_max
@@ -429,12 +435,12 @@ if bear_fvg_cond and barstate.isconfirmed
 // Invalidate FVGs when price fills them
 if array.size(fvg_bull_valid) > 0
     for i = 0 to array.size(fvg_bull_valid) - 1
-        if array.get(fvg_bull_valid, i) and close < array.get(fvg_bull_bot, i)
+        if array.get(fvg_bull_valid, i) and m5_c < array.get(fvg_bull_bot, i)
             array.set(fvg_bull_valid, i, false)
 
 if array.size(fvg_bear_valid) > 0
     for i = 0 to array.size(fvg_bear_valid) - 1
-        if array.get(fvg_bear_valid, i) and close > array.get(fvg_bear_top, i)
+        if array.get(fvg_bear_valid, i) and m5_c > array.get(fvg_bear_top, i)
             array.set(fvg_bear_valid, i, false)
 
 // Draw FVG boxes
@@ -483,8 +489,8 @@ if show_mss and mss_bear_5m and not na(last_sl_5m) and not na(last_sl_5m_bar)
     line.new(bar_index, high + atr14 * 0.2, bar_index, high + atr14 * 1.0, color=color.new(color.orange, 0), width=2)
 
 // CHoCH - off by default, tiny if enabled
-choch_bull = struct_dir_5m == -1 and not na(last_sl_5m) and low < last_sl_5m and close > last_sl_5m
-choch_bear = struct_dir_5m == 1  and not na(last_sh_5m) and high > last_sh_5m and close < last_sh_5m
+choch_bull = struct_dir_5m == -1 and not na(last_sl_5m) and m5_l < last_sl_5m and m5_c > last_sl_5m
+choch_bear = struct_dir_5m == 1  and not na(last_sh_5m) and m5_h > last_sh_5m and m5_c < last_sh_5m
 
 if show_choch and choch_bull
     label.new(bar_index, low - atr14 * 0.3, "CHoCH", style=label.style_label_up, color=color.new(color.teal, 50), textcolor=color.white, size=size.tiny)
@@ -504,7 +510,7 @@ f_in_bull_ob() =>
             if array.get(ob_bull_valid, i)
                 t = array.get(ob_bull_top, i)
                 b = array.get(ob_bull_bot, i)
-                if low <= t and high >= b
+                if m5_l <= t and m5_h >= b
                     result     := true
                     ob_top_ref := t
                     ob_bot_ref := b
@@ -520,7 +526,7 @@ f_in_bear_ob() =>
             if array.get(ob_bear_valid, i)
                 t = array.get(ob_bear_top, i)
                 b = array.get(ob_bear_bot, i)
-                if low <= t and high >= b
+                if m5_l <= t and m5_h >= b
                     result     := true
                     ob_top_ref := t
                     ob_bot_ref := b
@@ -534,7 +540,7 @@ f_in_bull_fvg() =>
             if array.get(fvg_bull_valid, i)
                 t = array.get(fvg_bull_top, i)
                 b = array.get(fvg_bull_bot, i)
-                if low <= t and high >= b
+                if m5_l <= t and m5_h >= b
                     result := true
                     break
     result
@@ -546,7 +552,7 @@ f_in_bear_fvg() =>
             if array.get(fvg_bear_valid, i)
                 t = array.get(fvg_bear_top, i)
                 b = array.get(fvg_bear_bot, i)
-                if low <= t and high >= b
+                if m5_l <= t and m5_h >= b
                     result := true
                     break
     result
@@ -563,11 +569,11 @@ poi_bear = in_bear_ob and (require_fvg ? in_bear_fvg : true)
 // DISPLACEMENT CANDLE CHECK
 // Large bodied candle closing near high (bull) or low (bear)
 // ============================================================================
-candle_body   = math.abs(close - open)
-candle_range  = high - low
+candle_body   = math.abs(m5_c - m5_o)
+candle_range  = m5_h - m5_l
 is_displaced  = candle_body >= atr14 * displace_mult
-disp_bull     = is_displaced and close > open and close >= (low + candle_range * 0.6)
-disp_bear     = is_displaced and close < open and close <= (high - candle_range * 0.6)
+disp_bull     = is_displaced and m5_c > m5_o and m5_c >= (m5_l + candle_range * 0.6)
+disp_bear     = is_displaced and m5_c < m5_o and m5_c <= (m5_h - candle_range * 0.6)
 
 // ============================================================================
 // ENTRY CONDITIONS
@@ -596,19 +602,19 @@ f_short_sl(_ob_top) => _ob_top + f_pip_to_price(sl_buffer_pips)
 
 // Trail SL update (rolling candle low for longs, high for shorts)
 f_trail_long() =>
-    float best = low[1]
+    float best = m5_l[1]
     int   n    = math.min(trail_lookback, bar_index)
     for i = 2 to n
-        if low[i] < best
-            best := low[i]
+        if m5_l[i] < best
+            best := m5_l[i]
     best
 
 f_trail_short() =>
-    float best = high[1]
+    float best = m5_h[1]
     int   n    = math.min(trail_lookback, bar_index)
     for i = 2 to n
-        if high[i] > best
-            best := high[i]
+        if m5_h[i] > best
+            best := m5_h[i]
     best
 
 // Exit conditions
@@ -977,6 +983,7 @@ if show_hud
     // Row 19 - Max DD
     table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
     table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+
 
 
 
