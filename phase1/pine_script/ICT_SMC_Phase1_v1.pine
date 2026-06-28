@@ -590,6 +590,30 @@ var bool  tp1_hit      = false
 var int   entry_bar    = na
 var int   entry_time   = na   // wall-clock time of entry, for cross-TF display
 
+// ============================================================================
+// TRADE EVENT LOG - stores all trade events for cross-TF label rendering
+// Each event: [timestamp, type, price, pnl, direction, sl, tp1, tp2, d_str, h4_str, h1_str, ob, fvg, kz]
+// type: 1=BUY entry, -1=SELL entry, 2=TP1, 3=TP2 close, 4=SL close
+// Labels are redrawn on every bar so they appear on ALL timeframes
+// ============================================================================
+var int[]   ev_time  = array.new_int()
+var int[]   ev_type  = array.new_int()
+var float[] ev_price = array.new_float()
+var float[] ev_pnl   = array.new_float()
+var int[]   ev_dir   = array.new_int()
+var float[] ev_sl    = array.new_float()
+var float[] ev_tp1   = array.new_float()
+var float[] ev_tp2   = array.new_float()
+var string[] ev_d   = array.new_string()
+var string[] ev_h4  = array.new_string()
+var string[] ev_h1  = array.new_string()
+var bool[]  ev_ob   = array.new_bool()
+var bool[]  ev_fvg  = array.new_bool()
+var string[] ev_kz  = array.new_string()
+var float[] ev_open = array.new_float()
+var float[] ev_close= array.new_float()
+var float[] ev_exit = array.new_float()
+
 // SL calculation
 f_long_sl(_ob_bot)  => _ob_bot - f_pip_to_price(sl_buffer_pips)
 f_short_sl(_ob_top) => _ob_top + f_pip_to_price(sl_buffer_pips)
@@ -643,7 +667,23 @@ if pos == 1 and long_tp2_hit
     float _pnl_ltp2 = tp2_price - entry_price
     if show_entry_labels
         close_tt_ltp2 = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    TP2 Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(tp2_price, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ltp2, format.mintick) + "\n" + "Result:      " + (_pnl_ltp2 >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
-        label.new(time, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=_pnl_ltp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ltp2, xloc=xloc.bar_time)
+        array.push(ev_time,  time)
+        array.push(ev_type,  3)
+        array.push(ev_price, tp2_price)
+        array.push(ev_pnl,   _pnl_ltp2)
+        array.push(ev_dir,   1)
+        array.push(ev_sl,    trail_sl)
+        array.push(ev_tp1,   tp1_price)
+        array.push(ev_tp2,   tp2_price)
+        array.push(ev_d,     "")
+        array.push(ev_h4,    "")
+        array.push(ev_h1,    "")
+        array.push(ev_ob,    false)
+        array.push(ev_fvg,   false)
+        array.push(ev_kz,    "")
+        array.push(ev_open,  m5_o)
+        array.push(ev_close, m5_c)
+        array.push(ev_exit,  tp2_price)
     equity += _pnl_ltp2
     trades += 1
     if _pnl_ltp2 >= 0
@@ -663,7 +703,23 @@ if pos == -1 and short_tp2_hit
     float _pnl_stp2 = entry_price - tp2_price
     if show_entry_labels
         close_tt_stp2 = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    TP2 Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(tp2_price, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_stp2, format.mintick) + "\n" + "Result:      " + (_pnl_stp2 >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
-        label.new(time, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=_pnl_stp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_stp2, xloc=xloc.bar_time)
+        array.push(ev_time,  time)
+        array.push(ev_type,  3)
+        array.push(ev_price, tp2_price)
+        array.push(ev_pnl,   _pnl_stp2)
+        array.push(ev_dir,   -1)
+        array.push(ev_sl,    trail_sl)
+        array.push(ev_tp1,   tp1_price)
+        array.push(ev_tp2,   tp2_price)
+        array.push(ev_d,     "")
+        array.push(ev_h4,    "")
+        array.push(ev_h1,    "")
+        array.push(ev_ob,    false)
+        array.push(ev_fvg,   false)
+        array.push(ev_kz,    "")
+        array.push(ev_open,  m5_o)
+        array.push(ev_close, m5_c)
+        array.push(ev_exit,  tp2_price)
     equity += _pnl_stp2
     trades += 1
     if _pnl_stp2 >= 0
@@ -685,21 +741,69 @@ if not exited_this_bar and pos == 1 and long_tp1_hit
     trail_sl := entry_price   // Move SL to BE
     if show_entry_labels
         tp1_tt_l = "TP1 HIT - LONG" + "\n" + "Entry: " + str.tostring(entry_price, format.mintick) + "\n" + "TP1:    " + str.tostring(tp1_price, format.mintick) + "\n" + "SL now at breakeven" + "\n" + "Trailing runner to TP2: " + str.tostring(tp2_price, format.mintick)
-        label.new(time, high + atr14 * 0.8, "TP1", style=label.style_label_down, color=color.new(color.green, 20), textcolor=color.white, size=size.small, tooltip=tp1_tt_l, xloc=xloc.bar_time)
+        array.push(ev_time,  time)
+        array.push(ev_type,  2)
+        array.push(ev_price, tp1_price)
+        array.push(ev_pnl,   0.0)
+        array.push(ev_dir,   1)
+        array.push(ev_sl,    entry_price)
+        array.push(ev_tp1,   tp1_price)
+        array.push(ev_tp2,   tp2_price)
+        array.push(ev_d,     "")
+        array.push(ev_h4,    "")
+        array.push(ev_h1,    "")
+        array.push(ev_ob,    false)
+        array.push(ev_fvg,   false)
+        array.push(ev_kz,    "")
+        array.push(ev_open,  m5_o)
+        array.push(ev_close, m5_c)
+        array.push(ev_exit,  tp1_price)
 
 if not exited_this_bar and pos == -1 and short_tp1_hit
     tp1_hit  := true
     trail_sl := entry_price   // Move SL to BE
     if show_entry_labels
         tp1_tt_s = "TP1 HIT - SHORT" + "\n" + "Entry: " + str.tostring(entry_price, format.mintick) + "\n" + "TP1:    " + str.tostring(tp1_price, format.mintick) + "\n" + "SL now at breakeven" + "\n" + "Trailing runner to TP2: " + str.tostring(tp2_price, format.mintick)
-        label.new(time, low - atr14 * 0.8, "TP1", style=label.style_label_up, color=color.new(color.green, 20), textcolor=color.white, size=size.small, tooltip=tp1_tt_s, xloc=xloc.bar_time)
+        array.push(ev_time,  time)
+        array.push(ev_type,  2)
+        array.push(ev_price, tp1_price)
+        array.push(ev_pnl,   0.0)
+        array.push(ev_dir,   -1)
+        array.push(ev_sl,    entry_price)
+        array.push(ev_tp1,   tp1_price)
+        array.push(ev_tp2,   tp2_price)
+        array.push(ev_d,     "")
+        array.push(ev_h4,    "")
+        array.push(ev_h1,    "")
+        array.push(ev_ob,    false)
+        array.push(ev_fvg,   false)
+        array.push(ev_kz,    "")
+        array.push(ev_open,  m5_o)
+        array.push(ev_close, m5_c)
+        array.push(ev_exit,  tp1_price)
 
 // SL hit
 if not exited_this_bar and pos == 1 and long_sl_hit
     float _pnl_lsl = trail_sl - entry_price
     if show_entry_labels
         close_tt_lsl = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_lsl, format.mintick) + "\n" + "Result:      " + (_pnl_lsl >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
-        label.new(time, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=_pnl_lsl >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_lsl, xloc=xloc.bar_time)
+        array.push(ev_time,  time)
+        array.push(ev_type,  4)
+        array.push(ev_price, trail_sl)
+        array.push(ev_pnl,   _pnl_lsl)
+        array.push(ev_dir,   1)
+        array.push(ev_sl,    trail_sl)
+        array.push(ev_tp1,   tp1_price)
+        array.push(ev_tp2,   tp2_price)
+        array.push(ev_d,     "")
+        array.push(ev_h4,    "")
+        array.push(ev_h1,    "")
+        array.push(ev_ob,    false)
+        array.push(ev_fvg,   false)
+        array.push(ev_kz,    "")
+        array.push(ev_open,  m5_o)
+        array.push(ev_close, m5_c)
+        array.push(ev_exit,  trail_sl)
     equity += _pnl_lsl
     trades += 1
     if _pnl_lsl >= 0
@@ -719,7 +823,23 @@ if not exited_this_bar and pos == -1 and short_sl_hit
     float _pnl_ssl = entry_price - trail_sl
     if show_entry_labels
         close_tt_ssl = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ssl, format.mintick) + "\n" + "Result:      " + (_pnl_ssl >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
-        label.new(time, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=_pnl_ssl >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ssl, xloc=xloc.bar_time)
+        array.push(ev_time,  time)
+        array.push(ev_type,  4)
+        array.push(ev_price, trail_sl)
+        array.push(ev_pnl,   _pnl_ssl)
+        array.push(ev_dir,   -1)
+        array.push(ev_sl,    trail_sl)
+        array.push(ev_tp1,   tp1_price)
+        array.push(ev_tp2,   tp2_price)
+        array.push(ev_d,     "")
+        array.push(ev_h4,    "")
+        array.push(ev_h1,    "")
+        array.push(ev_ob,    false)
+        array.push(ev_fvg,   false)
+        array.push(ev_kz,    "")
+        array.push(ev_open,  m5_o)
+        array.push(ev_close, m5_c)
+        array.push(ev_exit,  trail_sl)
     equity += _pnl_ssl
     trades += 1
     if _pnl_ssl >= 0
@@ -750,9 +870,24 @@ if not exited_this_bar and pos == 0 and long_entry_raw
     entry_bar   := bar_index
     entry_time  := time
 
-    if show_entry_labels
-        buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "Daily:       " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "4H:           " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "1H:           " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
-        label.new(time, low - atr14 * 1.5, "BUY", style=label.style_label_up, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=buy_tt, xloc=xloc.bar_time)
+    // Store BUY event for cross-TF rendering
+    array.push(ev_time,  time)
+    array.push(ev_type,  1)
+    array.push(ev_price, entry_price)
+    array.push(ev_pnl,   0.0)
+    array.push(ev_dir,   1)
+    array.push(ev_sl,    sl_price)
+    array.push(ev_tp1,   tp1_price)
+    array.push(ev_tp2,   tp2_price)
+    array.push(ev_d,     daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT")
+    array.push(ev_h4,    h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT")
+    array.push(ev_h1,    h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT")
+    array.push(ev_ob,    in_bull_ob)
+    array.push(ev_fvg,   in_bull_fvg)
+    array.push(ev_kz,    kz_5m_name)
+    array.push(ev_open,  m5_o)
+    array.push(ev_close, m5_c)
+    array.push(ev_exit,  0.0)
 
     if show_sl_line
         line.new(bar_index, sl_price, bar_index + 20, sl_price,
@@ -786,9 +921,24 @@ if not exited_this_bar and pos == 0 and short_entry_raw
     entry_bar   := bar_index
     entry_time  := time
 
-    if show_entry_labels
-        sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "Daily:       " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "4H:           " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "1H:           " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
-        label.new(time, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=sell_tt, xloc=xloc.bar_time)
+    // Store SELL event for cross-TF rendering
+    array.push(ev_time,  time)
+    array.push(ev_type,  -1)
+    array.push(ev_price, entry_price)
+    array.push(ev_pnl,   0.0)
+    array.push(ev_dir,   -1)
+    array.push(ev_sl,    sl_price)
+    array.push(ev_tp1,   tp1_price)
+    array.push(ev_tp2,   tp2_price)
+    array.push(ev_d,     daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT")
+    array.push(ev_h4,    h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT")
+    array.push(ev_h1,    h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT")
+    array.push(ev_ob,    in_bear_ob)
+    array.push(ev_fvg,   in_bear_fvg)
+    array.push(ev_kz,    kz_5m_name)
+    array.push(ev_open,  m5_o)
+    array.push(ev_close, m5_c)
+    array.push(ev_exit,  0.0)
 
     if show_sl_line
         line.new(bar_index, sl_price, bar_index + 20, sl_price,
@@ -858,6 +1008,61 @@ if show_bias_label and barstate.islast
 // ============================================================================
 // ============================================================================
 // ============================================================================
+// ============================================================================
+// CROSS-TF LABEL RENDERING
+// On every bar, check if any stored event falls within this bar's time window
+// This makes labels appear correctly on 5M, 1H, 4H, Daily - any TF
+// ============================================================================
+if show_entry_labels and array.size(ev_time) > 0
+    tf_ms = timeframe.in_seconds() * 1000
+    bar_end = time + tf_ms
+    for i = 0 to array.size(ev_time) - 1
+        ev_t = array.get(ev_time, i)
+        if ev_t >= time and ev_t < bar_end
+            ev_typ   = array.get(ev_type,  i)
+            ev_pr    = array.get(ev_price, i)
+            ev_pn    = array.get(ev_pnl,   i)
+            ev_di    = array.get(ev_dir,   i)
+            ev_sl_p  = array.get(ev_sl,    i)
+            ev_tp1_p = array.get(ev_tp1,   i)
+            ev_tp2_p = array.get(ev_tp2,   i)
+            ev_d_s   = array.get(ev_d,     i)
+            ev_h4_s  = array.get(ev_h4,    i)
+            ev_h1_s  = array.get(ev_h1,    i)
+            ev_ob_b  = array.get(ev_ob,    i)
+            ev_fvg_b = array.get(ev_fvg,   i)
+            ev_kz_s  = array.get(ev_kz,    i)
+            ev_op    = array.get(ev_open,  i)
+            ev_cl    = array.get(ev_close, i)
+            ev_ex    = array.get(ev_exit,  i)
+
+            if ev_typ == 1
+                tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(ev_op, format.mintick) + "\n" + "Close:       " + str.tostring(ev_cl, format.mintick) + "\n" + "Entry:      " + str.tostring(ev_pr, format.mintick) + "\n" + "Stop Loss: " + str.tostring(ev_sl_p, format.mintick) + "\n" + "TP1:          " + str.tostring(ev_tp1_p, format.mintick) + "\n" + "TP2:          " + str.tostring(ev_tp2_p, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "Daily:       " + ev_d_s + "\n" + "4H:           " + ev_h4_s + "\n" + "1H:           " + ev_h1_s + "\n" + "In OB:       " + (ev_ob_b ? "YES" : "NO") + "\n" + "In FVG:     " + (ev_fvg_b ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + ev_kz_s
+                label.new(bar_index, low - atr14 * 1.5, "BUY", style=label.style_label_up, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=tt)
+
+            else if ev_typ == -1
+                tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(ev_op, format.mintick) + "\n" + "Close:       " + str.tostring(ev_cl, format.mintick) + "\n" + "Entry:      " + str.tostring(ev_pr, format.mintick) + "\n" + "Stop Loss: " + str.tostring(ev_sl_p, format.mintick) + "\n" + "TP1:          " + str.tostring(ev_tp1_p, format.mintick) + "\n" + "TP2:          " + str.tostring(ev_tp2_p, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "Daily:       " + ev_d_s + "\n" + "4H:           " + ev_h4_s + "\n" + "1H:           " + ev_h1_s + "\n" + "In OB:       " + (ev_ob_b ? "YES" : "NO") + "\n" + "In FVG:     " + (ev_fvg_b ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + ev_kz_s
+                label.new(bar_index, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=tt)
+
+            else if ev_typ == 2
+                dir_str = ev_di == 1 ? "LONG" : "SHORT"
+                tt = "TP1 HIT - " + dir_str + "\n" + "Entry: " + str.tostring(ev_pr, format.mintick) + "\n" + "TP1:    " + str.tostring(ev_tp1_p, format.mintick) + "\n" + "SL moved to breakeven" + "\n" + "Trailing to TP2: " + str.tostring(ev_tp2_p, format.mintick)
+                if ev_di == 1
+                    label.new(bar_index, high + atr14 * 0.8, "TP1", style=label.style_label_down, color=color.new(color.green, 20), textcolor=color.white, size=size.small, tooltip=tt)
+                else
+                    label.new(bar_index, low - atr14 * 0.8, "TP1", style=label.style_label_up, color=color.new(color.green, 20), textcolor=color.white, size=size.small, tooltip=tt)
+
+            else if ev_typ == 3 or ev_typ == 4
+                reason = ev_typ == 3 ? "TP2 Hit" : "Stop Loss Hit"
+                dir_str = ev_di == 1 ? "LONG" : "SHORT"
+                result_str = ev_pn >= 0 ? "PROFIT" : "LOSS"
+                lbl_col = ev_pn >= 0 ? color.new(color.green, 0) : color.new(color.black, 0)
+                tt = "EXIT: CLOSE " + dir_str + "\n" + "====================" + "\n" + "Reason:    " + reason + "\n" + "Open:       " + str.tostring(ev_op, format.mintick) + "\n" + "Close:       " + str.tostring(ev_cl, format.mintick) + "\n" + "Entry:      " + str.tostring(ev_pr, format.mintick) + "\n" + "Exit:         " + str.tostring(ev_ex, format.mintick) + "\n" + "P&L:         " + str.tostring(ev_pn, format.mintick) + "\n" + "Result:      " + result_str
+                if ev_di == 1
+                    label.new(bar_index, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=lbl_col, textcolor=color.white, size=size.large, tooltip=tt)
+                else
+                    label.new(bar_index, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=lbl_col, textcolor=color.white, size=size.large, tooltip=tt)
+
 // HUD TABLE - White background, colored text only, with trade log
 // ============================================================================
 win_rate = (wins + losses) > 0 ? (float(wins) / float(wins + losses)) * 100.0 : 0.0
@@ -974,6 +1179,7 @@ if show_hud
     // Row 19 - Max DD
     table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
     table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+
 
 
 
