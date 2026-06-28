@@ -540,6 +540,10 @@ disp_bear     = is_displaced and close < open and close <= (high - candle_range 
 // ============================================================================
 
 // ============================================================================
+var float current_capital = initial_capital
+var float trade_lot_size  = 0.0
+var bool  trade_skipped   = false
+
 // DYNAMIC LOT SIZE CALCULATION
 // ============================================================================
 f_calc_lot(_entry, _sl) =>
@@ -609,9 +613,6 @@ var int   trades         = 0
 var float peak_equity    = 0.0
 var float equity         = 0.0
 var float max_dd         = 0.0
-var float current_capital = initial_capital
-var float trade_lot_size  = 0.0
-var bool  trade_skipped   = false
 
 // Trade log arrays - stores last 20 completed trades
 var int[]    tl_num    = array.new_int()
