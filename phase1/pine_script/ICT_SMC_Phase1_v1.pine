@@ -1,7 +1,7 @@
 // ============================================================================
 // ICT/SMC ALGO TRADING SYSTEM - PHASE 1
 // Strategy: Top-Down Bias + OB/FVG/BOS/MSS + Trade Window Entry
-// Chart TF: 5M | Higher TFs: 1H, 4H, Daily via request.security()
+// TTF: Trade Timeframe (default 5M) | HTF1/2/3: Higher TFs (default 1H/4H/D)
 // Author: Built for mesan4net-blip algo trading system
 // Version: 1.0
 // ============================================================================
@@ -11,16 +11,21 @@ indicator("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
      max_lines_count=500)
 
 // ============================================================================
-// CHART TF GUARD - This script must run on 5M chart
-// Labels use xloc.bar_time so they are visible on ALL timeframes when viewed
-// but the script MUST be added on a 5M chart to detect entries correctly
+// TF GUARD - Chart must be set to TTF for trade detection
 // ============================================================================
-if barstate.isfirst and timeframe.period != "5"
-    runtime.error("ICT Phase 1: Please set chart to 5M timeframe. Trades are detected on 5M. Labels will appear on all TFs once set.")
+if barstate.isfirst and timeframe.period != ttf_in
+    runtime.error("ICT Phase 1: Set chart to TTF (" + ttf_in + ") for trade detection. Labels appear on all TFs via xloc.bar_time.")
 
 // ============================================================================
 // INPUTS
 // ============================================================================
+
+// --- Timeframe Settings ---
+grp_tf   = "Timeframe Settings"
+ttf_in   = input.timeframe("5",   "TTF  - Trade Timeframe (entry/exit detection)", group=grp_tf)
+htf1_in  = input.timeframe("60",  "HTF1 - Higher Timeframe 1 (confirmation)",      group=grp_tf)
+htf2_in  = input.timeframe("240", "HTF2 - Higher Timeframe 2 (setup)",             group=grp_tf)
+htf3_in  = input.timeframe("D",   "HTF3 - Higher Timeframe 3 (bias)",              group=grp_tf)
 
 // --- Trade Windows ---
 grp_kz = "Trade Windows"
@@ -120,20 +125,20 @@ f_htf_high(_tf) =>
 f_htf_low(_tf) =>
     request.security(syminfo.tickerid, _tf, low, barmerge.gaps_off, barmerge.lookahead_off)
 
-// Daily
-d_close = f_htf_close("D")
-d_high  = f_htf_high("D")
-d_low   = f_htf_low("D")
+// HTF3 (default: Daily) - Bias
+d_close  = f_htf_close(htf3_in)
+d_high   = f_htf_high(htf3_in)
+d_low    = f_htf_low(htf3_in)
 
-// 4H
-h4_close = f_htf_close("240")
-h4_high  = f_htf_high("240")
-h4_low   = f_htf_low("240")
+// HTF2 (default: 4H) - Setup
+h4_close = f_htf_close(htf2_in)
+h4_high  = f_htf_high(htf2_in)
+h4_low   = f_htf_low(htf2_in)
 
-// 1H
-h1_close = f_htf_close("60")
-h1_high  = f_htf_high("60")
-h1_low   = f_htf_low("60")
+// HTF1 (default: 1H) - Confirmation
+h1_close = f_htf_close(htf1_in)
+h1_high  = f_htf_high(htf1_in)
+h1_low   = f_htf_low(htf1_in)
 
 // ============================================================================
 // ============================================================================
@@ -141,12 +146,13 @@ h1_low   = f_htf_low("60")
 // Structure runs on chart TF. Trades always detected on 5M.
 // Labels placed with xloc.bar_time so they appear on all TFs correctly.
 // ============================================================================
-m5_o     = request.security(syminfo.tickerid, "5", open,  barmerge.gaps_off, barmerge.lookahead_off)
-m5_h     = request.security(syminfo.tickerid, "5", high,  barmerge.gaps_off, barmerge.lookahead_off)
-m5_l     = request.security(syminfo.tickerid, "5", low,   barmerge.gaps_off, barmerge.lookahead_off)
-m5_c     = request.security(syminfo.tickerid, "5", close, barmerge.gaps_off, barmerge.lookahead_off)
-m5_t     = request.security(syminfo.tickerid, "5", time,  barmerge.gaps_off, barmerge.lookahead_off)
-m5_hr    = request.security(syminfo.tickerid, "5", hour(time, "America/New_York"), barmerge.gaps_off, barmerge.lookahead_off)
+// TTF (default: 5M) - Trade detection data
+m5_o  = request.security(syminfo.tickerid, ttf_in, open,  barmerge.gaps_off, barmerge.lookahead_off)
+m5_h  = request.security(syminfo.tickerid, ttf_in, high,  barmerge.gaps_off, barmerge.lookahead_off)
+m5_l  = request.security(syminfo.tickerid, ttf_in, low,   barmerge.gaps_off, barmerge.lookahead_off)
+m5_c  = request.security(syminfo.tickerid, ttf_in, close, barmerge.gaps_off, barmerge.lookahead_off)
+m5_t  = request.security(syminfo.tickerid, ttf_in, time,  barmerge.gaps_off, barmerge.lookahead_off)
+m5_hr = request.security(syminfo.tickerid, ttf_in, hour(time, "America/New_York"), barmerge.gaps_off, barmerge.lookahead_off)
 
 // Trade Window - evaluated on 5M time
 tw_london = kz_london_on and (m5_hr >= kz_london_h1 and m5_hr < kz_london_h2)
@@ -751,7 +757,7 @@ if not exited_this_bar and pos == 0 and long_entry_raw
     entry_time  := time
 
     if show_entry_labels
-        buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "Daily:       " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "4H:           " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "1H:           " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
+        buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
         label.new(time, low - atr14 * 1.5, "BUY", style=label.style_label_up, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=buy_tt, xloc=xloc.bar_time)
 
     if show_sl_line
@@ -787,7 +793,7 @@ if not exited_this_bar and pos == 0 and short_entry_raw
     entry_time  := time
 
     if show_entry_labels
-        sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "Daily:       " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "4H:           " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "1H:           " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
+        sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
         label.new(time, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=sell_tt, xloc=xloc.bar_time)
 
     if show_sl_line
@@ -939,15 +945,15 @@ if show_hud
     table.cell(hud, 1, 9, "",            bgcolor=W, text_color=GR, text_size=SZS)
 
     // Row 10 - Daily
-    table.cell(hud, 0, 10, "Daily",  bgcolor=W, text_color=BK,   text_size=SZ)
+    table.cell(hud, 0, 10, "HTF3 (" + htf3_in + ")", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 10, d_str,    bgcolor=W, text_color=d_col, text_size=SZ)
 
     // Row 11 - 4H
-    table.cell(hud, 0, 11, "4 Hour", bgcolor=W, text_color=BK,    text_size=SZ)
+    table.cell(hud, 0, 11, "HTF2 (" + htf2_in + ")", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 11, h4_str,   bgcolor=W, text_color=h4_col, text_size=SZ)
 
     // Row 12 - 1H
-    table.cell(hud, 0, 12, "1 Hour", bgcolor=W, text_color=BK,    text_size=SZ)
+    table.cell(hud, 0, 12, "HTF1 (" + htf1_in + ")", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 12, h1_str,   bgcolor=W, text_color=h1_col, text_size=SZ)
 
     // Row 13 - Signal
@@ -977,6 +983,7 @@ if show_hud
     // Row 19 - Max DD
     table.cell(hud, 0, 19, "Max Drawdown", bgcolor=W, text_color=BK,                         text_size=SZ)
     table.cell(hud, 1, 19, str.tostring(max_dd, format.mintick), bgcolor=W, text_color=color.new(color.orange, 0), text_size=SZ)
+
 
 
 
