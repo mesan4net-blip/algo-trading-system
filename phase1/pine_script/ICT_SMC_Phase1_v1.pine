@@ -683,16 +683,8 @@ if not exited_this_bar and pos == 0 and long_entry_raw
         risk_pts  = entry_price - sl_price
         tp1_val   = entry_price + risk_pts * tp1_rr
         tp2_val   = entry_price + risk_pts * tp2_rr
-        conf_str  = in_bull_ob and in_bull_fvg ? "[\"OB\",\"FVG\",\"MSS\"]" :
-                    in_bull_ob ? "[\"OB\",\"MSS\"]" : "[\"FVG\",\"MSS\"]"
-        msg = "{\"pair\":\"" + syminfo.ticker +
-              "\",\"direction\":\"BUY" +
-              "\",\"entry\":" + str.tostring(entry_price, format.mintick) +
-              ",\"sl\":"      + str.tostring(sl_price,    format.mintick) +
-              ",\"tp1\":"     + str.tostring(tp1_val,     format.mintick) +
-              ",\"tp2\":"     + str.tostring(tp2_val,     format.mintick) +
-              ",\"killzone\":\"" + kz_name + "\"" +
-              ",\"confluences\":" + conf_str + "}"
+        conf_str  = in_bull_ob and in_bull_fvg ? "[OB+FVG+MSS]" : in_bull_ob ? "[OB+MSS]" : "[FVG+MSS]"
+        msg = "{\"pair\":\"" + syminfo.ticker + "\",\"direction\":\"BUY\",\"entry\":" + str.tostring(entry_price, format.mintick) + ",\"sl\":" + str.tostring(sl_price, format.mintick) + ",\"tp1\":" + str.tostring(tp1_val, format.mintick) + ",\"tp2\":" + str.tostring(tp2_val, format.mintick) + ",\"killzone\":\"" + kz_name + "\",\"confluences\":\"" + conf_str + "\"}"
         alert(msg, alert.freq_once_per_bar)
         last_alert_bar := bar_index
 
@@ -727,16 +719,8 @@ if not exited_this_bar and pos == 0 and short_entry_raw
         risk_pts  = sl_price - entry_price
         tp1_val   = entry_price - risk_pts * tp1_rr
         tp2_val   = entry_price - risk_pts * tp2_rr
-        conf_str  = in_bear_ob and in_bear_fvg ? "[\"OB\",\"FVG\",\"MSS\"]" :
-                    in_bear_ob ? "[\"OB\",\"MSS\"]" : "[\"FVG\",\"MSS\"]"
-        msg = "{\"pair\":\"" + syminfo.ticker +
-              "\",\"direction\":\"SELL" +
-              "\",\"entry\":" + str.tostring(entry_price, format.mintick) +
-              ",\"sl\":"      + str.tostring(sl_price,    format.mintick) +
-              ",\"tp1\":"     + str.tostring(tp1_val,     format.mintick) +
-              ",\"tp2\":"     + str.tostring(tp2_val,     format.mintick) +
-              ",\"killzone\":\"" + kz_name + "\"" +
-              ",\"confluences\":" + conf_str + "}"
+        conf_str  = in_bear_ob and in_bear_fvg ? "[OB+FVG+MSS]" : in_bear_ob ? "[OB+MSS]" : "[FVG+MSS]"
+        msg = "{\"pair\":\"" + syminfo.ticker + "\",\"direction\":\"SELL\",\"entry\":" + str.tostring(entry_price, format.mintick) + ",\"sl\":" + str.tostring(sl_price, format.mintick) + ",\"tp1\":" + str.tostring(tp1_val, format.mintick) + ",\"tp2\":" + str.tostring(tp2_val, format.mintick) + ",\"killzone\":\"" + kz_name + "\",\"confluences\":\"" + conf_str + "\"}"
         alert(msg, alert.freq_once_per_bar)
         last_alert_bar := bar_index
 
