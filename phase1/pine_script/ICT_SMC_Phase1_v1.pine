@@ -91,10 +91,6 @@ bar_min  = minute(time, "America/New_York")
 
 // Trade Window detection
 // Gap filter (same as Script 1 - no entry on gap bars)
-gap_up   = bar_index > 0 and m5_low  > m5_high[1]
-gap_dn   = bar_index > 0 and m5_high < m5_low[1]
-gap_bar  = gap_up or gap_dn
-
 // ============================================================================
 // HIGHER TIMEFRAME DATA
 // ============================================================================
@@ -137,7 +133,12 @@ m5_hour  = request.security(syminfo.tickerid, "5", hour(time, "America/New_York"
 in_london = kz_london_on and (m5_hour >= kz_london_h1 and m5_hour < kz_london_h2)
 in_ny     = kz_ny_on     and (m5_hour >= kz_ny_h1     and m5_hour < kz_ny_h2)
 in_kz     = in_london or in_ny
-kz_name   = in_london ? "London" : in_ny ? "New York" : "Closed" 
+kz_name   = in_london ? "London" : in_ny ? "New York" : "Closed"
+
+// Gap filter — uses 5M data, must be after m5_ declarations
+gap_up  = bar_index > 0 and m5_low  > m5_high[1]
+gap_dn  = bar_index > 0 and m5_high < m5_low[1]
+gap_bar = gap_up or gap_dn
 
 // ============================================================================
 // MARKET STRUCTURE ENGINE
