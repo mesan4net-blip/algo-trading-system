@@ -9,7 +9,7 @@
 strategy("ICT SMC Phase 1 OB FVG BOS MSS", shorttitle="ICT-P1-v1",
      overlay=true, max_bars_back=5000, max_labels_count=500, max_boxes_count=500,
      max_lines_count=500, initial_capital=10000, default_qty_type=strategy.fixed,
-     default_qty_value=1, pyramiding=0, commission_type=strategy.commission.percent,
+     default_qty_value=1, pyramiding=2, commission_type=strategy.commission.percent,
      commission_value=0.005, slippage=1, calc_on_every_tick=false,
      process_orders_on_close=true)
 
@@ -662,12 +662,15 @@ if pos == 0 and long_entry_raw
         tp1_hit     := false
         entry_bar   := bar_index
         entry_time  := time
-        strategy.entry("Long", strategy.long, qty=trade_lot_size)
+        long_qty1 = math.floor(trade_lot_size * 50) / 100
+        long_qty2 = trade_lot_size - long_qty1
         long_tp1_ticks = math.round((tp1_price - entry_price) / syminfo.mintick)
         long_tp2_ticks = math.round((tp2_price - entry_price) / syminfo.mintick)
         long_sl_ticks  = math.round((entry_price - sl_price)  / syminfo.mintick)
-        strategy.exit("Long TP1", "Long", qty_percent=50, profit=long_tp1_ticks, loss=long_sl_ticks, comment="TP1")
-        strategy.exit("Long TP2", "Long", qty_percent=100, profit=long_tp2_ticks, loss=long_sl_ticks, comment="TP2")
+        strategy.entry("Long A", strategy.long, qty=long_qty1)
+        strategy.entry("Long B", strategy.long, qty=long_qty2)
+        strategy.exit("Long A Exit", "Long A", profit=long_tp1_ticks, loss=long_sl_ticks, comment="TP1")
+        strategy.exit("Long B Exit", "Long B", profit=long_tp2_ticks, loss=long_sl_ticks, comment="TP2")
 
     if show_entry_labels
         buy_tt = "ENTRY: BUY" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bull_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bull_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
@@ -706,12 +709,15 @@ if pos == 0 and short_entry_raw
         tp1_hit    := false
         entry_bar  := bar_index
         entry_time := time
-        strategy.entry("Short", strategy.short, qty=trade_lot_size)
+        short_qty1 = math.floor(trade_lot_size * 50) / 100
+        short_qty2 = trade_lot_size - short_qty1
         short_tp1_ticks = math.round((entry_price - tp1_price) / syminfo.mintick)
         short_tp2_ticks = math.round((entry_price - tp2_price) / syminfo.mintick)
         short_sl_ticks  = math.round((sl_price - entry_price)  / syminfo.mintick)
-        strategy.exit("Short TP1", "Short", qty_percent=50, profit=short_tp1_ticks, loss=short_sl_ticks, comment="TP1")
-        strategy.exit("Short TP2", "Short", qty_percent=100, profit=short_tp2_ticks, loss=short_sl_ticks, comment="TP2")
+        strategy.entry("Short A", strategy.short, qty=short_qty1)
+        strategy.entry("Short B", strategy.short, qty=short_qty2)
+        strategy.exit("Short A Exit", "Short A", profit=short_tp1_ticks, loss=short_sl_ticks, comment="TP1")
+        strategy.exit("Short B Exit", "Short B", profit=short_tp2_ticks, loss=short_sl_ticks, comment="TP2")
     if show_entry_labels and not trade_skipped
         sell_tt = "ENTRY: SELL" + "\n" + "====================" + "\n" + "Pair:        " + syminfo.ticker + "\n" + "Open:       " + str.tostring(open, format.mintick) + "\n" + "Close:       " + str.tostring(close, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Stop Loss: " + str.tostring(sl_price, format.mintick) + "\n" + "TP1:          " + str.tostring(tp1_price, format.mintick) + "\n" + "TP2:          " + str.tostring(tp2_price, format.mintick) + "\n" + "====================" + "\n" + "WHY THIS TRADE:" + "\n" + "HTF3 (" + htf3_in + "): " + (daily_struct == 1 ? "BULLISH" : daily_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF2 (" + htf2_in + "): " + (h4_struct == 1 ? "BULLISH" : h4_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "HTF1 (" + htf1_in + "): " + (h1_struct == 1 ? "BULLISH" : h1_struct == -1 ? "BEARISH" : "FLAT") + "\n" + "In OB:       " + (in_bear_ob ? "YES" : "NO") + "\n" + "In FVG:     " + (in_bear_fvg ? "YES" : "NO") + "\n" + "MSS 5M:    YES" + "\n" + "Window:   " + kz_name + "\n" + "====================" + "\n" + "Time: " + ts_str
         label.new(time, high + atr14 * 1.5, "SELL", style=label.style_label_down, color=color.new(color.blue, 0), textcolor=color.white, size=size.large, tooltip=sell_tt, xloc=xloc.bar_time)
