@@ -640,7 +640,7 @@ bool exited_this_bar = false
 
 // TP2 hit (full close on runner)
 if pos == 1 and long_tp2_hit
-    var float _pnl_ltp2 = tp2_price - entry_price
+    float _pnl_ltp2 = tp2_price - entry_price
     if show_entry_labels
         close_tt_ltp2 = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    TP2 Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(tp2_price, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ltp2, format.mintick) + "\n" + "Result:      " + (_pnl_ltp2 >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
         label.new(time, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=_pnl_ltp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ltp2, xloc=xloc.bar_time)
@@ -660,7 +660,7 @@ if pos == 1 and long_tp2_hit
     exited_this_bar := true
 
 if pos == -1 and short_tp2_hit
-    var float _pnl_stp2 = entry_price - tp2_price
+    float _pnl_stp2 = entry_price - tp2_price
     if show_entry_labels
         close_tt_stp2 = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    TP2 Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(tp2_price, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_stp2, format.mintick) + "\n" + "Result:      " + (_pnl_stp2 >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
         label.new(time, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=_pnl_stp2 >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_stp2, xloc=xloc.bar_time)
@@ -696,10 +696,10 @@ if not exited_this_bar and pos == -1 and short_tp1_hit
 
 // SL hit
 if not exited_this_bar and pos == 1 and long_sl_hit
-    var float _pnl_lsl = trail_sl - entry_price
+    float _pnl_lsl = trail_sl - entry_price
     if show_entry_labels
-        close_tt_lsl = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_lsl, format.mintick) + "\n" + "Result:      LOSS" + "\n" + "Time: " + ts_str
-        label.new(time, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_lsl, xloc=xloc.bar_time)
+        close_tt_lsl = "EXIT: CLOSE LONG" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_lsl, format.mintick) + "\n" + "Result:      " + (_pnl_lsl >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
+        label.new(time, high + atr14 * 1.5, "CLOSE", style=label.style_label_down, color=_pnl_lsl >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_lsl, xloc=xloc.bar_time)
     equity += _pnl_lsl
     trades += 1
     if _pnl_lsl >= 0
@@ -716,10 +716,10 @@ if not exited_this_bar and pos == 1 and long_sl_hit
     exited_this_bar := true
 
 if not exited_this_bar and pos == -1 and short_sl_hit
-    var float _pnl_ssl = entry_price - trail_sl
+    float _pnl_ssl = entry_price - trail_sl
     if show_entry_labels
-        close_tt_ssl = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ssl, format.mintick) + "\n" + "Result:      LOSS" + "\n" + "Time: " + ts_str
-        label.new(time, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ssl, xloc=xloc.bar_time)
+        close_tt_ssl = "EXIT: CLOSE SHORT" + "\n" + "====================" + "\n" + "Reason:    Stop Loss Hit" + "\n" + "Open:       " + str.tostring(m5_o, format.mintick) + "\n" + "Close:       " + str.tostring(m5_c, format.mintick) + "\n" + "Entry:      " + str.tostring(entry_price, format.mintick) + "\n" + "Exit:         " + str.tostring(trail_sl, format.mintick) + "\n" + "P&L:         " + str.tostring(_pnl_ssl, format.mintick) + "\n" + "Result:      " + (_pnl_ssl >= 0 ? "PROFIT" : "LOSS") + "\n" + "Time: " + ts_str
+        label.new(time, low - atr14 * 1.5, "CLOSE", style=label.style_label_up, color=_pnl_ssl >= 0 ? color.new(color.green, 0) : color.new(color.black, 0), textcolor=color.white, size=size.large, tooltip=close_tt_ssl, xloc=xloc.bar_time)
     equity += _pnl_ssl
     trades += 1
     if _pnl_ssl >= 0
