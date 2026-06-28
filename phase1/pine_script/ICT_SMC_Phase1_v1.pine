@@ -81,6 +81,9 @@ atr14    = ta.atr(14)
 
 f_pip_to_price(_pips) => _pips * pip_size
 
+// Timestamp — available globally for tooltips and HUD
+ts_str = str.tostring(year) + "-" + (month < 10 ? "0" : "") + str.tostring(month) + "-" + (dayofmonth < 10 ? "0" : "") + str.tostring(dayofmonth) + " " + (hour < 10 ? "0" : "") + str.tostring(hour) + ":" + (minute < 10 ? "0" : "") + str.tostring(minute)
+
 // Hour in EST (UTC-5 standard, UTC-4 DST - TradingView uses exchange time)
 // For forex pairs, syminfo.timezone = "America/New_York" on most brokers
 bar_hour = hour(time, "America/New_York")
@@ -821,9 +824,6 @@ sig_all_b = bias_bull and poi_bull and mss_bull_5m and in_kz
 sig_all_s = bias_bear and poi_bear and mss_bear_5m and in_kz
 sig_txt   = sig_all_b ? "LONG SIGNAL READY" : sig_all_s ? "SHORT SIGNAL READY" : "No signal yet"
 sig_col   = sig_all_b ? color.new(color.green, 0) : sig_all_s ? color.new(color.red, 0) : color.new(color.gray, 0)
-
-// Timestamp
-ts_str = str.tostring(year) + "-" + (month < 10 ? "0" : "") + str.tostring(month) + "-" + (dayofmonth < 10 ? "0" : "") + str.tostring(dayofmonth) + " " + (hour < 10 ? "0" : "") + str.tostring(hour) + ":" + (minute < 10 ? "0" : "") + str.tostring(minute)
 
 W   = color.white
 BK  = color.new(color.black, 0)
