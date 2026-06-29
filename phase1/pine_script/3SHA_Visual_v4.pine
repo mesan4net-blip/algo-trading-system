@@ -79,7 +79,7 @@ ny_label_col      = input.color(color.new(#33BBEE, 0),  "New York — Label Colo
 // INPUTS — GLOBAL DISPLAY
 // ============================================================================
 grp_global   = "Global Display"
-show_wicks   = input.bool(true, "Show Wicks (all layers)",   group=grp_global)
+show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
 show_borders = input.bool(true, "Show Borders (all layers)", group=grp_global)
 
 // ============================================================================
