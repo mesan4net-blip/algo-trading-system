@@ -179,7 +179,7 @@ sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)",             min
 // INPUTS — TRAIL — HOW THE STOP MOVES
 // ============================================================================
 grp_trail    = "Trail — How The Stop Moves"
-trail_method = input.string("Rolling Candle", "Trail Method",
+trail_method = input.string("Rolling Candle Low/High", "Trail Method",
      options=["Rolling Candle Low/High","SHA Body"], group=grp_trail)
 trail_src    = input.string("Real Price", "Price Source  (Rolling Candle only)",
      options=["Real Price","SHA Base","SHA HTF1","SHA HTF2"], group=grp_trail)
