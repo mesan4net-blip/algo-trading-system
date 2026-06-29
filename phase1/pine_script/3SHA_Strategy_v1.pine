@@ -298,10 +298,15 @@ sha_bot_1 = math.min(h1O, h1C)
 sha_bot_2 = math.min(h2O, h2C)
 
 // C2 — price closes beyond all 3 SHA bodies (signal bar)
-above_all = close > sha_top_b and close > sha_top_1 and close > sha_top_2
-below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
-c2_bull_sig = above_all and not above_all[1]
-c2_bear_sig = below_all and not below_all[1]
+// C2 — true full cluster cross in one candle
+// Bull: previous bar closed BELOW all three SHA bodies, this bar closes ABOVE all three
+// Bear: previous bar closed ABOVE all three SHA bodies, this bar closes BELOW all three
+was_below_all = close[1] < sha_bot_b[1] and close[1] < sha_bot_1[1] and close[1] < sha_bot_2[1]
+was_above_all = close[1] > sha_top_b[1] and close[1] > sha_top_1[1] and close[1] > sha_top_2[1]
+now_above_all = close > sha_top_b and close > sha_top_1 and close > sha_top_2
+now_below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
+c2_bull_sig   = was_below_all and now_above_all
+c2_bear_sig   = was_above_all and now_below_all
 
 // Cascade signal
 casc_bull_sig = all_bull and not all_bull[1]
