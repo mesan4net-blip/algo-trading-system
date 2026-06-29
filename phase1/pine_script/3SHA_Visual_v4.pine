@@ -153,6 +153,13 @@ c2_bull_col       = input.color(color.new(#0077BB, 0), "C2 Bull Color",         
 c2_bear_col       = input.color(color.new(#EE7733, 0), "C2 Bear Color",                   group=grp_entry)
 c2_size           = input.string("Small", "C2 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
 
+// C3 — Pullback Resume
+show_c3           = input.bool(true,  "Show C3 Marker  (pullback then resume above/below all 3 SHA)", group=grp_entry)
+c3_sess_only      = input.bool(false, "C3 — In Session Only",                             group=grp_entry)
+c3_bull_col       = input.color(color.new(#004488, 0), "C3 Bull Color",                   group=grp_entry)
+c3_bear_col       = input.color(color.new(#AA3377, 0), "C3 Bear Color",                   group=grp_entry)
+c3_size           = input.string("Small", "C3 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+
 // ============================================================================
 // INPUTS — STATE HUD
 // ============================================================================
@@ -356,6 +363,12 @@ now_below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
 c2_bull_raw = was_below_all and now_above_all
 c2_bear_raw = was_above_all and now_below_all
 
+// C3 — Pullback Resume
+// Price closes above all 3 SHA bodies this bar, was NOT fully above all 3 last bar
+// Broader than C2 — catches shallow and deep pullbacks, not just full cluster crosses
+c3_bull_raw = now_above_all and not now_above_all[1]
+c3_bear_raw = now_below_all and not now_below_all[1]
+
 // — Session gates (applied per condition)
 cascade_bull = show_cascade and cascade_bull_raw and (cascade_sess_only ? in_session[1] : true)
 cascade_bear = show_cascade and cascade_bear_raw and (cascade_sess_only ? in_session[1] : true)
@@ -363,6 +376,8 @@ c1_bull      = show_c1      and c1_bull_raw      and (c1_sess_only      ? in_ses
 c1_bear      = show_c1      and c1_bear_raw      and (c1_sess_only      ? in_session[1] : true)
 c2_bull      = show_c2      and c2_bull_raw      and (c2_sess_only      ? in_session[1] : true)
 c2_bear      = show_c2      and c2_bear_raw      and (c2_sess_only      ? in_session[1] : true)
+c3_bull      = show_c3      and c3_bull_raw      and (c3_sess_only      ? in_session[1] : true)
+c3_bear      = show_c3      and c3_bear_raw      and (c3_sess_only      ? in_session[1] : true)
 
 // ============================================================================
 // MARKER SIZE HELPER
@@ -394,6 +409,12 @@ if c2_bull
     label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=c2_bull_col, textcolor=color.white, size=f_sz(c2_size))
 if c2_bear
     label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=c2_bear_col, textcolor=color.white, size=f_sz(c2_size))
+
+// C3 markers — square shape, furthest out
+if c3_bull
+    label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=c3_bull_col, textcolor=color.white, size=f_sz(c3_size))
+if c3_bear
+    label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=c3_bear_col, textcolor=color.white, size=f_sz(c3_size))
 
 // ============================================================================
 // DRAW SHA CANDLES — HTF2 → HTF1 → Base
