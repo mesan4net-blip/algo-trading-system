@@ -1,0 +1,745 @@
+//@version=6
+// ============================================================================
+// 3SHA STRATEGY v1
+// Three Smoothed Heikin Ashi — Complete Trading Strategy
+// Cone flipped: Base=Chart TF (slow/dominant), LTF1=Mid, LTF2=Fast (entry)
+// Entry:   C2 / C3 / Cascade — user selects via show toggles
+// C3:      LTF2 dips below/above LTF1 body then recovers — Base holds direction
+// SL:      Previous N bars low/high in real price
+// Trail:   Configurable source + lookback, moves only in favor
+// Exit:    Trail hit, SHA layer flip, session end
+// Sizing:  Dynamic — 1% equity risk per trade, compounding
+// ============================================================================
+strategy("3SHA Strategy v1", shorttitle="3SHA-v1", overlay=true,
+         initial_capital=100000, currency=currency.USD,
+         default_qty_type=strategy.cash, default_qty_value=1000,
+         calc_on_every_tick=false, process_orders_on_close=false,
+         max_bars_back=5000)
+
+// ============================================================================
+// SHA FUNCTION — Two-pass: EMA → HA → EMA
+// ============================================================================
+f_sha(_len1, _len2, _o, _h, _l, _c) =>
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
+    haC = (o1 + h1 + l1 + c1) / 4.0
+    var float haO = na
+    haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
+    haH = math.max(h1, math.max(haO, haC))
+    haL = math.min(l1, math.min(haO, haC))
+    o2  = ta.ema(haO, _len2)
+    h2  = ta.ema(haH, _len2)
+    l2  = ta.ema(haL, _len2)
+    c2  = ta.ema(haC, _len2)
+    [o2, h2, l2, c2]
+
+// ============================================================================
+// INPUTS — BROKER TIME REFERENCE
+// ============================================================================
+grp_time        = "Broker Time Reference"
+your_local_hour = input.int(18,  "Your Current Local Hour (24h)",                 minval=0,   maxval=23, group=grp_time)
+your_local_day  = input.int(28,  "Your Current Local Day",                         minval=1,   maxval=31, group=grp_time)
+broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                      minval=0,   maxval=23, group=grp_time)
+broker_day_now  = input.int(29,  "Broker Current Day",                             minval=1,   maxval=31, group=grp_time)
+your_utc_offset = input.int(-7,  "Your UTC Offset (PDT=-7 PST=-8 EST=-5 EDT=-4)", minval=-12, maxval=14, group=grp_time)
+
+// ============================================================================
+// BROKER OFFSET CALCULATION
+// ============================================================================
+utc_hour_raw  = your_local_hour - your_utc_offset
+utc_hour_adj  = utc_hour_raw >= 24 ? utc_hour_raw - 24 : utc_hour_raw < 0 ? utc_hour_raw + 24 : utc_hour_raw
+day_crossed   = your_local_day != broker_day_now
+broker_offset = day_crossed ? broker_hour_now + (24 - utc_hour_adj) : broker_hour_now - utc_hour_adj
+f_norm(_h)   => _h >= 24 ? _h - 24 : _h < 0 ? _h + 24 : _h
+
+// ============================================================================
+// INPUTS — TRADE SESSIONS
+// ============================================================================
+grp_sess          = "Trade Sessions"
+pip_divisor       = input.float(0.0001,   "Pip Size (Forex=0.0001  JPY/Gold=0.01)", minval=0.00001, step=0.00001, group=grp_sess)
+pip_value_per_lot = input.float(10.0,     "Pip Value Per Lot (USD)",                minval=0.01,                  group=grp_sess)
+sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
+sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
+show_london       = input.bool(true,                    "Show London Session",           group=grp_sess)
+lon_full_fill     = input.color(color.new(#0077BB, 85), "London — Full Session Color",   group=grp_sess)
+lon_tw_fill       = input.color(color.new(#0077BB, 65), "London — Trade Window Color",   group=grp_sess)
+lon_border        = input.color(color.new(#0077BB, 20), "London — Border Color",         group=grp_sess)
+lon_label_col     = input.color(color.new(#0077BB, 0),  "London — Label Color",          group=grp_sess)
+show_ny           = input.bool(true,                    "Show New York Session",         group=grp_sess)
+ny_full_fill      = input.color(color.new(#33BBEE, 85), "New York — Full Session Color", group=grp_sess)
+ny_tw_fill        = input.color(color.new(#33BBEE, 65), "New York — Trade Window Color", group=grp_sess)
+ny_border         = input.color(color.new(#33BBEE, 20), "New York — Border Color",       group=grp_sess)
+ny_label_col      = input.color(color.new(#33BBEE, 0),  "New York — Label Color",        group=grp_sess)
+
+// ============================================================================
+// INPUTS — GLOBAL DISPLAY
+// ============================================================================
+grp_global   = "Global Display"
+show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
+show_borders = input.bool(true,  "Show Borders (all layers)", group=grp_global)
+
+// ============================================================================
+// INPUTS — BASE SHA  [Chart TF — Dominant / Slowest / Permission layer]
+// ============================================================================
+grp_base     = "Base SHA  [Chart TF — Dominant Trend]"
+base_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_base)
+base_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_base)
+base_show    = input.bool(true, "Show Base SHA Candles",      group=grp_base)
+base_bull    = input.color(color.new(#0077BB, 0), "Bull Color",   group=grp_base)
+base_bear    = input.color(color.new(#EE7733, 0), "Bear Color",   group=grp_base)
+base_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_base)
+base_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_base)
+base_opacity = input.int(0,  "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_base)
+
+// ============================================================================
+// INPUTS — LTF1 SHA  [Mid Timeframe — Confirmation]
+// ============================================================================
+grp_ltf1     = "LTF1 SHA  [Mid Timeframe — Confirmation]"
+ltf1_tf      = input.timeframe("60",  "LTF1 Timeframe",       group=grp_ltf1)
+ltf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_ltf1)
+ltf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_ltf1)
+ltf1_show    = input.bool(true, "Show LTF1 SHA Candles",      group=grp_ltf1)
+ltf1_bull    = input.color(color.new(#33BBEE, 0), "Bull Color",   group=grp_ltf1)
+ltf1_bear    = input.color(color.new(#CC3311, 0), "Bear Color",   group=grp_ltf1)
+ltf1_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_ltf1)
+ltf1_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_ltf1)
+ltf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_ltf1)
+
+// ============================================================================
+// INPUTS — LTF2 SHA  [Fast Timeframe — Entry Trigger]
+// ============================================================================
+grp_ltf2     = "LTF2 SHA  [Fast Timeframe — Entry Trigger]"
+ltf2_tf      = input.timeframe("15",  "LTF2 Timeframe",       group=grp_ltf2)
+ltf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_ltf2)
+ltf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_ltf2)
+ltf2_show    = input.bool(true, "Show LTF2 SHA Candles",      group=grp_ltf2)
+ltf2_bull    = input.color(color.new(#004488, 0), "Bull Color",   group=grp_ltf2)
+ltf2_bear    = input.color(color.new(#AA3377, 0), "Bear Color",   group=grp_ltf2)
+ltf2_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_ltf2)
+ltf2_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_ltf2)
+ltf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_ltf2)
+
+// ============================================================================
+// INPUTS — EMA FILTER
+// ============================================================================
+grp_ema      = "EMA Filter"
+use_ema      = input.bool(true,  "Enable EMA Direction Filter",  group=grp_ema)
+ema_len      = input.int(200,    "EMA Length",        minval=1,  group=grp_ema)
+ema_src      = input.source(close, "EMA Source",                 group=grp_ema)
+show_ema     = input.bool(true,  "Show EMA Line",                group=grp_ema)
+ema_col      = input.color(color.new(#888888, 0), "EMA Color",   group=grp_ema)
+
+// ============================================================================
+// INPUTS — ENTRY CONDITIONS
+// Toggling a condition ON enables both its marker AND its trade trigger
+// ============================================================================
+grp_entry         = "Entry Conditions"
+use_sess_filter   = input.bool(true,  "Session Filter — London + New York Only",    group=grp_entry)
+use_tw_only       = input.bool(false, "Trade Window Only (tighter session hours)",   group=grp_entry)
+use_gap_filter    = input.bool(true,  "Block Gap Bar Entries",                       group=grp_entry)
+show_cascade      = input.bool(false, "Cascade — All 3 SHA flip to same direction",  group=grp_entry)
+cascade_size      = input.string("Small", "Cascade Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+show_c2           = input.bool(false, "C2 — Full cluster cross (LTF2 crosses all 3 SHA bodies)", group=grp_entry)
+c2_size           = input.string("Small", "C2 Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+show_c3           = input.bool(false, "C3 — Valid pullback: LTF2 dips below/above LTF1 then recovers", group=grp_entry)
+c3_size           = input.string("Small", "C3 Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+
+// ============================================================================
+// INPUTS — INITIAL STOP LOSS
+// ============================================================================
+grp_sl       = "Initial Stop Loss"
+sl_method    = input.string("Prev N Bars Low/High", "SL Placement Method", options=["Trade Candle Low/High","Prev N Bars Low/High"], group=grp_sl)
+sl_lookback  = input.int(30,  "Lookback N Bars  (Prev N Bars method only)", minval=1, maxval=100, group=grp_sl)
+sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)",             minval=0, step=0.5,  group=grp_sl)
+
+// ============================================================================
+// INPUTS — TRAIL — HOW THE STOP MOVES
+// ============================================================================
+grp_trail    = "Trail — How The Stop Moves"
+trail_method = input.string("Rolling Candle Low/High", "Trail Method",
+     options=["Rolling Candle Low/High","SHA Body"], group=grp_trail)
+trail_src    = input.string("Real Price", "Price Source  (Rolling Candle only)",
+     options=["Real Price","SHA LTF2","SHA LTF1","SHA Base"], group=grp_trail)
+trail_bars   = input.int(30, "Lookback Bars  (Rolling Candle only)", minval=1, maxval=100, group=grp_trail)
+show_trail   = input.bool(true,  "Show Trail Line on Chart", group=grp_trail)
+trail_col    = input.color(color.new(#EE7733, 0), "Trail Line Color",       group=grp_trail)
+trail_width  = input.int(1, "Trail Line Width", minval=1, maxval=4,          group=grp_trail)
+
+// ============================================================================
+// INPUTS — EXIT — WHAT TRIGGERS THE CLOSE
+// ============================================================================
+grp_exit       = "Exit — What Triggers The Close"
+exit_trigger   = input.string("Touch", "Trail Stop Trigger", options=["Touch","Close Beyond"], group=grp_exit)
+exit_on_3flip  = input.bool(true,  "Exit if all 3 SHA layers flip against position",           group=grp_exit)
+exit_sha_layer = input.string("None", "Exit if this SHA layer flips against position",
+     options=["None","LTF2 SHA","LTF1 SHA","Base SHA"], group=grp_exit)
+exit_sess_end  = input.bool(false, "Close all positions at session end",                        group=grp_exit)
+
+// ============================================================================
+// INPUTS — POSITION SIZING
+// ============================================================================
+grp_risk      = "Position Sizing"
+risk_pct      = input.float(1.0, "Risk Per Trade (% of current equity)", minval=0.1, maxval=10.0, step=0.1, group=grp_risk)
+allow_pyramid = input.bool(true, "Allow Pyramiding",                                                          group=grp_risk)
+max_pyramid   = input.int(3,     "Max Pyramid Adds",                      minval=1,  maxval=10,               group=grp_risk)
+
+// ============================================================================
+// INPUTS — DAILY LOSS LIMIT
+// ============================================================================
+grp_daily       = "Daily Loss Limit"
+use_daily_limit = input.bool(true,  "Enable Daily Loss Limit",        group=grp_daily)
+daily_loss_pct  = input.float(3.0, "Max Daily Loss (% of equity)",    group=grp_daily, minval=0.1, maxval=20.0, step=0.1)
+
+// ============================================================================
+// INPUTS — STATE HUD
+// ============================================================================
+grp_hud     = "State HUD"
+show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
+hud_pos_inp = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
+
+// ============================================================================
+// COMPUTE SHA LAYERS
+// Base  = chart TF (dominant, slowest)
+// LTF1  = mid TF via request.security
+// LTF2  = fast TF via request.security (entry trigger)
+// ============================================================================
+
+// Base — chart TF directly (dominant trend layer)
+[bO, bH, bL, bC] = f_sha(base_len1, base_len2, open, high, low, close)
+
+// LTF1 — mid timeframe
+ltf1_o = request.security(syminfo.tickerid, ltf1_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
+ltf1_h = request.security(syminfo.tickerid, ltf1_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
+ltf1_l = request.security(syminfo.tickerid, ltf1_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
+ltf1_c = request.security(syminfo.tickerid, ltf1_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
+[l1O, l1H, l1L, l1C] = f_sha(ltf1_len1, ltf1_len2, ltf1_o, ltf1_h, ltf1_l, ltf1_c)
+
+// LTF2 — fast timeframe (entry trigger layer)
+ltf2_o = request.security(syminfo.tickerid, ltf2_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
+ltf2_h = request.security(syminfo.tickerid, ltf2_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
+ltf2_l = request.security(syminfo.tickerid, ltf2_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
+ltf2_c = request.security(syminfo.tickerid, ltf2_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
+[l2O, l2H, l2L, l2C] = f_sha(ltf2_len1, ltf2_len2, ltf2_o, ltf2_h, ltf2_l, ltf2_c)
+
+// ============================================================================
+// EMA FILTER
+// ============================================================================
+ema_val = ta.ema(ema_src, ema_len)
+plot(show_ema ? ema_val : na, title="EMA Filter", color=ema_col, linewidth=1)
+
+// ============================================================================
+// LAYER DIRECTION FLAGS
+// Base  = dominant trend (permission)
+// LTF1  = mid confirmation
+// LTF2  = fast entry trigger
+// ============================================================================
+base_ready    = not na(bO)  and not na(bC)
+ltf1_ready    = not na(l1O) and not na(l1C)
+ltf2_ready    = not na(l2O) and not na(l2C)
+all_ready     = base_ready and ltf1_ready and ltf2_ready
+
+base_bull_bar = bC  >= bO    // Dominant trend bullish
+ltf1_bull_bar = l1C >= l1O   // Mid confirmation bullish
+ltf2_bull_bar = l2C >= l2O   // Fast trigger bullish
+base_bear_bar = bC  < bO
+ltf1_bear_bar = l1C < l1O
+ltf2_bear_bar = l2C < l2O
+
+all_bull = all_ready and base_bull_bar and ltf1_bull_bar and ltf2_bull_bar
+all_bear = all_ready and base_bear_bar and ltf1_bear_bar and ltf2_bear_bar
+
+// ============================================================================
+// SESSION DETECTION — IANA timezone, DST-safe
+// ============================================================================
+in_lon_full = show_london and not na(time("", "0300-1200", "America/New_York"))
+in_lon_tw   = show_london and not na(time("", "0300-0500", "America/New_York"))
+in_ny_full  = show_ny     and not na(time("", "0800-1700", "America/New_York"))
+in_ny_tw    = show_ny     and not na(time("", "0800-1100", "America/New_York"))
+in_session  = in_lon_full or in_ny_full
+in_tw       = in_lon_tw   or in_ny_tw
+sess_name   = in_lon_tw ? "LONDON  Trade Window" : in_lon_full ? "LONDON" : in_ny_tw ? "NEW YORK  Trade Window" : in_ny_full ? "NEW YORK" : "CLOSED"
+active_sess = use_tw_only ? in_tw : in_session
+
+// ============================================================================
+// GAP FILTER
+// ============================================================================
+gap_bar = (low > high[1]) or (high < low[1])
+
+// ============================================================================
+// EMA DIRECTION GATE
+// ============================================================================
+ema_allow_long  = not use_ema or close > ema_val
+ema_allow_short = not use_ema or close < ema_val
+
+// ============================================================================
+// DAILY LOSS LIMIT
+// ============================================================================
+var float day_start_equity = strategy.initial_capital
+var bool  daily_limit_hit  = false
+
+if timeframe.change("1D")
+    day_start_equity := strategy.equity
+    daily_limit_hit  := false
+
+if use_daily_limit and (day_start_equity - strategy.equity) >= day_start_equity * (daily_loss_pct / 100.0)
+    daily_limit_hit := true
+
+can_trade = not daily_limit_hit
+
+// ============================================================================
+// SHA BODY BOUNDS
+// ============================================================================
+sha_top_base = math.max(bO,  bC)   // Base body top
+sha_top_ltf1 = math.max(l1O, l1C)  // LTF1 body top
+sha_top_ltf2 = math.max(l2O, l2C)  // LTF2 body top
+sha_bot_base = math.min(bO,  bC)   // Base body bottom
+sha_bot_ltf1 = math.min(l1O, l1C)  // LTF1 body bottom
+sha_bot_ltf2 = math.min(l2O, l2C)  // LTF2 body bottom
+
+// ============================================================================
+// C2 — TRUE FULL CLUSTER CROSS
+// LTF2 (fast) was below ALL three bodies last bar, closes above ALL three this bar
+// Bear: LTF2 was above ALL three bodies last bar, closes below ALL three this bar
+// ============================================================================
+ltf2_was_below_all = l2C[1] < sha_bot_base[1] and l2C[1] < sha_bot_ltf1[1] and l2C[1] < sha_bot_ltf2[1]
+ltf2_was_above_all = l2C[1] > sha_top_base[1] and l2C[1] > sha_top_ltf1[1] and l2C[1] > sha_top_ltf2[1]
+ltf2_now_above_all = l2C  > sha_top_base  and l2C  > sha_top_ltf1  and l2C  > sha_top_ltf2
+ltf2_now_below_all = l2C  < sha_bot_base  and l2C  < sha_bot_ltf1  and l2C  < sha_bot_ltf2
+c2_bull_sig        = ltf2_was_below_all and ltf2_now_above_all
+c2_bear_sig        = ltf2_was_above_all and ltf2_now_below_all
+
+// ============================================================================
+// C3 — VALID PULLBACK DEFINITION
+// Bull: LTF2 dips below LTF1 body bottom (Base stays bullish) → recovers above LTF1 body top
+// Bear: LTF2 rises above LTF1 body top (Base stays bearish) → recovers below LTF1 body bottom
+// Trade opens on next bar open after recovery bar
+// ============================================================================
+var bool pb_bull_dipped = false
+var bool pb_bear_dipped = false
+
+bull_dip      = l2C < sha_bot_ltf1 and base_bull_bar   // LTF2 dips below LTF1 body bottom, Base still bullish
+bull_recovery = l2C > sha_top_ltf1 and base_bull_bar   // LTF2 recovers above LTF1 body top, Base still bullish
+bear_dip      = l2C > sha_top_ltf1 and base_bear_bar   // LTF2 rises above LTF1 body top, Base still bearish
+bear_recovery = l2C < sha_bot_ltf1 and base_bear_bar   // LTF2 recovers below LTF1 body bottom, Base still bearish
+
+if bull_dip
+    pb_bull_dipped := true
+if not base_bull_bar or bull_recovery
+    pb_bull_dipped := false
+
+if bear_dip
+    pb_bear_dipped := true
+if not base_bear_bar or bear_recovery
+    pb_bear_dipped := false
+
+c3_bull_sig = bull_recovery and pb_bull_dipped[1] and base_bull_bar
+c3_bear_sig = bear_recovery and pb_bear_dipped[1] and base_bear_bar
+
+// ============================================================================
+// CASCADE — all 3 SHA layers flip into same direction
+// ============================================================================
+casc_bull_sig = all_bull and not all_bull[1]
+casc_bear_sig = all_bear and not all_bear[1]
+
+// ============================================================================
+// ENTRY LOGIC
+// Toggle ON = condition is both marker AND trade trigger
+// All filters applied: EMA, session, gap, daily limit, pyramiding
+// Entry fires on THIS bar open — signal was on PREVIOUS bar
+// ============================================================================
+entry_sig_bull = (show_cascade and casc_bull_sig) or (show_c2 and c2_bull_sig) or (show_c3 and c3_bull_sig)
+entry_sig_bear = (show_cascade and casc_bear_sig) or (show_c2 and c2_bear_sig) or (show_c3 and c3_bear_sig)
+
+entry_long_raw  = entry_sig_bull[1] and ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+entry_short_raw = entry_sig_bear[1] and ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+
+entry_long  = entry_long_raw  and can_trade and (strategy.position_size == 0 or (allow_pyramid and strategy.opentrades < max_pyramid))
+entry_short = entry_short_raw and can_trade and (strategy.position_size == 0 or (allow_pyramid and strategy.opentrades < max_pyramid))
+
+// ============================================================================
+// STOP LOSS CALCULATION
+// ============================================================================
+f_sl_long() =>
+    float sl = na
+    if sl_method == "Trade Candle Low/High"
+        sl := low - sl_buffer * pip_divisor
+    else
+        lowest = low[1]
+        for i = 1 to sl_lookback
+            if low[i] < lowest
+                lowest := low[i]
+        sl := lowest - sl_buffer * pip_divisor
+    sl
+
+f_sl_short() =>
+    float sl = na
+    if sl_method == "Trade Candle Low/High"
+        sl := high + sl_buffer * pip_divisor
+    else
+        highest = high[1]
+        for i = 1 to sl_lookback
+            if high[i] > highest
+                highest := high[i]
+        sl := highest + sl_buffer * pip_divisor
+    sl
+
+// ============================================================================
+// POSITION SIZING — dynamic, risk % of current equity
+// ============================================================================
+f_qty(_entry, _sl) =>
+    risk_usd = strategy.equity * (risk_pct / 100.0)
+    sl_pips  = math.abs(_entry - _sl) / pip_divisor
+    sl_pips > 0 ? math.max(risk_usd / (sl_pips * pip_value_per_lot), 0.01) : 0.01
+
+// ============================================================================
+// TRAILING STOP FUNCTIONS
+// Trail source mapping: LTF2=fast, LTF1=mid, Base=slow
+// ============================================================================
+f_trail_long() =>
+    float t = na
+    if trail_method == "Rolling Candle Low/High"
+        src_low = trail_src == "SHA LTF2" ? math.min(l2O, l2C) : trail_src == "SHA LTF1" ? math.min(l1O, l1C) : trail_src == "SHA Base" ? math.min(bO, bC) : low
+        t := src_low[1]
+        for i = 2 to trail_bars
+            if src_low[i] < t
+                t := src_low[i]
+    else
+        t := math.min(l2O, l2C)   // SHA Body mode — trail to LTF2 body bottom
+    t
+
+f_trail_short() =>
+    float t = na
+    if trail_method == "Rolling Candle Low/High"
+        src_high = trail_src == "SHA LTF2" ? math.max(l2O, l2C) : trail_src == "SHA LTF1" ? math.max(l1O, l1C) : trail_src == "SHA Base" ? math.max(bO, bC) : high
+        t := src_high[1]
+        for i = 2 to trail_bars
+            if src_high[i] > t
+                t := src_high[i]
+    else
+        t := math.max(l2O, l2C)   // SHA Body mode — trail to LTF2 body top
+    t
+
+// ============================================================================
+// EXIT — SHA LAYER FLIP CHECKS
+// ============================================================================
+sha_layer_flipped_against_long  = exit_sha_layer == "LTF2 SHA" ? ltf2_bear_bar : exit_sha_layer == "LTF1 SHA" ? ltf1_bear_bar : exit_sha_layer == "Base SHA" ? base_bear_bar : false
+sha_layer_flipped_against_short = exit_sha_layer == "LTF2 SHA" ? ltf2_bull_bar : exit_sha_layer == "LTF1 SHA" ? ltf1_bull_bar : exit_sha_layer == "Base SHA" ? base_bull_bar : false
+sess_just_ended = in_session[1] and not in_session
+
+// ============================================================================
+// COLOR + SIZE HELPERS
+// ============================================================================
+BLUE   = color.new(#0077BB, 0)
+ORANGE = color.new(#EE7733, 0)
+GREEN  = color.new(#009900, 0)
+BLACK  = color.new(#000000, 0)
+WHITE  = color.white
+f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+atr14  = ta.atr(14)
+
+// ============================================================================
+// EXECUTE ENTRIES + ENTRY PRICE LABELS
+// ============================================================================
+var float trail_level   = na
+var float entry_sl      = na
+var float entry_px      = na
+var float last_entry_px = na
+
+if entry_long
+    entry_px      := open
+    entry_sl      := f_sl_long()
+    last_entry_px := entry_px
+    qty            = f_qty(entry_px, entry_sl)
+    strategy.entry("Long", strategy.long, qty=qty)
+    trail_level   := f_trail_long()
+    label.new(bar_index, low - atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_up, color=BLUE, textcolor=WHITE, size=size.small)
+
+if entry_short
+    entry_px      := open
+    entry_sl      := f_sl_short()
+    last_entry_px := entry_px
+    qty            = f_qty(entry_px, entry_sl)
+    strategy.entry("Short", strategy.short, qty=qty)
+    trail_level   := f_trail_short()
+    label.new(bar_index, high + atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=size.small)
+
+// ============================================================================
+// MANAGE OPEN POSITIONS — trail update + exits + exit labels
+// ============================================================================
+if strategy.position_size > 0
+    new_trail = f_trail_long()
+    if not na(new_trail) and (na(trail_level) or new_trail > trail_level)
+        trail_level := new_trail
+    trail_stop = math.min(trail_level, entry_sl)
+    trail_hit  = exit_trigger == "Touch" ? low <= trail_stop : close <= trail_stop
+    flip_exit  = (exit_on_3flip and all_bear) or sha_layer_flipped_against_long
+    sess_exit  = exit_sess_end and sess_just_ended
+    if trail_hit or flip_exit or sess_exit
+        exit_px  = trail_hit ? math.min(open, trail_stop) : close
+        exit_col = exit_px > last_entry_px ? GREEN : BLACK
+        strategy.close("Long", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
+        label.new(bar_index, high + atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_down, color=exit_col, textcolor=WHITE, size=size.small)
+        trail_level := na
+
+if strategy.position_size < 0
+    new_trail = f_trail_short()
+    if not na(new_trail) and (na(trail_level) or new_trail < trail_level)
+        trail_level := new_trail
+    trail_stop = math.max(trail_level, entry_sl)
+    trail_hit  = exit_trigger == "Touch" ? high >= trail_stop : close >= trail_stop
+    flip_exit  = (exit_on_3flip and all_bull) or sha_layer_flipped_against_short
+    sess_exit  = exit_sess_end and sess_just_ended
+    if trail_hit or flip_exit or sess_exit
+        exit_px  = trail_hit ? math.max(open, trail_stop) : close
+        exit_col = exit_px < last_entry_px ? GREEN : BLACK
+        strategy.close("Short", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
+        label.new(bar_index, low - atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_up, color=exit_col, textcolor=WHITE, size=size.small)
+        trail_level := na
+
+if strategy.position_size == 0
+    trail_level := na
+    entry_sl    := na
+
+// ============================================================================
+// TRAIL LINE
+// ============================================================================
+plot(show_trail and strategy.position_size != 0 and not na(trail_level) ? trail_level : na, title="Trail", color=trail_col, linewidth=trail_width, style=plot.style_stepline)
+
+// ============================================================================
+// DRAW SIGNAL MARKERS
+// Only show signals that pass ALL trade filters
+// Pyramiding OFF: same-direction suppressed while in trade, opposite always shows
+// ============================================================================
+was_long  = strategy.position_size[1] > 0
+was_short = strategy.position_size[1] < 0
+was_flat  = strategy.position_size[1] == 0
+
+can_show_bull = allow_pyramid or was_flat or was_short
+can_show_bear = allow_pyramid or was_flat or was_long
+
+bull_filters = ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+bear_filters = ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+
+if show_cascade and casc_bull_sig[1] and bull_filters and can_show_bull
+    label.new(bar_index, low  - atr14 * 0.5, "▲", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(cascade_size))
+if show_cascade and casc_bear_sig[1] and bear_filters and can_show_bear
+    label.new(bar_index, high + atr14 * 0.5, "▼", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(cascade_size))
+
+if show_c2 and c2_bull_sig[1] and bull_filters and can_show_bull
+    label.new(bar_index, low  - atr14 * 2.0, "●", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c2_size))
+if show_c2 and c2_bear_sig[1] and bear_filters and can_show_bear
+    label.new(bar_index, high + atr14 * 2.0, "●", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c2_size))
+
+if show_c3 and c3_bull_sig[1] and bull_filters and can_show_bull
+    label.new(bar_index, low  - atr14 * 3.5, "■", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c3_size))
+if show_c3 and c3_bear_sig[1] and bear_filters and can_show_bear
+    label.new(bar_index, high + atr14 * 3.5, "■", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c3_size))
+
+// ============================================================================
+// SESSION BOXES
+// ============================================================================
+f_sess_lbl_size(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.large
+f_pips(_move)       => str.tostring(math.round(_move / pip_divisor, 1))
+
+var box   lon_box     = na
+var box   lon_tw_box  = na
+var label lon_lbl     = na
+var float lon_open_px = na
+var float lon_hi      = na
+var float lon_lo      = na
+var float lon_tw_hi   = na
+var float lon_tw_lo   = na
+
+lon_just_opened = in_lon_full and not in_lon_full[1]
+lon_just_closed = not in_lon_full and in_lon_full[1]
+lon_tw_opened   = in_lon_tw and not in_lon_tw[1]
+lon_tw_closed   = not in_lon_tw and in_lon_tw[1]
+
+if lon_just_opened
+    lon_open_px := open
+    lon_hi      := high
+    lon_lo      := low
+    lon_box     := box.new(bar_index, high, bar_index + 1, low, border_color=lon_border, border_width=sess_border_width, bgcolor=lon_full_fill)
+    lon_lbl     := label.new(bar_index, high, "LONDON  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=lon_label_col, size=f_sess_lbl_size(sess_label_size))
+
+if in_lon_full and not lon_just_opened and not na(lon_box)
+    lon_hi  := math.max(lon_hi, high)
+    lon_lo  := math.min(lon_lo, low)
+    box.set_top(lon_box,    lon_hi)
+    box.set_bottom(lon_box, lon_lo)
+    box.set_right(lon_box,  bar_index + 1)
+    pip_move = close - lon_open_px
+    pip_txt  = pip_move >= 0 ? "+" + f_pips(pip_move) + " pips" : f_pips(pip_move) + " pips"
+    label.set_xy(lon_lbl,   bar_index, lon_hi)
+    label.set_text(lon_lbl, "LONDON  " + pip_txt)
+    label.set_textcolor(lon_lbl, pip_move >= 0 ? lon_label_col : color.new(#EE7733, 0))
+
+if lon_just_closed and not na(lon_box)
+    box.set_right(lon_box, bar_index - 1)
+
+if lon_tw_opened
+    lon_tw_hi  := high
+    lon_tw_lo  := low
+    lon_tw_box := box.new(bar_index, high, bar_index + 1, low, border_color=lon_border, border_width=sess_border_width, bgcolor=lon_tw_fill)
+
+if in_lon_tw and not lon_tw_opened and not na(lon_tw_box)
+    lon_tw_hi := math.max(lon_tw_hi, high)
+    lon_tw_lo := math.min(lon_tw_lo, low)
+    box.set_top(lon_tw_box,    lon_tw_hi)
+    box.set_bottom(lon_tw_box, lon_tw_lo)
+    box.set_right(lon_tw_box,  bar_index + 1)
+
+if lon_tw_closed and not na(lon_tw_box)
+    box.set_right(lon_tw_box, bar_index - 1)
+
+var box   ny_box     = na
+var box   ny_tw_box  = na
+var label ny_lbl     = na
+var float ny_open_px = na
+var float ny_hi      = na
+var float ny_lo      = na
+var float ny_tw_hi   = na
+var float ny_tw_lo   = na
+
+ny_just_opened = in_ny_full and not in_ny_full[1]
+ny_just_closed = not in_ny_full and in_ny_full[1]
+ny_tw_opened   = in_ny_tw and not in_ny_tw[1]
+ny_tw_closed   = not in_ny_tw and in_ny_tw[1]
+
+if ny_just_opened
+    ny_open_px := open
+    ny_hi      := high
+    ny_lo      := low
+    ny_box     := box.new(bar_index, high, bar_index + 1, low, border_color=ny_border, border_width=sess_border_width, bgcolor=ny_full_fill)
+    ny_lbl     := label.new(bar_index, high, "NEW YORK  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=ny_label_col, size=f_sess_lbl_size(sess_label_size))
+
+if in_ny_full and not ny_just_opened and not na(ny_box)
+    ny_hi  := math.max(ny_hi, high)
+    ny_lo  := math.min(ny_lo, low)
+    box.set_top(ny_box,    ny_hi)
+    box.set_bottom(ny_box, ny_lo)
+    box.set_right(ny_box,  bar_index + 1)
+    pip_move = close - ny_open_px
+    pip_txt  = pip_move >= 0 ? "+" + f_pips(pip_move) + " pips" : f_pips(pip_move) + " pips"
+    label.set_xy(ny_lbl,   bar_index, ny_hi)
+    label.set_text(ny_lbl, "NEW YORK  " + pip_txt)
+    label.set_textcolor(ny_lbl, pip_move >= 0 ? ny_label_col : color.new(#EE7733, 0))
+
+if ny_just_closed and not na(ny_box)
+    box.set_right(ny_box, bar_index - 1)
+
+if ny_tw_opened
+    ny_tw_hi  := high
+    ny_tw_lo  := low
+    ny_tw_box := box.new(bar_index, high, bar_index + 1, low, border_color=ny_border, border_width=sess_border_width, bgcolor=ny_tw_fill)
+
+if in_ny_full and not ny_tw_opened and not na(ny_tw_box)
+    ny_tw_hi := math.max(ny_tw_hi, high)
+    ny_tw_lo := math.min(ny_tw_lo, low)
+    box.set_top(ny_tw_box,    ny_tw_hi)
+    box.set_bottom(ny_tw_box, ny_tw_lo)
+    box.set_right(ny_tw_box,  bar_index + 1)
+
+if ny_tw_closed and not na(ny_tw_box)
+    box.set_right(ny_tw_box, bar_index - 1)
+
+// ============================================================================
+// DRAW SHA CANDLES
+// Draw order: LTF2 first (background) → LTF1 → Base (foreground)
+// ============================================================================
+
+// LTF2 — fast layer (background, most transparent)
+ltf2_body_col = l2C >= l2O ? color.new(ltf2_bull, ltf2_opacity) : color.new(ltf2_bear, ltf2_opacity)
+ltf2_wick_col = show_wicks   ? color.new(ltf2_wick,   ltf2_opacity) : na
+ltf2_brdr_col = show_borders ? color.new(ltf2_border, ltf2_opacity) : ltf2_body_col
+ltf2_pH       = show_wicks ? l2H : math.max(l2O, l2C)
+ltf2_pL       = show_wicks ? l2L : math.min(l2O, l2C)
+
+plotcandle(ltf2_ready and ltf2_show ? l2O     : na, ltf2_ready and ltf2_show ? ltf2_pH : na,
+           ltf2_ready and ltf2_show ? ltf2_pL : na, ltf2_ready and ltf2_show ? l2C     : na,
+           title="LTF2 SHA", color=ltf2_ready and ltf2_show ? ltf2_body_col : na,
+           wickcolor=ltf2_ready and ltf2_show ? ltf2_wick_col : na,
+           bordercolor=ltf2_ready and ltf2_show ? ltf2_brdr_col : na)
+
+// LTF1 — mid layer
+ltf1_body_col = l1C >= l1O ? color.new(ltf1_bull, ltf1_opacity) : color.new(ltf1_bear, ltf1_opacity)
+ltf1_wick_col = show_wicks   ? color.new(ltf1_wick,   ltf1_opacity) : na
+ltf1_brdr_col = show_borders ? color.new(ltf1_border, ltf1_opacity) : ltf1_body_col
+ltf1_pH       = show_wicks ? l1H : math.max(l1O, l1C)
+ltf1_pL       = show_wicks ? l1L : math.min(l1O, l1C)
+
+plotcandle(ltf1_ready and ltf1_show ? l1O     : na, ltf1_ready and ltf1_show ? ltf1_pH : na,
+           ltf1_ready and ltf1_show ? ltf1_pL : na, ltf1_ready and ltf1_show ? l1C     : na,
+           title="LTF1 SHA", color=ltf1_ready and ltf1_show ? ltf1_body_col : na,
+           wickcolor=ltf1_ready and ltf1_show ? ltf1_wick_col : na,
+           bordercolor=ltf1_ready and ltf1_show ? ltf1_brdr_col : na)
+
+// Base — dominant layer (foreground, fully solid)
+base_body_col = bC >= bO ? color.new(base_bull, base_opacity) : color.new(base_bear, base_opacity)
+base_wick_col = show_wicks   ? color.new(base_wick,   base_opacity) : na
+base_brdr_col = show_borders ? color.new(base_border, base_opacity) : base_body_col
+base_pH       = show_wicks ? bH : math.max(bO, bC)
+base_pL       = show_wicks ? bL : math.min(bO, bC)
+
+plotcandle(base_ready and base_show ? bO      : na, base_ready and base_show ? base_pH : na,
+           base_ready and base_show ? base_pL : na, base_ready and base_show ? bC      : na,
+           title="Base SHA", color=base_ready and base_show ? base_body_col : na,
+           wickcolor=base_ready and base_show ? base_wick_col : na,
+           bordercolor=base_ready and base_show ? base_brdr_col : na)
+
+// ============================================================================
+// STATE HUD
+// ============================================================================
+f_hud_pos(_s) => _s == "Top Left" ? position.top_left : _s == "Top Right" ? position.top_right : _s == "Bottom Left" ? position.bottom_left : position.bottom_right
+f_dir_str(_bull, _bear) => _bull ? "BULLISH" : _bear ? "BEARISH" : "FLAT"
+f_dir_col(_bull, _bear) => _bull ? color.new(#0077BB, 0) : _bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
+
+pos_txt   = strategy.position_size > 0 ? "LONG  " + str.tostring(strategy.position_size, "#.##") : strategy.position_size < 0 ? "SHORT  " + str.tostring(math.abs(strategy.position_size), "#.##") : "FLAT"
+pos_col   = strategy.position_size > 0 ? color.new(#0077BB, 0) : strategy.position_size < 0 ? color.new(#EE7733, 0) : color.new(#888888, 0)
+align_txt = all_bull ? "ALL BULL  ▲" : all_bear ? "ALL BEAR  ▼" : "MIXED  —"
+align_col = all_bull ? color.new(#0077BB, 0) : all_bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
+sess_col  = in_tw ? color.new(#0077BB, 0) : in_session ? color.new(#33BBEE, 0) : color.new(#888888, 0)
+eq_col    = strategy.equity >= strategy.initial_capital ? color.new(#0077BB, 0) : color.new(#EE7733, 0)
+dl_col    = daily_limit_hit ? color.new(#EE7733, 0) : color.new(#0077BB, 0)
+dl_txt    = daily_limit_hit ? "LIMIT HIT" : "OK"
+
+W  = color.white
+BK = color.new(#212121, 0)
+GR = color.new(#888888, 0)
+SZ = size.normal
+SS = size.small
+
+var table hud = table.new(f_hud_pos(hud_pos_inp), 2, 12, frame_color=color.new(#CCCCCC, 0), frame_width=1, border_color=color.new(#DDDDDD, 0), border_width=1)
+
+if show_hud and barstate.islast
+    table.cell(hud, 0, 0,  "3SHA STRATEGY",  bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 0,  "Base / LTF1 / LTF2", bgcolor=W, text_color=GR, text_size=SS)
+
+    table.cell(hud, 0, 1,  "Base (Chart)",   bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 1,  f_dir_str(base_bull_bar, base_bear_bar), bgcolor=W, text_color=f_dir_col(base_bull_bar, base_bear_bar), text_size=SZ)
+    table.cell(hud, 0, 2,  "LTF1 (" + ltf1_tf + ")", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 2,  f_dir_str(ltf1_bull_bar, ltf1_bear_bar), bgcolor=W, text_color=f_dir_col(ltf1_bull_bar, ltf1_bear_bar), text_size=SZ)
+    table.cell(hud, 0, 3,  "LTF2 (" + ltf2_tf + ")", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 3,  f_dir_str(ltf2_bull_bar, ltf2_bear_bar), bgcolor=W, text_color=f_dir_col(ltf2_bull_bar, ltf2_bear_bar), text_size=SZ)
+
+    table.cell(hud, 0, 4,  "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+    table.cell(hud, 1, 4,  "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+
+    table.cell(hud, 0, 5,  "Alignment", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 5,  align_txt,   bgcolor=W, text_color=align_col, text_size=SZ)
+    table.cell(hud, 0, 6,  "Session",   bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 6,  sess_name,   bgcolor=W, text_color=sess_col, text_size=SZ)
+
+    table.cell(hud, 0, 7,  "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+    table.cell(hud, 1, 7,  "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+
+    table.cell(hud, 0, 8,  "Position",  bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 8,  pos_txt,     bgcolor=W, text_color=pos_col, text_size=SZ)
+    table.cell(hud, 0, 9,  "Equity",    bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 9,  "$" + str.tostring(math.round(strategy.equity, 2), "#,###.00"), bgcolor=W, text_color=eq_col, text_size=SZ)
+    table.cell(hud, 0, 10, "Daily P&L", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 10, "$" + str.tostring(math.round(strategy.equity - day_start_equity, 2), "#,###.00"), bgcolor=W, text_color=eq_col, text_size=SZ)
+    table.cell(hud, 0, 11, "Day Limit", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 11, dl_txt,      bgcolor=W, text_color=dl_col, text_size=SZ)
