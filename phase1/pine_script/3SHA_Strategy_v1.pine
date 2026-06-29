@@ -333,14 +333,14 @@ casc_bear_sig = all_bear and not all_bear[1]
 // C1 signal
 
 // ============================================================================
-// INPUTS — ENTRY TRIGGER SELECTION
+// ENTRY TRIGGER — driven by show toggles
+// Whichever condition toggle is ON becomes a trade trigger
+// Multiple can be ON simultaneously
 // ============================================================================
-grp_trigger   = "Entry Trigger"
-entry_trigger_src = input.string("None", "Entry Trigger Condition", options=["None","Cascade","C2","C3"], group=grp_trigger)
 
 // Entry fires on THIS bar open when PREV bar had the signal
-entry_sig_bull = entry_trigger_src == "Cascade" ? casc_bull_sig : entry_trigger_src == "C2" ? c2_bull_sig : entry_trigger_src == "C3" ? c3_bull_sig : false
-entry_sig_bear = entry_trigger_src == "Cascade" ? casc_bear_sig : entry_trigger_src == "C2" ? c2_bear_sig : entry_trigger_src == "C3" ? c3_bear_sig : false
+entry_sig_bull = (show_cascade and casc_bull_sig) or (show_c2 and c2_bull_sig) or (show_c3 and c3_bull_sig)
+entry_sig_bear = (show_cascade and casc_bear_sig) or (show_c2 and c2_bear_sig) or (show_c3 and c3_bear_sig)
 
 entry_long_raw  = entry_sig_bull[1] and ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
 entry_short_raw = entry_sig_bear[1] and ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
@@ -510,40 +510,36 @@ plot(show_trail and strategy.position_size != 0 and not na(trail_level) ? trail_
 
 // ============================================================================
 // DRAW SIGNAL MARKERS
-// Show toggle is the ONLY control for visibility
-// Trigger selection controls which condition opens trades — NOT marker visibility
-// Pyramiding OFF: show only first marker per direction (when was flat or opposite)
-// Pyramiding ON:  show all markers of toggled-on conditions
+// Toggle ON = both marker visible AND trade trigger
+// Pyramiding OFF: only first marker per direction shown (must be flat or opposite)
+// Pyramiding ON:  all markers of toggled-on conditions shown
+// Opposite direction always shown regardless of pyramiding
 // ============================================================================
 was_long  = strategy.position_size[1] > 0
 was_short = strategy.position_size[1] < 0
 was_flat  = strategy.position_size[1] == 0
 
-f_show_bull(_sig) => _sig and (allow_pyramid or was_flat or was_short)
-f_show_bear(_sig) => _sig and (allow_pyramid or was_flat or was_long)
+// Bull marker shows if: pyramiding ON, OR was flat, OR was short (opposite = exit warning)
+can_show_bull = allow_pyramid or was_flat or was_short
+// Bear marker shows if: pyramiding ON, OR was flat, OR was long (opposite = exit warning)
+can_show_bear = allow_pyramid or was_flat or was_long
 
-// Cascade — only if show toggle is ON
-casc_bull_vis = show_cascade and casc_bull_sig[1] and (cascade_sess_only ? in_session[1] : true)
-casc_bear_vis = show_cascade and casc_bear_sig[1] and (cascade_sess_only ? in_session[1] : true)
-if f_show_bull(casc_bull_vis)
+// Cascade
+if show_cascade and casc_bull_sig[1] and (cascade_sess_only ? in_session[1] : true) and can_show_bull
     label.new(bar_index, low  - atr14 * 0.5, "▲", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(cascade_size))
-if f_show_bear(casc_bear_vis)
+if show_cascade and casc_bear_sig[1] and (cascade_sess_only ? in_session[1] : true) and can_show_bear
     label.new(bar_index, high + atr14 * 0.5, "▼", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(cascade_size))
 
-// C2 — only if show toggle is ON
-c2_bull_vis = show_c2 and c2_bull_sig[1] and (c2_sess_only ? in_session[1] : true)
-c2_bear_vis = show_c2 and c2_bear_sig[1] and (c2_sess_only ? in_session[1] : true)
-if f_show_bull(c2_bull_vis)
+// C2
+if show_c2 and c2_bull_sig[1] and (c2_sess_only ? in_session[1] : true) and can_show_bull
     label.new(bar_index, low  - atr14 * 2.0, "●", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c2_size))
-if f_show_bear(c2_bear_vis)
+if show_c2 and c2_bear_sig[1] and (c2_sess_only ? in_session[1] : true) and can_show_bear
     label.new(bar_index, high + atr14 * 2.0, "●", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c2_size))
 
-// C3 — only if show toggle is ON
-c3_bull_vis = show_c3 and c3_bull_sig[1] and (c3_sess_only ? in_session[1] : true)
-c3_bear_vis = show_c3 and c3_bear_sig[1] and (c3_sess_only ? in_session[1] : true)
-if f_show_bull(c3_bull_vis)
+// C3
+if show_c3 and c3_bull_sig[1] and (c3_sess_only ? in_session[1] : true) and can_show_bull
     label.new(bar_index, low  - atr14 * 3.5, "■", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c3_size))
-if f_show_bear(c3_bear_vis)
+if show_c3 and c3_bear_sig[1] and (c3_sess_only ? in_session[1] : true) and can_show_bear
     label.new(bar_index, high + atr14 * 3.5, "■", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c3_size))
 
 // ============================================================================
