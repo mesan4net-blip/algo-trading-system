@@ -429,6 +429,8 @@ ORANGE = color.new(#EE7733, 0)
 GREEN  = color.new(#009900, 0)
 BLACK  = color.new(#000000, 0)
 WHITE  = color.white
+f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+atr14  = ta.atr(14)
 
 if entry_long
     entry_px    := open
@@ -500,13 +502,6 @@ plot(show_trail and strategy.position_size != 0 and not na(trail_level) ? trail_
 
 // ============================================================================
 // DRAW SIGNAL MARKERS
-// Pyramiding OFF: only show first marker that opens a trade
-//                 suppress subsequent same-direction markers while trade open
-//                 always show opposite-direction markers (exit warning)
-// Pyramiding ON:  show all markers always
-// ============================================================================
-f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
-atr14 = ta.atr(14)
 
 is_long  = strategy.position_size > 0
 is_short = strategy.position_size < 0
