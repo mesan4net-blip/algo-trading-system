@@ -142,15 +142,6 @@ cascade_sess_only = input.bool(true,  "Cascade — In Session Only",            
 cascade_bull_col  = input.color(color.new(#0077BB, 0), "Cascade Bull Color",        group=grp_entry)
 cascade_bear_col  = input.color(color.new(#EE7733, 0), "Cascade Bear Color",        group=grp_entry)
 cascade_size      = input.string("Small", "Cascade Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
-show_c1           = input.bool(true,  "Show C1 Marker (adjacent SHA agreement)",    group=grp_entry)
-c1_base_htf1_bull = input.bool(true,  "C1 Bull — Base + HTF1",                     group=grp_entry)
-c1_htf1_htf2_bull = input.bool(true,  "C1 Bull — HTF1 + HTF2",                     group=grp_entry)
-c1_base_htf1_bear = input.bool(true,  "C1 Bear — Base + HTF1",                     group=grp_entry)
-c1_htf1_htf2_bear = input.bool(true,  "C1 Bear — HTF1 + HTF2",                     group=grp_entry)
-c1_sess_only      = input.bool(false, "C1 — In Session Only",                       group=grp_entry)
-c1_bull_col       = input.color(color.new(#0077BB, 0), "C1 Bull Color",             group=grp_entry)
-c1_bear_col       = input.color(color.new(#EE7733, 0), "C1 Bear Color",             group=grp_entry)
-c1_size           = input.string("Small", "C1 Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
 show_c2           = input.bool(true,  "Show C2 Marker (price cross all 3 SHA)",     group=grp_entry)
 c2_sess_only      = input.bool(false, "C2 — In Session Only",                       group=grp_entry)
 c2_bull_col       = input.color(color.new(#0077BB, 0), "C2 Bull Color",             group=grp_entry)
@@ -340,12 +331,6 @@ casc_bull_sig = all_bull and not all_bull[1]
 casc_bear_sig = all_bear and not all_bear[1]
 
 // C1 signal
-bh1_bull_sig  = base_bull_bar and htf1_bull_bar and not (base_bull_bar[1] and htf1_bull_bar[1])
-h1h2_bull_sig = htf1_bull_bar and htf2_bull_bar and not (htf1_bull_bar[1] and htf2_bull_bar[1])
-bh1_bear_sig  = base_bear_bar and htf1_bear_bar and not (base_bear_bar[1] and htf1_bear_bar[1])
-h1h2_bear_sig = htf1_bear_bar and htf2_bear_bar and not (htf1_bear_bar[1] and htf2_bear_bar[1])
-c1_bull_sig   = (c1_base_htf1_bull and bh1_bull_sig) or (c1_htf1_htf2_bull and h1h2_bull_sig)
-c1_bear_sig   = (c1_base_htf1_bear and bh1_bear_sig) or (c1_htf1_htf2_bear and h1h2_bear_sig)
 
 // Entry fires on THIS bar open when PREV bar had the signal
 // Primary entry trigger: C2
@@ -505,10 +490,6 @@ if show_cascade and casc_bear_sig[1] and (cascade_sess_only ? in_session[1] : tr
     label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_sz(cascade_size))
 
 // C1 markers
-if show_c1 and c1_bull_sig[1] and (c1_sess_only ? in_session[1] : true)
-    label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=c1_bull_col, textcolor=color.white, size=f_sz(c1_size))
-if show_c1 and c1_bear_sig[1] and (c1_sess_only ? in_session[1] : true)
-    label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=c1_bear_col, textcolor=color.white, size=f_sz(c1_size))
 
 // C2 markers
 if show_c2 and c2_bull_sig[1] and (c2_sess_only ? in_session[1] : true)
