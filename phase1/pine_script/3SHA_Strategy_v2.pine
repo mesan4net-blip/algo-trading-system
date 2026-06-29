@@ -10,7 +10,7 @@
 // Exit:    Trail hit, SHA layer flip, session end
 // Sizing:  Dynamic — 1% equity risk per trade, compounding
 // ============================================================================
-strategy("3SHA Strategy v1", shorttitle="3SHA-v1", overlay=true,
+strategy("3SHA Strategy v2 — Inverted Cone", shorttitle="3SHA-v2", overlay=true,
          initial_capital=100000, currency=currency.USD,
          default_qty_type=strategy.cash, default_qty_value=1000,
          calc_on_every_tick=false, process_orders_on_close=false,
