@@ -1,6 +1,7 @@
 //@version=6
 // ============================================================================
 // 3SHA VISUAL v2 — Layers + Alignment + Cascade + Conflict + State HUD
+// Color blind safe palette — Blue (bull) vs Orange (bear) throughout
 // Visual confirmation only — no strategy logic
 // ============================================================================
 indicator("3SHA Visual v2 — Signal Conditions", shorttitle="3SHA-Visual-v2", overlay=true, max_bars_back=5000)
@@ -38,10 +39,10 @@ grp_base     = "Base SHA  [Chart TF — auto]"
 base_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_base)
 base_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_base)
 base_show    = input.bool(true, "Show Base SHA Candles",      group=grp_base)
-base_bull    = input.color(color.new(#00897B, 0), "Bull Color",   group=grp_base)
-base_bear    = input.color(color.new(#F44336, 0), "Bear Color",   group=grp_base)
-base_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_base)
-base_wick    = input.color(color.new(#607D8B, 0), "Wick Color",   group=grp_base)
+base_bull    = input.color(color.new(#0077BB, 0),  "Bull Color",   group=grp_base)
+base_bear    = input.color(color.new(#EE7733, 0),  "Bear Color",   group=grp_base)
+base_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_base)
+base_wick    = input.color(color.new(#555555, 0),  "Wick Color",   group=grp_base)
 base_opacity = input.int(0,  "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_base)
 
 // ============================================================================
@@ -52,10 +53,10 @@ htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
 htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
 htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
 htf1_show    = input.bool(true, "Show HTF1 SHA Candles",      group=grp_htf1)
-htf1_bull    = input.color(color.new(#76FF03, 0), "Bull Color",   group=grp_htf1)
-htf1_bear    = input.color(color.new(#FF3D00, 0), "Bear Color",   group=grp_htf1)
-htf1_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf1)
-htf1_wick    = input.color(color.new(#607D8B, 0), "Wick Color",   group=grp_htf1)
+htf1_bull    = input.color(color.new(#33BBEE, 0),  "Bull Color",   group=grp_htf1)
+htf1_bear    = input.color(color.new(#CC3311, 0),  "Bear Color",   group=grp_htf1)
+htf1_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_htf1)
+htf1_wick    = input.color(color.new(#555555, 0),  "Wick Color",   group=grp_htf1)
 htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf1)
 
 // ============================================================================
@@ -66,37 +67,37 @@ htf2_tf      = input.timeframe("240", "HTF2 Timeframe",       group=grp_htf2)
 htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf2)
 htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf2)
 htf2_show    = input.bool(true, "Show HTF2 SHA Candles",      group=grp_htf2)
-htf2_bull    = input.color(color.new(#1565C0, 0), "Bull Color",   group=grp_htf2)
-htf2_bear    = input.color(color.new(#B71C1C, 0), "Bear Color",   group=grp_htf2)
-htf2_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf2)
-htf2_wick    = input.color(color.new(#607D8B, 0), "Wick Color",   group=grp_htf2)
+htf2_bull    = input.color(color.new(#004488, 0),  "Bull Color",   group=grp_htf2)
+htf2_bear    = input.color(color.new(#AA3377, 0),  "Bear Color",   group=grp_htf2)
+htf2_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_htf2)
+htf2_wick    = input.color(color.new(#555555, 0),  "Wick Color",   group=grp_htf2)
 htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf2)
 
 // ============================================================================
 // INPUTS — ALIGNMENT HIGHLIGHT
 // ============================================================================
-grp_align        = "Alignment Highlight"
-show_align       = input.bool(true,  "Show Alignment Background",  group=grp_align)
-align_bull_col   = input.color(color.new(#00E676, 88), "All Bullish BG Color", group=grp_align)
-align_bear_col   = input.color(color.new(#FF1744, 88), "All Bearish BG Color", group=grp_align)
-show_conflict    = input.bool(true,  "Show Conflict Background",   group=grp_align)
-conflict_col     = input.color(color.new(#90A4AE, 92), "Conflict BG Color",    group=grp_align)
+grp_align      = "Alignment Highlight"
+show_align     = input.bool(true, "Show Alignment Background",  group=grp_align)
+align_bull_col = input.color(color.new(#0077BB, 92), "All Bullish BG Color", group=grp_align)
+align_bear_col = input.color(color.new(#EE7733, 92), "All Bearish BG Color", group=grp_align)
+show_conflict  = input.bool(true, "Show Conflict Background",   group=grp_align)
+conflict_col   = input.color(color.new(#BBBBBB, 92), "Conflict BG Color",    group=grp_align)
 
 // ============================================================================
 // INPUTS — CASCADE MARKER
 // ============================================================================
 grp_cascade      = "Cascade Marker"
-show_cascade     = input.bool(true,  "Show Cascade Trigger Marker", group=grp_cascade)
-cascade_bull_col = input.color(color.new(#00E676,  0), "Bull Cascade Color",   group=grp_cascade)
-cascade_bear_col = input.color(color.new(#FF1744,  0), "Bear Cascade Color",   group=grp_cascade)
+show_cascade     = input.bool(true, "Show Cascade Trigger Marker", group=grp_cascade)
+cascade_bull_col = input.color(color.new(#0077BB, 0), "Bull Cascade Color",  group=grp_cascade)
+cascade_bear_col = input.color(color.new(#EE7733, 0), "Bear Cascade Color",  group=grp_cascade)
 cascade_size     = input.string("Small", "Cascade Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_cascade)
 
 // ============================================================================
 // INPUTS — STATE HUD
 // ============================================================================
-grp_hud          = "State HUD"
-show_hud         = input.bool(true, "Show State HUD",  group=grp_hud)
-hud_pos_inp      = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
+grp_hud      = "State HUD"
+show_hud     = input.bool(true, "Show State HUD", group=grp_hud)
+hud_pos_inp  = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
 
 // ============================================================================
 // COMPUTE SHA LAYERS
@@ -105,14 +106,14 @@ hud_pos_inp      = input.string("Top Right", "HUD Position", options=["Top Left"
 // Base — chart TF directly
 [bO, bH, bL, bC] = f_sha(base_len1, base_len2, open, high, low, close)
 
-// HTF1 — via request.security on completed candles
+// HTF1
 htf1_o = request.security(syminfo.tickerid, htf1_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
 htf1_h = request.security(syminfo.tickerid, htf1_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
 htf1_l = request.security(syminfo.tickerid, htf1_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
 htf1_c = request.security(syminfo.tickerid, htf1_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
 [h1O, h1H, h1L, h1C] = f_sha(htf1_len1, htf1_len2, htf1_o, htf1_h, htf1_l, htf1_c)
 
-// HTF2 — via request.security on completed candles
+// HTF2
 htf2_o = request.security(syminfo.tickerid, htf2_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
 htf2_h = request.security(syminfo.tickerid, htf2_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
 htf2_l = request.security(syminfo.tickerid, htf2_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
@@ -130,7 +131,6 @@ all_ready  = base_ready and htf1_ready and htf2_ready
 base_bull_bar = bC  >= bO
 htf1_bull_bar = h1C >= h1O
 htf2_bull_bar = h2C >= h2O
-
 base_bear_bar = bC  < bO
 htf1_bear_bar = h1C < h1O
 htf2_bear_bar = h2C < h2O
@@ -138,15 +138,13 @@ htf2_bear_bar = h2C < h2O
 // ============================================================================
 // ALIGNMENT STATES
 // ============================================================================
-all_bull     = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
-all_bear     = all_ready and base_bear_bar and htf1_bear_bar and htf2_bear_bar
-in_conflict  = all_ready and not all_bull and not all_bear
+all_bull    = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
+all_bear    = all_ready and base_bear_bar and htf1_bear_bar and htf2_bear_bar
+in_conflict = all_ready and not all_bull and not all_bear
 
 // ============================================================================
 // CASCADE DETECTION
-// Base is the LAST layer to flip — completing the three-way agreement
-// Bull cascade: HTF2 and HTF1 already bull, Base just flipped bull this bar
-// Bear cascade: HTF2 and HTF1 already bear, Base just flipped bear this bar
+// Base flips LAST — completing the three-way agreement
 // ============================================================================
 base_just_bull = base_bull_bar and not base_bull_bar[1]
 base_just_bear = base_bear_bar and not base_bear_bar[1]
@@ -166,15 +164,17 @@ bgcolor(bg_col, title="Alignment Background")
 f_cascade_size(_s) =>
     _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
 
+atr14 = ta.atr(14)
+
 if show_cascade and cascade_bull
-    label.new(bar_index, low - ta.atr(14) * 0.6, "▲", style=label.style_label_up, color=cascade_bull_col, textcolor=color.white, size=f_cascade_size(cascade_size))
+    label.new(bar_index, low - atr14 * 0.6, "▲", style=label.style_label_up, color=cascade_bull_col, textcolor=color.white, size=f_cascade_size(cascade_size))
 
 if show_cascade and cascade_bear
-    label.new(bar_index, high + ta.atr(14) * 0.6, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_cascade_size(cascade_size))
+    label.new(bar_index, high + atr14 * 0.6, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_cascade_size(cascade_size))
 
 // ============================================================================
 // DRAW SHA CANDLES
-// Order: HTF2 first (background), HTF1 second, Base last (foreground)
+// Order: HTF2 (background) → HTF1 (middle) → Base (foreground)
 // ============================================================================
 
 // HTF2
@@ -184,14 +184,14 @@ htf2_brdr_col = show_borders ? color.new(htf2_border, htf2_opacity) : htf2_body_
 htf2_pH       = show_wicks ? h2H : math.max(h2O, h2C)
 htf2_pL       = show_wicks ? h2L : math.min(h2O, h2C)
 
-plotcandle(htf2_ready and htf2_show ? h2O     : na,
-           htf2_ready and htf2_show ? htf2_pH : na,
-           htf2_ready and htf2_show ? htf2_pL : na,
-           htf2_ready and htf2_show ? h2C     : na,
+plotcandle(htf2_ready and htf2_show ? h2O      : na,
+           htf2_ready and htf2_show ? htf2_pH  : na,
+           htf2_ready and htf2_show ? htf2_pL  : na,
+           htf2_ready and htf2_show ? h2C      : na,
            title="HTF2 SHA",
-           color=htf2_ready and htf2_show ? htf2_body_col : na,
-           wickcolor=htf2_ready and htf2_show ? htf2_wick_col : na,
-           bordercolor=htf2_ready and htf2_show ? htf2_brdr_col : na)
+           color=htf2_ready and htf2_show       ? htf2_body_col : na,
+           wickcolor=htf2_ready and htf2_show    ? htf2_wick_col : na,
+           bordercolor=htf2_ready and htf2_show  ? htf2_brdr_col : na)
 
 // HTF1
 htf1_body_col = h1C >= h1O ? color.new(htf1_bull, htf1_opacity) : color.new(htf1_bear, htf1_opacity)
@@ -200,14 +200,14 @@ htf1_brdr_col = show_borders ? color.new(htf1_border, htf1_opacity) : htf1_body_
 htf1_pH       = show_wicks ? h1H : math.max(h1O, h1C)
 htf1_pL       = show_wicks ? h1L : math.min(h1O, h1C)
 
-plotcandle(htf1_ready and htf1_show ? h1O     : na,
-           htf1_ready and htf1_show ? htf1_pH : na,
-           htf1_ready and htf1_show ? htf1_pL : na,
-           htf1_ready and htf1_show ? h1C     : na,
+plotcandle(htf1_ready and htf1_show ? h1O      : na,
+           htf1_ready and htf1_show ? htf1_pH  : na,
+           htf1_ready and htf1_show ? htf1_pL  : na,
+           htf1_ready and htf1_show ? h1C      : na,
            title="HTF1 SHA",
-           color=htf1_ready and htf1_show ? htf1_body_col : na,
-           wickcolor=htf1_ready and htf1_show ? htf1_wick_col : na,
-           bordercolor=htf1_ready and htf1_show ? htf1_brdr_col : na)
+           color=htf1_ready and htf1_show       ? htf1_body_col : na,
+           wickcolor=htf1_ready and htf1_show    ? htf1_wick_col : na,
+           bordercolor=htf1_ready and htf1_show  ? htf1_brdr_col : na)
 
 // Base
 base_body_col = bC >= bO ? color.new(base_bull, base_opacity) : color.new(base_bear, base_opacity)
@@ -216,17 +216,17 @@ base_brdr_col = show_borders ? color.new(base_border, base_opacity) : base_body_
 base_pH       = show_wicks ? bH : math.max(bO, bC)
 base_pL       = show_wicks ? bL : math.min(bO, bC)
 
-plotcandle(base_ready and base_show ? bO     : na,
-           base_ready and base_show ? base_pH : na,
-           base_ready and base_show ? base_pL : na,
-           base_ready and base_show ? bC     : na,
+plotcandle(base_ready and base_show ? bO       : na,
+           base_ready and base_show ? base_pH  : na,
+           base_ready and base_show ? base_pL  : na,
+           base_ready and base_show ? bC       : na,
            title="Base SHA",
-           color=base_ready and base_show ? base_body_col : na,
-           wickcolor=base_ready and base_show ? base_wick_col : na,
-           bordercolor=base_ready and base_show ? base_brdr_col : na)
+           color=base_ready and base_show       ? base_body_col : na,
+           wickcolor=base_ready and base_show    ? base_wick_col : na,
+           bordercolor=base_ready and base_show  ? base_brdr_col : na)
 
 // ============================================================================
-// STATE HUD
+// STATE HUD — white background, colored text only
 // ============================================================================
 f_hud_pos(_s) =>
     _s == "Top Left" ? position.top_left : _s == "Top Right" ? position.top_right : _s == "Bottom Left" ? position.bottom_left : position.bottom_right
@@ -235,40 +235,40 @@ f_dir_str(_bull, _bear) =>
     _bull ? "BULLISH" : _bear ? "BEARISH" : "FLAT"
 
 f_dir_col(_bull, _bear) =>
-    _bull ? color.new(#00E676, 0) : _bear ? color.new(#FF1744, 0) : color.new(#90A4AE, 0)
+    _bull ? color.new(#0077BB, 0) : _bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
 
 align_txt = all_bull ? "ALL BULL  ▲" : all_bear ? "ALL BEAR  ▼" : in_conflict ? "MIXED  —" : "WAITING"
-align_col = all_bull ? color.new(#00E676, 0) : all_bear ? color.new(#FF1744, 0) : color.new(#90A4AE, 0)
+align_col = all_bull ? color.new(#0077BB, 0) : all_bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
 
 W  = color.white
 BK = color.new(#212121, 0)
-GR = color.new(#90A4AE, 0)
+GR = color.new(#888888, 0)
 SZ = size.normal
 SS = size.small
 
-var table hud = table.new(f_hud_pos(hud_pos_inp), 2, 6, frame_color=color.new(#212121, 60), frame_width=1, border_color=color.new(#424242, 60), border_width=1)
+var table hud = table.new(f_hud_pos(hud_pos_inp), 2, 6, frame_color=color.new(#CCCCCC, 0), frame_width=1, border_color=color.new(#DDDDDD, 0), border_width=1)
 
 if show_hud and barstate.islast
-    // Title
-    table.cell(hud, 0, 0, "3SHA STATE",   bgcolor=W, text_color=BK, text_size=SZ)
+    // Row 0 — Title
+    table.cell(hud, 0, 0, "3SHA STATE",                    bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 0, htf2_tf + " / " + htf1_tf + " / Base", bgcolor=W, text_color=GR, text_size=SS)
 
-    // HTF2
+    // Row 1 — HTF2
     table.cell(hud, 0, 1, "HTF2 (" + htf2_tf + ")", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 1, f_dir_str(htf2_bull_bar, htf2_bear_bar), bgcolor=W, text_color=f_dir_col(htf2_bull_bar, htf2_bear_bar), text_size=SZ)
 
-    // HTF1
+    // Row 2 — HTF1
     table.cell(hud, 0, 2, "HTF1 (" + htf1_tf + ")", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 2, f_dir_str(htf1_bull_bar, htf1_bear_bar), bgcolor=W, text_color=f_dir_col(htf1_bull_bar, htf1_bear_bar), text_size=SZ)
 
-    // Base
+    // Row 3 — Base
     table.cell(hud, 0, 3, "Base (Chart)", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 3, f_dir_str(base_bull_bar, base_bear_bar), bgcolor=W, text_color=f_dir_col(base_bull_bar, base_bear_bar), text_size=SZ)
 
-    // Divider
-    table.cell(hud, 0, 4, "", bgcolor=color.new(#E0E0E0, 0), text_color=BK, text_size=SS)
-    table.cell(hud, 1, 4, "", bgcolor=color.new(#E0E0E0, 0), text_color=BK, text_size=SS)
+    // Row 4 — Divider
+    table.cell(hud, 0, 4, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+    table.cell(hud, 1, 4, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
 
-    // Alignment
-    table.cell(hud, 0, 5, "Alignment", bgcolor=W, text_color=BK, text_size=SZ)
+    // Row 5 — Alignment
+    table.cell(hud, 0, 5, "Alignment", bgcolor=W, text_color=BK,       text_size=SZ)
     table.cell(hud, 1, 5, align_txt,   bgcolor=W, text_color=align_col, text_size=SZ)
