@@ -1,9 +1,12 @@
 //@version=6
 // ============================================================================
 // 3SHA VISUAL v3 — Clean visual hierarchy
-// Session boxes with fill, label, directional pip movement
+// Full sessions with trade window highlights
 // SHA candles + cascade markers + HUD
 // Color blind safe: Blue (bull) vs Orange (bear)
+// Broker: UTC+3 | Your time: PDT (UTC-7)
+// London: 11:00-20:00 broker | Trade Window: 11:00-13:00
+// New York: 16:00-01:00 broker | Trade Window: 16:00-19:00
 // ============================================================================
 indicator("3SHA Visual v3 — Clean Chart", shorttitle="3SHA-Visual-v3", overlay=true, max_bars_back=5000, max_boxes_count=500, max_labels_count=500)
 
@@ -30,14 +33,14 @@ f_sha(_len1, _len2, _o, _h, _l, _c) =>
 // INPUTS — BROKER TIME REFERENCE
 // ============================================================================
 grp_time        = "Broker Time Reference"
-your_local_hour = input.int(18,  "Your Current Local Hour (24h)",                          minval=0,   maxval=23,  group=grp_time)
-your_local_day  = input.int(28,  "Your Current Local Day",                                  minval=1,   maxval=31,  group=grp_time)
-broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                               minval=0,   maxval=23,  group=grp_time)
-broker_day_now  = input.int(29,  "Broker Current Day",                                      minval=1,   maxval=31,  group=grp_time)
-your_utc_offset = input.int(-7,  "Your UTC Offset (PDT=-7  PST=-8  EST=-5  EDT=-4)",        minval=-12, maxval=14,  group=grp_time)
+your_local_hour = input.int(18,  "Your Current Local Hour (24h)",                    minval=0,   maxval=23, group=grp_time)
+your_local_day  = input.int(28,  "Your Current Local Day",                            minval=1,   maxval=31, group=grp_time)
+broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                         minval=0,   maxval=23, group=grp_time)
+broker_day_now  = input.int(29,  "Broker Current Day",                                minval=1,   maxval=31, group=grp_time)
+your_utc_offset = input.int(-7,  "Your UTC Offset (PDT=-7 PST=-8 EST=-5 EDT=-4)",    minval=-12, maxval=14, group=grp_time)
 
 // ============================================================================
-// BROKER OFFSET + SESSION HOURS CALCULATION
+// BROKER OFFSET CALCULATION
 // ============================================================================
 utc_hour_raw  = your_local_hour - your_utc_offset
 utc_hour_adj  = utc_hour_raw >= 24 ? utc_hour_raw - 24 : utc_hour_raw < 0 ? utc_hour_raw + 24 : utc_hour_raw
@@ -46,33 +49,49 @@ broker_offset = day_crossed ? broker_hour_now + (24 - utc_hour_adj) : broker_hou
 
 f_norm(_h) => _h >= 24 ? _h - 24 : _h < 0 ? _h + 24 : _h
 
-lon_open_h  = f_norm(7  + broker_offset)
-lon_close_h = f_norm(10 + broker_offset)
-ny_open_h   = f_norm(13 + broker_offset)
-ny_close_h  = f_norm(16 + broker_offset)
+// Full session hours in broker time
+// London full:   03:00-12:00 EST = 08:00-17:00 UTC = UTC+3 → 11:00-20:00
+// NY full:       08:00-17:00 EST = 13:00-22:00 UTC = UTC+3 → 16:00-01:00
+// London TW:     03:00-05:00 EST = UTC+3 → 11:00-13:00
+// NY TW:         08:00-11:00 EST = UTC+3 → 16:00-19:00
+
+lon_full_open_h  = f_norm(8  + broker_offset)
+lon_full_close_h = f_norm(17 + broker_offset)
+lon_tw_open_h    = f_norm(8  + broker_offset)
+lon_tw_close_h   = f_norm(10 + broker_offset)
+ny_full_open_h   = f_norm(13 + broker_offset)
+ny_full_close_h  = f_norm(22 + broker_offset)
+ny_tw_open_h     = f_norm(13 + broker_offset)
+ny_tw_close_h    = f_norm(16 + broker_offset)
 
 // ============================================================================
-// INPUTS — ALL SESSION PARAMETERS IN ONE BLOCK
+// INPUTS — TRADE SESSIONS (all in one block)
 // ============================================================================
-grp_sess           = "Trade Sessions"
-show_london        = input.bool(true,                        "Show London Session",              group=grp_sess)
-london_fill_col    = input.color(color.new(#0077BB, 85),     "London Fill Color",                group=grp_sess)
-london_border_col  = input.color(color.new(#0077BB, 30),     "London Border Color",              group=grp_sess)
-london_label_col   = input.color(color.new(#0077BB, 0),      "London Label Color",               group=grp_sess)
-show_ny            = input.bool(true,                        "Show New York Session",            group=grp_sess)
-ny_fill_col        = input.color(color.new(#33BBEE, 85),     "New York Fill Color",              group=grp_sess)
-ny_border_col      = input.color(color.new(#33BBEE, 30),     "New York Border Color",            group=grp_sess)
-ny_label_col       = input.color(color.new(#33BBEE, 0),      "New York Label Color",             group=grp_sess)
-sess_border_width  = input.int(1,                            "Session Box Border Width",         group=grp_sess, minval=1, maxval=4)
-sess_label_size    = input.string("Small",                   "Session Label Size",               group=grp_sess, options=["Tiny","Small","Normal","Large"])
-pip_divisor        = input.float(0.0001,                     "Pip Size (0.0001=Forex 0.01=JPY/Gold)", group=grp_sess, minval=0.00001, step=0.00001)
+grp_sess          = "Trade Sessions"
+pip_divisor       = input.float(0.0001, "Pip Size (Forex=0.0001  JPY/Gold=0.01)", minval=0.00001, step=0.00001, group=grp_sess)
+sess_border_width = input.int(1,        "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
+sess_label_size   = input.string("Small", "Session Label Size", options=["Tiny","Small","Normal","Large"],       group=grp_sess)
+
+// London
+show_london       = input.bool(true,                       "Show London Session",               group=grp_sess)
+lon_full_col      = input.color(color.new(#0077BB, 90),   "London — Full Session Fill",        group=grp_sess)
+lon_tw_col        = input.color(color.new(#0077BB, 70),   "London — Trade Window Fill",        group=grp_sess)
+lon_border_col    = input.color(color.new(#0077BB, 20),   "London — Border Color",             group=grp_sess)
+lon_label_col     = input.color(color.new(#0077BB, 0),    "London — Label Color",              group=grp_sess)
+
+// New York
+show_ny           = input.bool(true,                       "Show New York Session",             group=grp_sess)
+ny_full_col       = input.color(color.new(#33BBEE, 90),   "New York — Full Session Fill",      group=grp_sess)
+ny_tw_col         = input.color(color.new(#33BBEE, 70),   "New York — Trade Window Fill",      group=grp_sess)
+ny_border_col     = input.color(color.new(#33BBEE, 20),   "New York — Border Color",           group=grp_sess)
+ny_label_col      = input.color(color.new(#33BBEE, 0),    "New York — Label Color",            group=grp_sess)
 
 // ============================================================================
 // INPUTS — GLOBAL DISPLAY
 // ============================================================================
 grp_global   = "Global Display"
-show_wicks   = input.bool(true,  "Show Wicks (all layers)",   group=grp_global)
-show_borders = input.bool(true,  "Show Borders (all layers)", group=grp_global)
+show_wicks   = input.bool(true, "Show Wicks (all layers)",   group=grp_global)
+show_borders = input.bool(true, "Show Borders (all layers)", group=grp_global)
 
 // ============================================================================
 // INPUTS — BASE SHA
@@ -81,10 +100,10 @@ grp_base     = "Base SHA  [Chart TF — auto]"
 base_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_base)
 base_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_base)
 base_show    = input.bool(true, "Show Base SHA Candles",      group=grp_base)
-base_bull    = input.color(color.new(#0077BB, 0),  "Bull Color",   group=grp_base)
-base_bear    = input.color(color.new(#EE7733, 0),  "Bear Color",   group=grp_base)
-base_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_base)
-base_wick    = input.color(color.new(#555555, 0),  "Wick Color",   group=grp_base)
+base_bull    = input.color(color.new(#0077BB, 0), "Bull Color",   group=grp_base)
+base_bear    = input.color(color.new(#EE7733, 0), "Bear Color",   group=grp_base)
+base_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_base)
+base_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_base)
 base_opacity = input.int(0,  "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_base)
 
 // ============================================================================
@@ -95,10 +114,10 @@ htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
 htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
 htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
 htf1_show    = input.bool(true, "Show HTF1 SHA Candles",      group=grp_htf1)
-htf1_bull    = input.color(color.new(#33BBEE, 0),  "Bull Color",   group=grp_htf1)
-htf1_bear    = input.color(color.new(#CC3311, 0),  "Bear Color",   group=grp_htf1)
-htf1_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_htf1)
-htf1_wick    = input.color(color.new(#555555, 0),  "Wick Color",   group=grp_htf1)
+htf1_bull    = input.color(color.new(#33BBEE, 0), "Bull Color",   group=grp_htf1)
+htf1_bear    = input.color(color.new(#CC3311, 0), "Bear Color",   group=grp_htf1)
+htf1_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf1)
+htf1_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf1)
 htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf1)
 
 // ============================================================================
@@ -109,18 +128,18 @@ htf2_tf      = input.timeframe("240", "HTF2 Timeframe",       group=grp_htf2)
 htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf2)
 htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf2)
 htf2_show    = input.bool(true, "Show HTF2 SHA Candles",      group=grp_htf2)
-htf2_bull    = input.color(color.new(#004488, 0),  "Bull Color",   group=grp_htf2)
-htf2_bear    = input.color(color.new(#AA3377, 0),  "Bear Color",   group=grp_htf2)
-htf2_border  = input.color(color.new(#000000, 0),  "Border Color", group=grp_htf2)
-htf2_wick    = input.color(color.new(#555555, 0),  "Wick Color",   group=grp_htf2)
+htf2_bull    = input.color(color.new(#004488, 0), "Bull Color",   group=grp_htf2)
+htf2_bear    = input.color(color.new(#AA3377, 0), "Bear Color",   group=grp_htf2)
+htf2_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf2)
+htf2_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf2)
 htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf2)
 
 // ============================================================================
 // INPUTS — CASCADE MARKER
 // ============================================================================
 grp_cascade       = "Cascade Marker"
-show_cascade      = input.bool(true,  "Show Cascade Trigger Marker",      group=grp_cascade)
-cascade_sess_only = input.bool(true,  "Only show cascade inside sessions", group=grp_cascade)
+show_cascade      = input.bool(true,  "Show Cascade Trigger Marker",       group=grp_cascade)
+cascade_sess_only = input.bool(true,  "Only show cascade inside sessions",  group=grp_cascade)
 cascade_bull_col  = input.color(color.new(#0077BB, 0), "Bull Cascade Color", group=grp_cascade)
 cascade_bear_col  = input.color(color.new(#EE7733, 0), "Bear Cascade Color", group=grp_cascade)
 cascade_size      = input.string("Small", "Cascade Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_cascade)
@@ -133,82 +152,94 @@ show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
 hud_pos_inp = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
 
 // ============================================================================
-// SESSION DETECTION
+// SESSION DETECTION — broker GMT+3
 // ============================================================================
-broker_h   = hour(time, "GMT+3")
-in_london  = show_london and (broker_h >= lon_open_h  and broker_h < lon_close_h)
-in_ny      = show_ny     and (broker_h >= ny_open_h   and broker_h < ny_close_h)
-in_session = in_london or in_ny
-sess_name  = in_london ? "LONDON" : in_ny ? "NEW YORK" : "CLOSED"
+broker_h = hour(time, "GMT+3")
+
+in_lon_full = show_london and (lon_full_close_h > lon_full_open_h ? (broker_h >= lon_full_open_h and broker_h < lon_full_close_h) : (broker_h >= lon_full_open_h or broker_h < lon_full_close_h))
+in_lon_tw   = show_london and (broker_h >= lon_tw_open_h and broker_h < lon_tw_close_h)
+in_ny_full  = show_ny     and (ny_full_close_h > ny_full_open_h ? (broker_h >= ny_full_open_h and broker_h < ny_full_close_h) : (broker_h >= ny_full_open_h or broker_h < ny_full_close_h))
+in_ny_tw    = show_ny     and (broker_h >= ny_tw_open_h and broker_h < ny_tw_close_h)
+
+in_session  = in_lon_full or in_ny_full
+in_tw       = in_lon_tw   or in_ny_tw
+sess_name   = in_lon_tw ? "LONDON TW" : in_lon_full ? "LONDON" : in_ny_tw ? "NEW YORK TW" : in_ny_full ? "NEW YORK" : "CLOSED"
 
 // ============================================================================
-// SESSION BOXES — fill + border + label + directional pip movement
+// SESSION BACKGROUND — bgcolor for trade window highlight
+// ============================================================================
+bgcolor(in_lon_tw  ? lon_tw_col   : in_lon_full ? lon_full_col : na, title="London Background")
+bgcolor(in_ny_tw   ? ny_tw_col    : in_ny_full  ? ny_full_col  : na, title="New York Background")
+
+// ============================================================================
+// SESSION BOXES — outline + label + directional pip movement
+// One box per session per day, tracks high/low, label updates live
 // ============================================================================
 f_sess_lbl_size(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.large
 f_pips(_move) => str.tostring(math.round(_move / pip_divisor, 1))
 
-// LONDON
-var box    lon_box      = na
-var label  lon_lbl      = na
-var float  lon_open_px  = na
-var float  lon_hi       = na
-var float  lon_lo       = na
+// LONDON BOX
+var box   lon_box     = na
+var label lon_lbl     = na
+var float lon_open_px = na
+var float lon_hi      = na
+var float lon_lo      = na
 
-lon_just_opened = in_london and not in_london[1]
-lon_just_closed = not in_london and in_london[1]
+lon_just_opened = in_lon_full and not in_lon_full[1]
+lon_just_closed = not in_lon_full and in_lon_full[1]
 
 if lon_just_opened
     lon_open_px := open
     lon_hi      := high
     lon_lo      := low
-    lon_box     := box.new(bar_index, high, bar_index + 1, low, border_color=london_border_col, border_width=sess_border_width, bgcolor=london_fill_col, extend=extend.none)
-    lon_lbl     := label.new(bar_index, high, "LONDON  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=london_label_col, size=f_sess_lbl_size(sess_label_size))
+    lon_box     := box.new(bar_index, high, bar_index + 1, low, border_color=lon_border_col, border_width=sess_border_width, bgcolor=color.new(#FFFFFF, 100), extend=extend.none)
+    lon_lbl     := label.new(bar_index, high, "LONDON  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=lon_label_col, size=f_sess_lbl_size(sess_label_size))
 
-if in_london and not lon_just_opened and not na(lon_box)
+if in_lon_full and not lon_just_opened and not na(lon_box)
     lon_hi := math.max(lon_hi, high)
     lon_lo := math.min(lon_lo, low)
     box.set_top(lon_box,    lon_hi)
     box.set_bottom(lon_box, lon_lo)
     box.set_right(lon_box,  bar_index + 1)
-    pip_move_lon  = close - lon_open_px
-    pip_txt_lon   = pip_move_lon >= 0 ? "+" + f_pips(pip_move_lon) + " pips" : f_pips(pip_move_lon) + " pips"
-    lbl_col_lon   = pip_move_lon >= 0 ? london_label_col : color.new(#EE7733, 0)
-    label.set_xy(lon_lbl,    bar_index, lon_hi)
-    label.set_text(lon_lbl,  "LONDON  " + pip_txt_lon)
-    label.set_textcolor(lon_lbl, lbl_col_lon)
+    pip_move  = close - lon_open_px
+    pip_txt   = pip_move >= 0 ? "+" + f_pips(pip_move) + " pips" : f_pips(pip_move) + " pips"
+    lbl_col   = pip_move >= 0 ? lon_label_col : color.new(#EE7733, 0)
+    label.set_xy(lon_lbl,   bar_index, lon_hi)
+    label.set_text(lon_lbl, "LONDON  " + pip_txt)
+    label.set_textcolor(lon_lbl, lbl_col)
 
 if lon_just_closed and not na(lon_box)
     box.set_right(lon_box, bar_index - 1)
 
-// NEW YORK
-var box    ny_box      = na
-var label  ny_lbl      = na
-var float  ny_open_px  = na
-var float  ny_hi       = na
-var float  ny_lo       = na
+// NEW YORK BOX
+var box   ny_box     = na
+var label ny_lbl     = na
+var float ny_open_px = na
+var float ny_hi      = na
+var float ny_lo      = na
 
-ny_just_opened = in_ny and not in_ny[1]
-ny_just_closed = not in_ny and in_ny[1]
+ny_just_opened = in_ny_full and not in_ny_full[1]
+ny_just_closed = not in_ny_full and in_ny_full[1]
 
 if ny_just_opened
     ny_open_px := open
     ny_hi      := high
     ny_lo      := low
-    ny_box     := box.new(bar_index, high, bar_index + 1, low, border_color=ny_border_col, border_width=sess_border_width, bgcolor=ny_fill_col, extend=extend.none)
+    ny_box     := box.new(bar_index, high, bar_index + 1, low, border_color=ny_border_col, border_width=sess_border_width, bgcolor=color.new(#FFFFFF, 100), extend=extend.none)
     ny_lbl     := label.new(bar_index, high, "NEW YORK  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=ny_label_col, size=f_sess_lbl_size(sess_label_size))
 
-if in_ny and not ny_just_opened and not na(ny_box)
+if in_ny_full and not ny_just_opened and not na(ny_box)
     ny_hi := math.max(ny_hi, high)
     ny_lo := math.min(ny_lo, low)
     box.set_top(ny_box,    ny_hi)
     box.set_bottom(ny_box, ny_lo)
     box.set_right(ny_box,  bar_index + 1)
-    pip_move_ny  = close - ny_open_px
-    pip_txt_ny   = pip_move_ny >= 0 ? "+" + f_pips(pip_move_ny) + " pips" : f_pips(pip_move_ny) + " pips"
-    lbl_col_ny   = pip_move_ny >= 0 ? ny_label_col : color.new(#EE7733, 0)
-    label.set_xy(ny_lbl,    bar_index, ny_hi)
-    label.set_text(ny_lbl,  "NEW YORK  " + pip_txt_ny)
-    label.set_textcolor(ny_lbl, lbl_col_ny)
+    pip_move  = close - ny_open_px
+    pip_txt   = pip_move >= 0 ? "+" + f_pips(pip_move) + " pips" : f_pips(pip_move) + " pips"
+    lbl_col   = pip_move >= 0 ? ny_label_col : color.new(#EE7733, 0)
+    label.set_xy(ny_lbl,   bar_index, ny_hi)
+    label.set_text(ny_lbl, "NEW YORK  " + pip_txt)
+    label.set_textcolor(ny_lbl, lbl_col)
 
 if ny_just_closed and not na(ny_box)
     box.set_right(ny_box, bar_index - 1)
@@ -216,18 +247,14 @@ if ny_just_closed and not na(ny_box)
 // ============================================================================
 // COMPUTE SHA LAYERS
 // ============================================================================
-
-// Base
 [bO, bH, bL, bC] = f_sha(base_len1, base_len2, open, high, low, close)
 
-// HTF1
 htf1_o = request.security(syminfo.tickerid, htf1_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
 htf1_h = request.security(syminfo.tickerid, htf1_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
 htf1_l = request.security(syminfo.tickerid, htf1_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
 htf1_c = request.security(syminfo.tickerid, htf1_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
 [h1O, h1H, h1L, h1C] = f_sha(htf1_len1, htf1_len2, htf1_o, htf1_h, htf1_l, htf1_c)
 
-// HTF2
 htf2_o = request.security(syminfo.tickerid, htf2_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
 htf2_h = request.security(syminfo.tickerid, htf2_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
 htf2_l = request.security(syminfo.tickerid, htf2_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
@@ -277,8 +304,6 @@ if show_c_bear
 // ============================================================================
 // DRAW SHA CANDLES — HTF2 → HTF1 → Base
 // ============================================================================
-
-// HTF2
 htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
 htf2_wick_col = show_wicks   ? color.new(htf2_wick,   htf2_opacity) : na
 htf2_brdr_col = show_borders ? color.new(htf2_border, htf2_opacity) : htf2_body_col
@@ -289,12 +314,10 @@ plotcandle(htf2_ready and htf2_show ? h2O     : na,
            htf2_ready and htf2_show ? htf2_pH : na,
            htf2_ready and htf2_show ? htf2_pL : na,
            htf2_ready and htf2_show ? h2C     : na,
-           title="HTF2 SHA",
-           color=htf2_ready and htf2_show      ? htf2_body_col : na,
-           wickcolor=htf2_ready and htf2_show   ? htf2_wick_col : na,
+           title="HTF2 SHA", color=htf2_ready and htf2_show ? htf2_body_col : na,
+           wickcolor=htf2_ready and htf2_show ? htf2_wick_col : na,
            bordercolor=htf2_ready and htf2_show ? htf2_brdr_col : na)
 
-// HTF1
 htf1_body_col = h1C >= h1O ? color.new(htf1_bull, htf1_opacity) : color.new(htf1_bear, htf1_opacity)
 htf1_wick_col = show_wicks   ? color.new(htf1_wick,   htf1_opacity) : na
 htf1_brdr_col = show_borders ? color.new(htf1_border, htf1_opacity) : htf1_body_col
@@ -305,12 +328,10 @@ plotcandle(htf1_ready and htf1_show ? h1O     : na,
            htf1_ready and htf1_show ? htf1_pH : na,
            htf1_ready and htf1_show ? htf1_pL : na,
            htf1_ready and htf1_show ? h1C     : na,
-           title="HTF1 SHA",
-           color=htf1_ready and htf1_show      ? htf1_body_col : na,
-           wickcolor=htf1_ready and htf1_show   ? htf1_wick_col : na,
+           title="HTF1 SHA", color=htf1_ready and htf1_show ? htf1_body_col : na,
+           wickcolor=htf1_ready and htf1_show ? htf1_wick_col : na,
            bordercolor=htf1_ready and htf1_show ? htf1_brdr_col : na)
 
-// Base
 base_body_col = bC >= bO ? color.new(base_bull, base_opacity) : color.new(base_bear, base_opacity)
 base_wick_col = show_wicks   ? color.new(base_wick,   base_opacity) : na
 base_brdr_col = show_borders ? color.new(base_border, base_opacity) : base_body_col
@@ -321,13 +342,12 @@ plotcandle(base_ready and base_show ? bO      : na,
            base_ready and base_show ? base_pH : na,
            base_ready and base_show ? base_pL : na,
            base_ready and base_show ? bC      : na,
-           title="Base SHA",
-           color=base_ready and base_show      ? base_body_col : na,
-           wickcolor=base_ready and base_show   ? base_wick_col : na,
+           title="Base SHA", color=base_ready and base_show ? base_body_col : na,
+           wickcolor=base_ready and base_show ? base_wick_col : na,
            bordercolor=base_ready and base_show ? base_brdr_col : na)
 
 // ============================================================================
-// STATE HUD — white background, colored text only
+// STATE HUD
 // ============================================================================
 f_hud_pos(_s) => _s == "Top Left" ? position.top_left : _s == "Top Right" ? position.top_right : _s == "Bottom Left" ? position.bottom_left : position.bottom_right
 f_dir_str(_bull, _bear) => _bull ? "BULLISH" : _bear ? "BEARISH" : "FLAT"
@@ -335,7 +355,7 @@ f_dir_col(_bull, _bear) => _bull ? color.new(#0077BB, 0) : _bear ? color.new(#EE
 
 align_txt = all_bull ? "ALL BULL  ▲" : all_bear ? "ALL BEAR  ▼" : "MIXED  —"
 align_col = all_bull ? color.new(#0077BB, 0) : all_bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
-sess_col  = in_session ? color.new(#0077BB, 0) : color.new(#888888, 0)
+sess_col  = in_tw ? color.new(#0077BB, 0) : in_session ? color.new(#33BBEE, 0) : color.new(#888888, 0)
 
 W  = color.white
 BK = color.new(#212121, 0)
