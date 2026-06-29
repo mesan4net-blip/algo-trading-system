@@ -137,19 +137,19 @@ grp_entry         = "Entry Conditions"
 use_sess_filter   = input.bool(true,  "Session Filter — London + New York Only",    group=grp_entry)
 use_tw_only       = input.bool(false, "Trade Window Only (tighter session hours)",   group=grp_entry)
 use_gap_filter    = input.bool(true,  "Block Gap Bar Entries",                       group=grp_entry)
-show_cascade      = input.bool(true,  "Show Cascade Marker (all 3 agree)",           group=grp_entry)
+show_cascade      = input.bool(false, "Show Cascade Marker (all 3 agree)",           group=grp_entry)
 cascade_sess_only = input.bool(true,  "Cascade — In Session Only",                  group=grp_entry)
 cascade_bull_col  = input.color(color.new(#0077BB, 0), "Cascade Bull Color",        group=grp_entry)
 cascade_bear_col  = input.color(color.new(#EE7733, 0), "Cascade Bear Color",        group=grp_entry)
 cascade_size      = input.string("Small", "Cascade Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
-show_c2           = input.bool(true,  "Show C2 Marker (price cross all 3 SHA)",     group=grp_entry)
+show_c2           = input.bool(false, "Show C2 Marker (price cross all 3 SHA)",     group=grp_entry)
 c2_sess_only      = input.bool(false, "C2 — In Session Only",                       group=grp_entry)
 c2_bull_col       = input.color(color.new(#0077BB, 0), "C2 Bull Color",             group=grp_entry)
 c2_bear_col       = input.color(color.new(#EE7733, 0), "C2 Bear Color",             group=grp_entry)
 c2_size           = input.string("Small", "C2 Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
 
 // C3 — Pullback Resume
-show_c3           = input.bool(true,  "Show C3 Marker (pullback resume above/below all 3 SHA)", group=grp_entry)
+show_c3           = input.bool(false, "Show C3 Marker (pullback resume above/below all 3 SHA)", group=grp_entry)
 c3_sess_only      = input.bool(false, "C3 — In Session Only",                       group=grp_entry)
 c3_bull_col       = input.color(color.new(#004488, 0), "C3 Bull Color",             group=grp_entry)
 c3_bear_col       = input.color(color.new(#AA3377, 0), "C3 Bear Color",             group=grp_entry)
@@ -332,10 +332,19 @@ casc_bear_sig = all_bear and not all_bear[1]
 
 // C1 signal
 
+// ============================================================================
+// INPUTS — ENTRY TRIGGER SELECTION
+// ============================================================================
+grp_trigger   = "Entry Trigger"
+entry_trigger_src = input.string("C3", "Entry Trigger Condition", options=["Cascade","C2","C3"], group=grp_trigger)
+
 // Entry fires on THIS bar open when PREV bar had the signal
-// Primary entry trigger: C3 (pullback resume — price closes back above/below all 3 SHA bodies)
-entry_long_raw  = c3_bull_sig[1] and ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
-entry_short_raw = c3_bear_sig[1] and ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+// User selects which condition triggers an actual trade
+entry_sig_bull = entry_trigger_src == "Cascade" ? casc_bull_sig : entry_trigger_src == "C2" ? c2_bull_sig : c3_bull_sig
+entry_sig_bear = entry_trigger_src == "Cascade" ? casc_bear_sig : entry_trigger_src == "C2" ? c2_bear_sig : c3_bear_sig
+
+entry_long_raw  = entry_sig_bull[1] and ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+entry_short_raw = entry_sig_bear[1] and ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
 
 entry_long  = entry_long_raw  and can_trade and (strategy.position_size == 0 or (allow_pyramid and strategy.opentrades < max_pyramid))
 entry_short = entry_short_raw and can_trade and (strategy.position_size == 0 or (allow_pyramid and strategy.opentrades < max_pyramid))
@@ -502,40 +511,57 @@ plot(show_trail and strategy.position_size != 0 and not na(trail_level) ? trail_
 
 // ============================================================================
 // DRAW SIGNAL MARKERS
-// Use position_size[1] — state BEFORE this bar's entry fired
-// Pyramiding OFF: suppress same-direction markers if already in trade last bar
-//                 always show opposite-direction markers (exit warning)
-// Pyramiding ON:  show all markers always
+// Only show markers for the selected entry trigger condition
+// Pyramiding OFF: show only first marker (when flat or opposite position)
+// Pyramiding ON:  show all markers of that type
+// Other conditions: only show if their toggle is explicitly ON
 // ============================================================================
 was_long  = strategy.position_size[1] > 0
 was_short = strategy.position_size[1] < 0
 was_flat  = strategy.position_size[1] == 0
 
-f_show_bull(_sig) => _sig and (allow_pyramid or was_flat or was_short)
-f_show_bear(_sig) => _sig and (allow_pyramid or was_flat or was_long)
+f_show_bull(_sig, _is_trigger) =>
+    if not _sig
+        false
+    else if _is_trigger
+        allow_pyramid or was_flat or was_short
+    else
+        allow_pyramid or was_flat or was_short
 
-// Cascade
-casc_bull_vis = show_cascade and casc_bull_sig[1] and (cascade_sess_only ? in_session[1] : true)
-casc_bear_vis = show_cascade and casc_bear_sig[1] and (cascade_sess_only ? in_session[1] : true)
-if f_show_bull(casc_bull_vis)
+f_show_bear(_sig, _is_trigger) =>
+    if not _sig
+        false
+    else if _is_trigger
+        allow_pyramid or was_flat or was_long
+    else
+        allow_pyramid or was_flat or was_long
+
+is_casc_trigger = entry_trigger_src == "Cascade"
+is_c2_trigger   = entry_trigger_src == "C2"
+is_c3_trigger   = entry_trigger_src == "C3"
+
+// Cascade — show if it's the trigger OR if manually toggled on
+casc_bull_vis = (is_casc_trigger or show_cascade) and casc_bull_sig[1] and (cascade_sess_only ? in_session[1] : true)
+casc_bear_vis = (is_casc_trigger or show_cascade) and casc_bear_sig[1] and (cascade_sess_only ? in_session[1] : true)
+if f_show_bull(casc_bull_vis, is_casc_trigger)
     label.new(bar_index, low  - atr14 * 0.5, "▲", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(cascade_size))
-if f_show_bear(casc_bear_vis)
+if f_show_bear(casc_bear_vis, is_casc_trigger)
     label.new(bar_index, high + atr14 * 0.5, "▼", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(cascade_size))
 
-// C2
-c2_bull_vis = show_c2 and c2_bull_sig[1] and (c2_sess_only ? in_session[1] : true)
-c2_bear_vis = show_c2 and c2_bear_sig[1] and (c2_sess_only ? in_session[1] : true)
-if f_show_bull(c2_bull_vis)
+// C2 — show if it's the trigger OR if manually toggled on
+c2_bull_vis = (is_c2_trigger or show_c2) and c2_bull_sig[1] and (c2_sess_only ? in_session[1] : true)
+c2_bear_vis = (is_c2_trigger or show_c2) and c2_bear_sig[1] and (c2_sess_only ? in_session[1] : true)
+if f_show_bull(c2_bull_vis, is_c2_trigger)
     label.new(bar_index, low  - atr14 * 2.0, "●", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c2_size))
-if f_show_bear(c2_bear_vis)
+if f_show_bear(c2_bear_vis, is_c2_trigger)
     label.new(bar_index, high + atr14 * 2.0, "●", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c2_size))
 
-// C3
-c3_bull_vis = show_c3 and c3_bull_sig[1] and (c3_sess_only ? in_session[1] : true)
-c3_bear_vis = show_c3 and c3_bear_sig[1] and (c3_sess_only ? in_session[1] : true)
-if f_show_bull(c3_bull_vis)
+// C3 — show if it's the trigger OR if manually toggled on
+c3_bull_vis = (is_c3_trigger or show_c3) and c3_bull_sig[1] and (c3_sess_only ? in_session[1] : true)
+c3_bear_vis = (is_c3_trigger or show_c3) and c3_bear_sig[1] and (c3_sess_only ? in_session[1] : true)
+if f_show_bull(c3_bull_vis, is_c3_trigger)
     label.new(bar_index, low  - atr14 * 3.5, "■", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c3_size))
-if f_show_bear(c3_bear_vis)
+if f_show_bear(c3_bear_vis, is_c3_trigger)
     label.new(bar_index, high + atr14 * 3.5, "■", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c3_size))
 
 // ============================================================================
