@@ -418,55 +418,76 @@ sha_layer_flipped_against_short = exit_sha_layer == "Base SHA"  ? base_bull_bar 
 sess_just_ended = in_session[1] and not in_session
 
 // ============================================================================
-// EXECUTE ENTRIES
+// EXECUTE ENTRIES + ENTRY PRICE LABELS
 // ============================================================================
-var float entry_sl = na
-var float entry_px = na
+var float entry_sl     = na
+var float entry_px     = na
+var bool  trade_open   = false   // tracks whether a trade is currently open
+
+BLUE   = color.new(#0077BB, 0)
+ORANGE = color.new(#EE7733, 0)
+GREEN  = color.new(#009900, 0)
+BLACK  = color.new(#000000, 0)
+WHITE  = color.white
 
 if entry_long
-    entry_px := open
-    entry_sl := f_sl_long()
-    qty       = f_qty(entry_px, entry_sl)
+    entry_px    := open
+    entry_sl    := f_sl_long()
+    qty          = f_qty(entry_px, entry_sl)
     strategy.entry("Long", strategy.long, qty=qty)
     trail_level := f_trail_long()
+    trade_open  := true
+    label.new(bar_index, low - atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_up, color=BLUE, textcolor=WHITE, size=size.small)
 
 if entry_short
-    entry_px := open
-    entry_sl := f_sl_short()
-    qty       = f_qty(entry_px, entry_sl)
+    entry_px    := open
+    entry_sl    := f_sl_short()
+    qty          = f_qty(entry_px, entry_sl)
     strategy.entry("Short", strategy.short, qty=qty)
     trail_level := f_trail_short()
+    trade_open  := true
+    label.new(bar_index, high + atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=size.small)
 
 // ============================================================================
-// MANAGE OPEN POSITIONS — trail update + exits
+// MANAGE OPEN POSITIONS — trail update + exits + exit price labels
 // ============================================================================
+var float last_entry_px = na
+if entry_long or entry_short
+    last_entry_px := entry_px
+
 if strategy.position_size > 0
-    new_trail = f_trail_long()
+    new_trail  = f_trail_long()
     if not na(new_trail) and (na(trail_level) or new_trail > trail_level)
         trail_level := new_trail
-    // Trail stop trigger
     trail_stop = math.min(trail_level, entry_sl)
     trail_hit  = exit_trigger == "Touch" ? low <= trail_stop : close <= trail_stop
-    // Additional exit conditions
     flip_exit  = (exit_on_3flip and all_bear) or sha_layer_flipped_against_long
     sess_exit  = exit_sess_end and sess_just_ended
     if trail_hit or flip_exit or sess_exit
+        exit_px    = trail_hit ? math.min(open, trail_stop) : close
+        is_profit  = exit_px > last_entry_px
+        exit_col   = is_profit ? GREEN : BLACK
         strategy.close("Long", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
+        label.new(bar_index, high + atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_down, color=exit_col, textcolor=WHITE, size=size.small)
         trail_level := na
+        trade_open  := false
 
 if strategy.position_size < 0
-    new_trail = f_trail_short()
+    new_trail  = f_trail_short()
     if not na(new_trail) and (na(trail_level) or new_trail < trail_level)
         trail_level := new_trail
-    // Trail stop trigger
     trail_stop = math.max(trail_level, entry_sl)
     trail_hit  = exit_trigger == "Touch" ? high >= trail_stop : close >= trail_stop
-    // Additional exit conditions
     flip_exit  = (exit_on_3flip and all_bull) or sha_layer_flipped_against_short
     sess_exit  = exit_sess_end and sess_just_ended
     if trail_hit or flip_exit or sess_exit
+        exit_px    = trail_hit ? math.max(open, trail_stop) : close
+        is_profit  = exit_px < last_entry_px
+        exit_col   = is_profit ? GREEN : BLACK
         strategy.close("Short", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
+        label.new(bar_index, low - atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_up, color=exit_col, textcolor=WHITE, size=size.small)
         trail_level := na
+        trade_open  := false
 
 if strategy.position_size == 0
     trail_level := na
@@ -478,29 +499,45 @@ if strategy.position_size == 0
 plot(show_trail and strategy.position_size != 0 and not na(trail_level) ? trail_level : na, title="Trail", color=trail_col, linewidth=trail_width, style=plot.style_stepline)
 
 // ============================================================================
-// DRAW ENTRY MARKERS — Cascade, C1, C2 (visual only, not trade triggers)
+// DRAW SIGNAL MARKERS
+// Pyramiding OFF: only show first marker that opens a trade
+//                 suppress subsequent same-direction markers while trade open
+//                 always show opposite-direction markers (exit warning)
+// Pyramiding ON:  show all markers always
 // ============================================================================
 f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
 atr14 = ta.atr(14)
 
-// Cascade markers
-if show_cascade and casc_bull_sig[1] and (cascade_sess_only ? in_session[1] : true)
-    label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=cascade_bull_col, textcolor=color.white, size=f_sz(cascade_size))
-if show_cascade and casc_bear_sig[1] and (cascade_sess_only ? in_session[1] : true)
-    label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_sz(cascade_size))
+is_long  = strategy.position_size > 0
+is_short = strategy.position_size < 0
+is_flat  = strategy.position_size == 0
 
-// C1 markers
+f_show_bull(_sig) => _sig and (allow_pyramid or is_flat or is_short)
+f_show_bear(_sig) => _sig and (allow_pyramid or is_flat or is_long)
 
-// C2 markers
-if show_c2 and c2_bull_sig[1] and (c2_sess_only ? in_session[1] : true)
-    label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=c2_bull_col, textcolor=color.white, size=f_sz(c2_size))
-if show_c2 and c2_bear_sig[1] and (c2_sess_only ? in_session[1] : true)
-    label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=c2_bear_col, textcolor=color.white, size=f_sz(c2_size))
+// Cascade
+casc_bull_vis = show_cascade and casc_bull_sig[1] and (cascade_sess_only ? in_session[1] : true)
+casc_bear_vis = show_cascade and casc_bear_sig[1] and (cascade_sess_only ? in_session[1] : true)
+if f_show_bull(casc_bull_vis)
+    label.new(bar_index, low  - atr14 * 0.5, "▲", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(cascade_size))
+if f_show_bear(casc_bear_vis)
+    label.new(bar_index, high + atr14 * 0.5, "▼", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(cascade_size))
 
-if show_c3 and c3_bull_sig[1] and (c3_sess_only ? in_session[1] : true)
-    label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=c3_bull_col, textcolor=color.white, size=f_sz(c3_size))
-if show_c3 and c3_bear_sig[1] and (c3_sess_only ? in_session[1] : true)
-    label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=c3_bear_col, textcolor=color.white, size=f_sz(c3_size))
+// C2
+c2_bull_vis = show_c2 and c2_bull_sig[1] and (c2_sess_only ? in_session[1] : true)
+c2_bear_vis = show_c2 and c2_bear_sig[1] and (c2_sess_only ? in_session[1] : true)
+if f_show_bull(c2_bull_vis)
+    label.new(bar_index, low  - atr14 * 2.0, "●", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c2_size))
+if f_show_bear(c2_bear_vis)
+    label.new(bar_index, high + atr14 * 2.0, "●", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c2_size))
+
+// C3
+c3_bull_vis = show_c3 and c3_bull_sig[1] and (c3_sess_only ? in_session[1] : true)
+c3_bear_vis = show_c3 and c3_bear_sig[1] and (c3_sess_only ? in_session[1] : true)
+if f_show_bull(c3_bull_vis)
+    label.new(bar_index, low  - atr14 * 3.5, "■", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c3_size))
+if f_show_bear(c3_bear_vis)
+    label.new(bar_index, high + atr14 * 3.5, "■", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c3_size))
 
 // ============================================================================
 // SESSION BOXES
