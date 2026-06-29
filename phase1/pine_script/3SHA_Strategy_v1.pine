@@ -311,10 +311,48 @@ sha_bot_b = math.min(bO, bC)
 sha_bot_1 = math.min(h1O, h1C)
 sha_bot_2 = math.min(h2O, h2C)
 
-// C2 — price closes beyond all 3 SHA bodies (signal bar)
+// ============================================================================
+// VALID PULLBACK DETECTION
+// Bull: Base dips below HTF1 body bottom, then recovers above HTF1 body top
+//       HTF2 must remain bullish throughout
+// Bear: Base rises above HTF1 body top, then recovers below HTF1 body bottom
+//       HTF2 must remain bearish throughout
+// State machine: track whether a valid dip has occurred
+// ============================================================================
+var bool pb_bull_dipped = false   // Base has dipped below HTF1 body bottom
+var bool pb_bear_dipped = false   // Base has risen above HTF1 body top
+
+// Bull pullback dip — Base closes below HTF1 body bottom while HTF2 remains bullish
+bull_dip_condition  = bC < sha_bot_1 and htf2_bull_bar
+// Bull pullback recovery — Base closes above HTF1 body top after a valid dip
+bull_recovery       = bC > sha_top_1 and htf2_bull_bar
+
+// Bear pullback dip — Base closes above HTF1 body top while HTF2 remains bearish
+bear_dip_condition  = bC > sha_top_1 and htf2_bear_bar
+// Bear pullback recovery — Base closes below HTF1 body bottom after a valid dip
+bear_recovery       = bC < sha_bot_1 and htf2_bear_bar
+
+// Track dip state — set on dip, clear on recovery or HTF2 flip
+if bull_dip_condition
+    pb_bull_dipped := true
+if not htf2_bull_bar or bull_recovery
+    pb_bull_dipped := false
+
+if bear_dip_condition
+    pb_bear_dipped := true
+if not htf2_bear_bar or bear_recovery
+    pb_bear_dipped := false
+
+// Valid pullback signal fires on the recovery bar
+// pb_bull_dipped[1] = dip was registered on the previous bar
+pb_bull_sig = bull_recovery and pb_bull_dipped[1] and htf2_bull_bar
+pb_bear_sig = bear_recovery and pb_bear_dipped[1] and htf2_bear_bar
+
+// ============================================================================
 // C2 — true full cluster cross in one candle
 // Bull: previous bar closed BELOW all three SHA bodies, this bar closes ABOVE all three
 // Bear: previous bar closed ABOVE all three SHA bodies, this bar closes BELOW all three
+// ============================================================================
 was_below_all = close[1] < sha_bot_b[1] and close[1] < sha_bot_1[1] and close[1] < sha_bot_2[1]
 was_above_all = close[1] > sha_top_b[1] and close[1] > sha_top_1[1] and close[1] > sha_top_2[1]
 now_above_all = close > sha_top_b and close > sha_top_1 and close > sha_top_2
@@ -322,20 +360,22 @@ now_below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
 c2_bull_sig   = was_below_all and now_above_all
 c2_bear_sig   = was_above_all and now_below_all
 
-// C3 — Pullback Resume (old C2 logic — price resumes above/below all 3 SHA bodies)
-c3_bull_sig   = now_above_all and not now_above_all[1]
-c3_bear_sig   = now_below_all and not now_below_all[1]
+// ============================================================================
+// C3 — Pullback Resume using Valid Pullback definition
+// Base dips below HTF1 body then recovers above HTF1 body, HTF2 holds direction
+// ============================================================================
+c3_bull_sig = pb_bull_sig
+c3_bear_sig = pb_bear_sig
 
 // Cascade signal
 casc_bull_sig = all_bull and not all_bull[1]
 casc_bear_sig = all_bear and not all_bear[1]
 
-// C1 signal
-
 // ============================================================================
 // ENTRY TRIGGER — driven by show toggles
 // Whichever condition toggle is ON becomes a trade trigger
 // Multiple can be ON simultaneously
+// All filters applied: EMA, session, gap
 // ============================================================================
 
 // Entry fires on THIS bar open when PREV bar had the signal
@@ -510,36 +550,41 @@ plot(show_trail and strategy.position_size != 0 and not na(trail_level) ? trail_
 
 // ============================================================================
 // DRAW SIGNAL MARKERS
-// Toggle ON = both marker visible AND trade trigger
-// Pyramiding OFF: only first marker per direction shown (must be flat or opposite)
-// Pyramiding ON:  all markers of toggled-on conditions shown
-// Opposite direction always shown regardless of pyramiding
+// Only show markers that ALSO pass all trade filters:
+//   — EMA filter
+//   — Session filter (if enabled)
+//   — Gap filter (if enabled)
+//   — Pyramiding rule (same direction suppressed if position open and pyramiding OFF)
+// Opposite direction markers always show (exit warning)
+// Entry price label only on bars where trade actually opened
 // ============================================================================
 was_long  = strategy.position_size[1] > 0
 was_short = strategy.position_size[1] < 0
 was_flat  = strategy.position_size[1] == 0
 
-// Bull marker shows if: pyramiding ON, OR was flat, OR was short (opposite = exit warning)
 can_show_bull = allow_pyramid or was_flat or was_short
-// Bear marker shows if: pyramiding ON, OR was flat, OR was long (opposite = exit warning)
 can_show_bear = allow_pyramid or was_flat or was_long
 
+// Shared filter gate — same filters as entry conditions
+bull_filters = ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+bear_filters = ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+
 // Cascade
-if show_cascade and casc_bull_sig[1] and (cascade_sess_only ? in_session[1] : true) and can_show_bull
+if show_cascade and casc_bull_sig[1] and bull_filters and can_show_bull
     label.new(bar_index, low  - atr14 * 0.5, "▲", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(cascade_size))
-if show_cascade and casc_bear_sig[1] and (cascade_sess_only ? in_session[1] : true) and can_show_bear
+if show_cascade and casc_bear_sig[1] and bear_filters and can_show_bear
     label.new(bar_index, high + atr14 * 0.5, "▼", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(cascade_size))
 
 // C2
-if show_c2 and c2_bull_sig[1] and (c2_sess_only ? in_session[1] : true) and can_show_bull
+if show_c2 and c2_bull_sig[1] and bull_filters and can_show_bull
     label.new(bar_index, low  - atr14 * 2.0, "●", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c2_size))
-if show_c2 and c2_bear_sig[1] and (c2_sess_only ? in_session[1] : true) and can_show_bear
+if show_c2 and c2_bear_sig[1] and bear_filters and can_show_bear
     label.new(bar_index, high + atr14 * 2.0, "●", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c2_size))
 
 // C3
-if show_c3 and c3_bull_sig[1] and (c3_sess_only ? in_session[1] : true) and can_show_bull
+if show_c3 and c3_bull_sig[1] and bull_filters and can_show_bull
     label.new(bar_index, low  - atr14 * 3.5, "■", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c3_size))
-if show_c3 and c3_bear_sig[1] and (c3_sess_only ? in_session[1] : true) and can_show_bear
+if show_c3 and c3_bear_sig[1] and bear_filters and can_show_bear
     label.new(bar_index, high + atr14 * 3.5, "■", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c3_size))
 
 // ============================================================================
