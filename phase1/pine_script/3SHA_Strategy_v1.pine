@@ -336,12 +336,11 @@ casc_bear_sig = all_bear and not all_bear[1]
 // INPUTS — ENTRY TRIGGER SELECTION
 // ============================================================================
 grp_trigger   = "Entry Trigger"
-entry_trigger_src = input.string("C3", "Entry Trigger Condition", options=["Cascade","C2","C3"], group=grp_trigger)
+entry_trigger_src = input.string("None", "Entry Trigger Condition", options=["None","Cascade","C2","C3"], group=grp_trigger)
 
 // Entry fires on THIS bar open when PREV bar had the signal
-// User selects which condition triggers an actual trade
-entry_sig_bull = entry_trigger_src == "Cascade" ? casc_bull_sig : entry_trigger_src == "C2" ? c2_bull_sig : c3_bull_sig
-entry_sig_bear = entry_trigger_src == "Cascade" ? casc_bear_sig : entry_trigger_src == "C2" ? c2_bear_sig : c3_bear_sig
+entry_sig_bull = entry_trigger_src == "Cascade" ? casc_bull_sig : entry_trigger_src == "C2" ? c2_bull_sig : entry_trigger_src == "C3" ? c3_bull_sig : false
+entry_sig_bear = entry_trigger_src == "Cascade" ? casc_bear_sig : entry_trigger_src == "C2" ? c2_bear_sig : entry_trigger_src == "C3" ? c3_bear_sig : false
 
 entry_long_raw  = entry_sig_bull[1] and ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
 entry_short_raw = entry_sig_bear[1] and ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
