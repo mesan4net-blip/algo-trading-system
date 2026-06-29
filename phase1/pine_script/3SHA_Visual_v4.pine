@@ -136,15 +136,6 @@ cascade_bear_col  = input.color(color.new(#EE7733, 0), "Cascade Bear Color",    
 cascade_size      = input.string("Small", "Cascade Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
 
 // C1 — Adjacent SHA Agreement
-show_c1           = input.bool(true,  "Show C1 Marker  (adjacent SHA agreement)",  group=grp_entry)
-c1_base_htf1_bull = input.bool(true,  "C1 Bull — Base + HTF1",                    group=grp_entry)
-c1_htf1_htf2_bull = input.bool(true,  "C1 Bull — HTF1 + HTF2",                    group=grp_entry)
-c1_base_htf1_bear = input.bool(true,  "C1 Bear — Base + HTF1",                    group=grp_entry)
-c1_htf1_htf2_bear = input.bool(true,  "C1 Bear — HTF1 + HTF2",                    group=grp_entry)
-c1_sess_only      = input.bool(false, "C1 — In Session Only",                      group=grp_entry)
-c1_bull_col       = input.color(color.new(#0077BB, 0), "C1 Bull Color",            group=grp_entry)
-c1_bear_col       = input.color(color.new(#EE7733, 0), "C1 Bear Color",            group=grp_entry)
-c1_size           = input.string("Small", "C1 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
 
 // C2 — Price Cross All 3 SHA Bodies
 show_c2           = input.bool(true,  "Show C2 Marker  (price closes beyond all 3 SHA)", group=grp_entry)
@@ -336,13 +327,7 @@ cascade_bull_raw = all_bull[1] and not all_bull[2]
 cascade_bear_raw = all_bear[1] and not all_bear[2]
 
 // — C1: first adjacent SHA pair agreement
-bull_b_h1  = base_bull_bar[1] and htf1_bull_bar[1] and not (base_bull_bar[2] and htf1_bull_bar[2])
-bull_h1_h2 = htf1_bull_bar[1] and htf2_bull_bar[1] and not (htf1_bull_bar[2] and htf2_bull_bar[2])
-bear_b_h1  = base_bear_bar[1] and htf1_bear_bar[1] and not (base_bear_bar[2] and htf1_bear_bar[2])
-bear_h1_h2 = htf1_bear_bar[1] and htf2_bear_bar[1] and not (htf1_bear_bar[2] and htf2_bear_bar[2])
 
-c1_bull_raw = (c1_base_htf1_bull and bull_b_h1) or (c1_htf1_htf2_bull and bull_h1_h2)
-c1_bear_raw = (c1_base_htf1_bear and bear_b_h1) or (c1_htf1_htf2_bear and bear_h1_h2)
 
 // — C2: price closes beyond all 3 SHA bodies
 sha_top_b = math.max(bO,  bC)
@@ -372,8 +357,6 @@ c3_bear_raw = now_below_all and not now_below_all[1]
 // — Session gates (applied per condition)
 cascade_bull = show_cascade and cascade_bull_raw and (cascade_sess_only ? in_session[1] : true)
 cascade_bear = show_cascade and cascade_bear_raw and (cascade_sess_only ? in_session[1] : true)
-c1_bull      = show_c1      and c1_bull_raw      and (c1_sess_only      ? in_session[1] : true)
-c1_bear      = show_c1      and c1_bear_raw      and (c1_sess_only      ? in_session[1] : true)
 c2_bull      = show_c2      and c2_bull_raw      and (c2_sess_only      ? in_session[1] : true)
 c2_bear      = show_c2      and c2_bear_raw      and (c2_sess_only      ? in_session[1] : true)
 c3_bull      = show_c3      and c3_bull_raw      and (c3_sess_only      ? in_session[1] : true)
@@ -399,10 +382,6 @@ if cascade_bear
     label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_sz(cascade_size))
 
 // C1 — diamond (label_diamond style), slightly further from bar
-if c1_bull
-    label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=c1_bull_col, textcolor=color.white, size=f_sz(c1_size))
-if c1_bear
-    label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=c1_bear_col, textcolor=color.white, size=f_sz(c1_size))
 
 // C2 — circle dot, furthest from bar
 if c2_bull
