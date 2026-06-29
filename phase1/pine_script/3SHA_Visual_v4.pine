@@ -345,11 +345,16 @@ sha_bot_b = math.min(bO,  bC)
 sha_bot_1 = math.min(h1O, h1C)
 sha_bot_2 = math.min(h2O, h2C)
 
-price_above_all = close > sha_top_b and close > sha_top_1 and close > sha_top_2
-price_below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
+// C2 — true full cluster cross in one candle
+// Bull: previous bar closed BELOW all three SHA bodies, this bar closes ABOVE all three
+// Bear: previous bar closed ABOVE all three SHA bodies, this bar closes BELOW all three
+was_below_all = close[1] < sha_bot_b[1] and close[1] < sha_bot_1[1] and close[1] < sha_bot_2[1]
+was_above_all = close[1] > sha_top_b[1] and close[1] > sha_top_1[1] and close[1] > sha_top_2[1]
+now_above_all = close > sha_top_b and close > sha_top_1 and close > sha_top_2
+now_below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
 
-c2_bull_raw = price_above_all[1] and not price_above_all[2]
-c2_bear_raw = price_below_all[1] and not price_below_all[2]
+c2_bull_raw = was_below_all and now_above_all
+c2_bear_raw = was_above_all and now_below_all
 
 // — Session gates (applied per condition)
 cascade_bull = show_cascade and cascade_bull_raw and (cascade_sess_only ? in_session[1] : true)
