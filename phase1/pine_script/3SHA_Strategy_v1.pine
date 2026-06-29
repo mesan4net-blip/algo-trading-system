@@ -502,13 +502,17 @@ plot(show_trail and strategy.position_size != 0 and not na(trail_level) ? trail_
 
 // ============================================================================
 // DRAW SIGNAL MARKERS
+// Use position_size[1] — state BEFORE this bar's entry fired
+// Pyramiding OFF: suppress same-direction markers if already in trade last bar
+//                 always show opposite-direction markers (exit warning)
+// Pyramiding ON:  show all markers always
+// ============================================================================
+was_long  = strategy.position_size[1] > 0
+was_short = strategy.position_size[1] < 0
+was_flat  = strategy.position_size[1] == 0
 
-is_long  = strategy.position_size > 0
-is_short = strategy.position_size < 0
-is_flat  = strategy.position_size == 0
-
-f_show_bull(_sig) => _sig and (allow_pyramid or is_flat or is_short)
-f_show_bear(_sig) => _sig and (allow_pyramid or is_flat or is_long)
+f_show_bull(_sig) => _sig and (allow_pyramid or was_flat or was_short)
+f_show_bear(_sig) => _sig and (allow_pyramid or was_flat or was_long)
 
 // Cascade
 casc_bull_vis = show_cascade and casc_bull_sig[1] and (cascade_sess_only ? in_session[1] : true)
