@@ -167,36 +167,52 @@ c3_size           = input.string("Small", "C3 Size", options=["Tiny","Small","No
 // ============================================================================
 // INPUTS — STOP LOSS
 // ============================================================================
-grp_sl       = "Stop Loss"
-sl_method    = input.string("Prev N Bars", "SL Method", options=["Trade Candle","Prev N Bars"], group=grp_sl)
-sl_lookback  = input.int(10, "Lookback N Bars (Prev N method)", minval=1, maxval=50,            group=grp_sl)
-sl_buffer    = input.float(2.0, "SL Buffer (pips beyond low/high)",  minval=0, step=0.5,        group=grp_sl)
+// ============================================================================
+// INPUTS — INITIAL STOP LOSS
+// ============================================================================
+grp_sl       = "Initial Stop Loss"
+sl_method    = input.string("Prev N Bars", "SL Placement Method", options=["Trade Candle Low/High","Prev N Bars Low/High"], group=grp_sl)
+sl_lookback  = input.int(30,  "Lookback N Bars  (Prev N Bars method only)", minval=1, maxval=100, group=grp_sl)
+sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)",             minval=0, step=0.5,  group=grp_sl)
 
 // ============================================================================
-// INPUTS — TRAILING STOP
+// INPUTS — TRAIL — HOW THE STOP MOVES
 // ============================================================================
-grp_trail    = "Trailing Stop"
-trail_method = input.string("Rolling Candle", "Trail Method", options=["Rolling Candle","SHA Body","3-Layer Flip"], group=grp_trail)
-trail_src    = input.string("Real Price", "Trail Source (Rolling Candle)", options=["Real Price","SHA Base","SHA HTF1","SHA HTF2"], group=grp_trail)
-trail_bars   = input.int(10, "Trail Lookback Bars (Rolling Candle)", minval=1, maxval=50, group=grp_trail)
-show_trail   = input.bool(true,  "Show Trail Line",  group=grp_trail)
-trail_col    = input.color(color.new(#EE7733, 0), "Trail Line Color", group=grp_trail)
-trail_width  = input.int(1, "Trail Line Width", minval=1, maxval=4,  group=grp_trail)
+grp_trail    = "Trail — How The Stop Moves"
+trail_method = input.string("Rolling Candle", "Trail Method",
+     options=["Rolling Candle Low/High","SHA Body"], group=grp_trail)
+trail_src    = input.string("Real Price", "Price Source  (Rolling Candle only)",
+     options=["Real Price","SHA Base","SHA HTF1","SHA HTF2"], group=grp_trail)
+trail_bars   = input.int(30, "Lookback Bars  (Rolling Candle only)", minval=1, maxval=100, group=grp_trail)
+show_trail   = input.bool(true,  "Show Trail Line on Chart", group=grp_trail)
+trail_col    = input.color(color.new(#EE7733, 0), "Trail Line Color",       group=grp_trail)
+trail_width  = input.int(1, "Trail Line Width", minval=1, maxval=4,          group=grp_trail)
+
+// ============================================================================
+// INPUTS — EXIT — WHAT TRIGGERS THE CLOSE
+// ============================================================================
+grp_exit          = "Exit — What Triggers The Close"
+exit_trigger      = input.string("Touch", "Trail Stop Trigger",
+     options=["Touch","Close Beyond"], group=grp_exit)
+exit_on_3flip     = input.bool(true,  "Exit immediately if all 3 SHA layers flip against position", group=grp_exit)
+exit_sha_layer    = input.string("None", "Exit if this SHA layer flips against position",
+     options=["None","Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_exit)
+exit_sess_end     = input.bool(false, "Close all positions at session end", group=grp_exit)
 
 // ============================================================================
 // INPUTS — POSITION SIZING
 // ============================================================================
-grp_risk     = "Position Sizing"
-risk_pct     = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, group=grp_risk)
-allow_pyramid = input.bool(true, "Allow Pyramiding",                                       group=grp_risk)
-max_pyramid  = input.int(3, "Max Pyramid Adds", minval=1, maxval=10,                       group=grp_risk)
+grp_risk      = "Position Sizing"
+risk_pct      = input.float(1.0, "Risk Per Trade (% of current equity)", minval=0.1, maxval=10.0, step=0.1, group=grp_risk)
+allow_pyramid = input.bool(true, "Allow Pyramiding",                                                          group=grp_risk)
+max_pyramid   = input.int(3,     "Max Pyramid Adds",                      minval=1,  maxval=10,               group=grp_risk)
 
 // ============================================================================
 // INPUTS — DAILY LOSS LIMIT
 // ============================================================================
-grp_daily    = "Daily Loss Limit"
-use_daily_limit = input.bool(true,    "Enable Daily Loss Limit",          group=grp_daily)
-daily_loss_pct  = input.float(3.0,   "Max Daily Loss (% of equity)",     group=grp_daily, minval=0.1, maxval=20.0, step=0.1)
+grp_daily       = "Daily Loss Limit"
+use_daily_limit = input.bool(true,  "Enable Daily Loss Limit",        group=grp_daily)
+daily_loss_pct  = input.float(3.0, "Max Daily Loss (% of equity)",    group=grp_daily, minval=0.1, maxval=20.0, step=0.1)
 
 // ============================================================================
 // INPUTS — STATE HUD
@@ -344,7 +360,7 @@ entry_short = entry_short_raw and can_trade and (strategy.position_size == 0 or 
 // ============================================================================
 f_sl_long() =>
     float sl = na
-    if sl_method == "Trade Candle"
+    if sl_method == "Trade Candle Low/High"
         sl := low - sl_buffer * pip_divisor
     else
         lowest = low[1]
@@ -356,7 +372,7 @@ f_sl_long() =>
 
 f_sl_short() =>
     float sl = na
-    if sl_method == "Trade Candle"
+    if sl_method == "Trade Candle Low/High"
         sl := high + sl_buffer * pip_divisor
     else
         highest = high[1]
@@ -382,31 +398,39 @@ var float trail_level = na
 
 f_trail_long() =>
     float t = na
-    if trail_method == "Rolling Candle"
+    if trail_method == "Rolling Candle Low/High"
         src_low = trail_src == "SHA Base" ? math.min(bO, bC) : trail_src == "SHA HTF1" ? math.min(h1O, h1C) : trail_src == "SHA HTF2" ? math.min(h2O, h2C) : low
         t := src_low[1]
         for i = 2 to trail_bars
             if src_low[i] < t
                 t := src_low[i]
-    else if trail_method == "SHA Body"
-        t := math.min(bO, bC)
     else
-        t := all_bear ? close : trail_level
+        t := math.min(bO, bC)
     t
 
 f_trail_short() =>
     float t = na
-    if trail_method == "Rolling Candle"
+    if trail_method == "Rolling Candle Low/High"
         src_high = trail_src == "SHA Base" ? math.max(bO, bC) : trail_src == "SHA HTF1" ? math.max(h1O, h1C) : trail_src == "SHA HTF2" ? math.max(h2O, h2C) : high
         t := src_high[1]
         for i = 2 to trail_bars
             if src_high[i] > t
                 t := src_high[i]
-    else if trail_method == "SHA Body"
-        t := math.max(bO, bC)
     else
-        t := all_bull ? close : trail_level
+        t := math.max(bO, bC)
     t
+
+// SHA layer flip checks for exit
+sha_layer_flipped_against_long  = exit_sha_layer == "Base SHA"  ? base_bear_bar :
+                                   exit_sha_layer == "HTF1 SHA" ? htf1_bear_bar :
+                                   exit_sha_layer == "HTF2 SHA" ? htf2_bear_bar : false
+
+sha_layer_flipped_against_short = exit_sha_layer == "Base SHA"  ? base_bull_bar :
+                                   exit_sha_layer == "HTF1 SHA" ? htf1_bull_bar :
+                                   exit_sha_layer == "HTF2 SHA" ? htf2_bull_bar : false
+
+// Session end exit
+sess_just_ended = in_session[1] and not in_session
 
 // ============================================================================
 // EXECUTE ENTRIES
@@ -435,13 +459,29 @@ if strategy.position_size > 0
     new_trail = f_trail_long()
     if not na(new_trail) and (na(trail_level) or new_trail > trail_level)
         trail_level := new_trail
-    strategy.exit("Long Exit", from_entry="Long", stop=math.min(trail_level, entry_sl))
+    // Trail stop trigger
+    trail_stop = math.min(trail_level, entry_sl)
+    trail_hit  = exit_trigger == "Touch" ? low <= trail_stop : close <= trail_stop
+    // Additional exit conditions
+    flip_exit  = (exit_on_3flip and all_bear) or sha_layer_flipped_against_long
+    sess_exit  = exit_sess_end and sess_just_ended
+    if trail_hit or flip_exit or sess_exit
+        strategy.close("Long", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
+        trail_level := na
 
 if strategy.position_size < 0
     new_trail = f_trail_short()
     if not na(new_trail) and (na(trail_level) or new_trail < trail_level)
         trail_level := new_trail
-    strategy.exit("Short Exit", from_entry="Short", stop=math.max(trail_level, entry_sl))
+    // Trail stop trigger
+    trail_stop = math.max(trail_level, entry_sl)
+    trail_hit  = exit_trigger == "Touch" ? high >= trail_stop : close >= trail_stop
+    // Additional exit conditions
+    flip_exit  = (exit_on_3flip and all_bull) or sha_layer_flipped_against_short
+    sess_exit  = exit_sess_end and sess_just_ended
+    if trail_hit or flip_exit or sess_exit
+        strategy.close("Short", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
+        trail_level := na
 
 if strategy.position_size == 0
     trail_level := na
