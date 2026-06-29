@@ -333,9 +333,9 @@ casc_bear_sig = all_bear and not all_bear[1]
 // C1 signal
 
 // Entry fires on THIS bar open when PREV bar had the signal
-// Primary entry trigger: C2
-entry_long_raw  = c2_bull_sig[1] and ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
-entry_short_raw = c2_bear_sig[1] and ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+// Primary entry trigger: C3 (pullback resume — price closes back above/below all 3 SHA bodies)
+entry_long_raw  = c3_bull_sig[1] and ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
+entry_short_raw = c3_bear_sig[1] and ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
 
 entry_long  = entry_long_raw  and can_trade and (strategy.position_size == 0 or (allow_pyramid and strategy.opentrades < max_pyramid))
 entry_short = entry_short_raw and can_trade and (strategy.position_size == 0 or (allow_pyramid and strategy.opentrades < max_pyramid))
