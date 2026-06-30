@@ -676,41 +676,30 @@ plot(show_trail and strategy.position_size != 0 and not na(trail_level) ? trail_
 
 // ============================================================================
 // DRAW SIGNAL MARKERS
-// Only show markers that ALSO pass all trade filters:
-//   — EMA filter
-//   — Session filter (if enabled)
-//   — Gap filter (if enabled)
-//   — Pyramiding rule (same direction suppressed if position open and pyramiding OFF)
-// Opposite direction markers always show (exit warning)
-// Entry price label only on bars where trade actually opened
+// Purely informational — show WHERE a condition fired, independent of
+// current position, pyramiding setting, or whether a trade was taken.
+// Only gated by: toggle ON + the same EMA/session/gap filters used for entries
+// (so the marker reflects a genuinely tradeable setup, not just raw noise).
 // ============================================================================
-was_long  = strategy.position_size[1] > 0
-was_short = strategy.position_size[1] < 0
-was_flat  = strategy.position_size[1] == 0
-
-can_show_bull = allow_pyramid or was_flat or was_short
-can_show_bear = allow_pyramid or was_flat or was_long
-
-// Shared filter gate — same filters as entry conditions
 bull_filters = ema_allow_long  and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
 bear_filters = ema_allow_short and (not use_sess_filter or active_sess[1]) and (not use_gap_filter or not gap_bar) and all_ready
 
 // Cascade
-if show_cascade and casc_bull_sig[1] and bull_filters and can_show_bull
+if show_cascade and casc_bull_sig[1] and bull_filters
     label.new(bar_index, low  - atr14 * 0.5, "▲", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(cascade_size))
-if show_cascade and casc_bear_sig[1] and bear_filters and can_show_bear
+if show_cascade and casc_bear_sig[1] and bear_filters
     label.new(bar_index, high + atr14 * 0.5, "▼", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(cascade_size))
 
 // C2
-if show_c2 and c2_bull_sig[1] and bull_filters and can_show_bull
+if show_c2 and c2_bull_sig[1] and bull_filters
     label.new(bar_index, low  - atr14 * 2.0, "●", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c2_size))
-if show_c2 and c2_bear_sig[1] and bear_filters and can_show_bear
+if show_c2 and c2_bear_sig[1] and bear_filters
     label.new(bar_index, high + atr14 * 2.0, "●", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c2_size))
 
 // C3
-if show_c3 and c3_bull_sig[1] and bull_filters and can_show_bull
+if show_c3 and c3_bull_sig[1] and bull_filters
     label.new(bar_index, low  - atr14 * 3.5, "■", style=label.style_label_up,   color=BLUE,   textcolor=WHITE, size=f_sz(c3_size))
-if show_c3 and c3_bear_sig[1] and bear_filters and can_show_bear
+if show_c3 and c3_bear_sig[1] and bear_filters
     label.new(bar_index, high + atr14 * 3.5, "■", style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(c3_size))
 
 // ============================================================================
