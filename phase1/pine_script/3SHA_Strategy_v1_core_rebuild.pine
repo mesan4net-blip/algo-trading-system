@@ -116,19 +116,20 @@ risk_pct          = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10
 [bO, bH, bL, bC] = f_sha(base_len1, base_len2, open, high, low, close)
 
 // Pull the LAST CONFIRMED HTF bar — not the live, still-forming one.
-// open[1]/high[1]/low[1]/close[1] inside the security context refers to the
-// previous COMPLETED bar on that higher timeframe, so the SHA body we trade
-// against is always a settled, fixed reference — never a moving target.
-htf1_o = request.security(syminfo.tickerid, htf1_tf, open[1],  barmerge.gaps_off, barmerge.lookahead_off)
-htf1_h = request.security(syminfo.tickerid, htf1_tf, high[1],  barmerge.gaps_off, barmerge.lookahead_off)
-htf1_l = request.security(syminfo.tickerid, htf1_tf, low[1],   barmerge.gaps_off, barmerge.lookahead_off)
-htf1_c = request.security(syminfo.tickerid, htf1_tf, close[1], barmerge.gaps_off, barmerge.lookahead_off)
+// Per TradingView's official non-repainting pattern: offset the expression by [1]
+// AND use barmerge.lookahead_on together. This combination is required —
+// lookahead_off with an offset expression produces persistent na values.
+// The [1] offset means we always get the last CLOSED HTF bar, never the live one.
+htf1_o = request.security(syminfo.tickerid, htf1_tf, open[1],  barmerge.gaps_off, barmerge.lookahead_on)
+htf1_h = request.security(syminfo.tickerid, htf1_tf, high[1],  barmerge.gaps_off, barmerge.lookahead_on)
+htf1_l = request.security(syminfo.tickerid, htf1_tf, low[1],   barmerge.gaps_off, barmerge.lookahead_on)
+htf1_c = request.security(syminfo.tickerid, htf1_tf, close[1], barmerge.gaps_off, barmerge.lookahead_on)
 [h1O, h1H, h1L, h1C] = f_sha(htf1_len1, htf1_len2, htf1_o, htf1_h, htf1_l, htf1_c)
 
-htf2_o = request.security(syminfo.tickerid, htf2_tf, open[1],  barmerge.gaps_off, barmerge.lookahead_off)
-htf2_h = request.security(syminfo.tickerid, htf2_tf, high[1],  barmerge.gaps_off, barmerge.lookahead_off)
-htf2_l = request.security(syminfo.tickerid, htf2_tf, low[1],   barmerge.gaps_off, barmerge.lookahead_off)
-htf2_c = request.security(syminfo.tickerid, htf2_tf, close[1], barmerge.gaps_off, barmerge.lookahead_off)
+htf2_o = request.security(syminfo.tickerid, htf2_tf, open[1],  barmerge.gaps_off, barmerge.lookahead_on)
+htf2_h = request.security(syminfo.tickerid, htf2_tf, high[1],  barmerge.gaps_off, barmerge.lookahead_on)
+htf2_l = request.security(syminfo.tickerid, htf2_tf, low[1],   barmerge.gaps_off, barmerge.lookahead_on)
+htf2_c = request.security(syminfo.tickerid, htf2_tf, close[1], barmerge.gaps_off, barmerge.lookahead_on)
 [h2O, h2H, h2L, h2C] = f_sha(htf2_len1, htf2_len2, htf2_o, htf2_h, htf2_l, htf2_c)
 
 // ============================================================================
