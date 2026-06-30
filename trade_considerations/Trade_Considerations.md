@@ -6,6 +6,8 @@ A running log of trade setup ideas, observations, and pattern notes captured fro
 
 ## Entry #1 — 2026-06-30 — EURUSD 30M — Trend Continuation Entry
 
+![Entry 1 — Trend Continuation SELL](images/entry_01_trend_continuation_sell.png)
+
 **Chart:** EURUSD, 30M, OANDA — using 3SHA-v3 strategy script
 **Timeframe stack:** HTF2 = 1D, HTF1 = 4H, Base = Chart (30M)
 
