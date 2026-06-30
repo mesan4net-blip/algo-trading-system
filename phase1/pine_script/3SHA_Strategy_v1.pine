@@ -100,8 +100,8 @@ htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
 htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
 htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
 htf1_show    = input.bool(true, "Show HTF1 SHA Candles",      group=grp_htf1)
-htf1_bull    = input.color(color.new(#33BBEE, 0), "Bull Color",   group=grp_htf1)
-htf1_bear    = input.color(color.new(#CC3311, 0), "Bear Color",   group=grp_htf1)
+htf1_bull    = input.color(color.new(#882255, 0), "Bull Color",   group=grp_htf1)
+htf1_bear    = input.color(color.new(#DDCC77, 0), "Bear Color",   group=grp_htf1)
 htf1_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf1)
 htf1_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf1)
 htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf1)
@@ -114,8 +114,8 @@ htf2_tf      = input.timeframe("240", "HTF2 Timeframe",       group=grp_htf2)
 htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf2)
 htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf2)
 htf2_show    = input.bool(true, "Show HTF2 SHA Candles",      group=grp_htf2)
-htf2_bull    = input.color(color.new(#004488, 0), "Bull Color",   group=grp_htf2)
-htf2_bear    = input.color(color.new(#AA3377, 0), "Bear Color",   group=grp_htf2)
+htf2_bull    = input.color(color.new(#117733, 0), "Bull Color",   group=grp_htf2)
+htf2_bear    = input.color(color.new(#CC3311, 0), "Bear Color",   group=grp_htf2)
 htf2_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf2)
 htf2_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf2)
 htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf2)
@@ -185,9 +185,10 @@ trail_width  = input.int(1, "Trail Line Width", minval=1, maxval=4,          gro
 grp_exit          = "Exit — What Triggers The Close"
 exit_trigger      = input.string("Touch", "Trail Stop Trigger",
      options=["Touch","Close Beyond"], group=grp_exit)
-exit_on_3flip     = input.bool(true,  "Exit immediately if all 3 SHA layers flip against position", group=grp_exit)
-exit_sha_layer    = input.string("None", "Exit if this SHA layer flips against position",
-     options=["None","Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_exit)
+exit_flip_mode    = input.string("None", "Exit On SHA Flip",
+     options=["None","Any One Layer","All Three Layers"], group=grp_exit)
+exit_sha_layer    = input.string("Base SHA", "Which Layer  (only used if 'Any One Layer' selected)",
+     options=["Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_exit)
 exit_sess_end     = input.bool(false, "Close all positions at session end", group=grp_exit)
 
 // ============================================================================
@@ -463,13 +464,23 @@ base_just_bull = base_bull_bar and not base_bull_bar[1]
 htf1_just_bull = htf1_bull_bar and not htf1_bull_bar[1]
 htf2_just_bull = htf2_bull_bar and not htf2_bull_bar[1]
 
-sha_layer_flipped_against_long  = exit_sha_layer == "Base SHA"  ? base_just_bear :
-                                   exit_sha_layer == "HTF1 SHA" ? htf1_just_bear :
-                                   exit_sha_layer == "HTF2 SHA" ? htf2_just_bear : false
+// Single flip mode — one rule active at a time, no overlapping conditions
+single_layer_flip_long  = exit_sha_layer == "Base SHA"  ? base_just_bear :
+                           exit_sha_layer == "HTF1 SHA" ? htf1_just_bear :
+                           htf2_just_bear
 
-sha_layer_flipped_against_short = exit_sha_layer == "Base SHA"  ? base_just_bull :
-                                   exit_sha_layer == "HTF1 SHA" ? htf1_just_bull :
-                                   exit_sha_layer == "HTF2 SHA" ? htf2_just_bull : false
+single_layer_flip_short = exit_sha_layer == "Base SHA"  ? base_just_bull :
+                           exit_sha_layer == "HTF1 SHA" ? htf1_just_bull :
+                           htf2_just_bull
+
+all_three_flip_long  = all_bear and not all_bear[1]
+all_three_flip_short = all_bull and not all_bull[1]
+
+sha_layer_flipped_against_long  = exit_flip_mode == "Any One Layer"   ? single_layer_flip_long  :
+                                   exit_flip_mode == "All Three Layers" ? all_three_flip_long    : false
+
+sha_layer_flipped_against_short = exit_flip_mode == "Any One Layer"   ? single_layer_flip_short :
+                                   exit_flip_mode == "All Three Layers" ? all_three_flip_short   : false
 
 // Session end exit
 sess_just_ended = in_session[1] and not in_session
@@ -520,7 +531,7 @@ if strategy.position_size > 0
         trail_level := new_trail
     trail_stop = math.min(trail_level, entry_sl)
     trail_hit  = exit_trigger == "Touch" ? low <= trail_stop : close <= trail_stop
-    flip_exit  = (exit_on_3flip and all_bear and not all_bear[1]) or sha_layer_flipped_against_long
+    flip_exit  = sha_layer_flipped_against_long
     sess_exit  = exit_sess_end and sess_just_ended
     if trail_hit or flip_exit or sess_exit
         exit_px    = trail_hit ? math.min(open, trail_stop) : close
@@ -537,7 +548,7 @@ if strategy.position_size < 0
         trail_level := new_trail
     trail_stop = math.max(trail_level, entry_sl)
     trail_hit  = exit_trigger == "Touch" ? high >= trail_stop : close >= trail_stop
-    flip_exit  = (exit_on_3flip and all_bull and not all_bull[1]) or sha_layer_flipped_against_short
+    flip_exit  = sha_layer_flipped_against_short
     sess_exit  = exit_sess_end and sess_just_ended
     if trail_hit or flip_exit or sess_exit
         exit_px    = trail_hit ? math.max(open, trail_stop) : close
