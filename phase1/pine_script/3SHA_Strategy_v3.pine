@@ -168,6 +168,15 @@ early_trend_bull_col  = input.color(color.new(#0077BB, 0), "Early Trend Bull Col
 early_trend_bear_col  = input.color(color.new(#EE7733, 0), "Early Trend Bear Color", group=grp_entry)
 early_trend_size      = input.string("Small", "Early Trend Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
 
+// Trend Continuation — full spatial stacking of Base/HTF1/HTF2 bodies, fires once at London open
+// Bucket: opens at London open, closes at end of NY session — separate from trail/flip/R:R system
+show_trend_cont   = input.bool(false, "Show Trend Continuation Marker  (LON open → NY close bucket)",
+     tooltip="Fires once, only at London session open, when Base/HTF1/HTF2 bodies are fully stacked in order (not just same color). Position closes automatically at end of NY session — a separate session-bound bucket from the trail/flip/R:R exit system.",
+     group=grp_entry)
+trend_cont_bull_col = input.color(color.new(#0077BB, 0), "Trend Continuation Bull Color", group=grp_entry)
+trend_cont_bear_col = input.color(color.new(#EE7733, 0), "Trend Continuation Bear Color", group=grp_entry)
+trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+
 // ============================================================================
 // INPUTS — STATE HUD
 // ============================================================================
@@ -421,6 +430,15 @@ c3_bear           = show_c3           and c3_bear_raw           and (c3_sess_onl
 early_trend_bull  = show_early_trend  and early_trend_bull_raw  and (early_trend_sess_only   ? in_session[1] : true)
 early_trend_bear  = show_early_trend  and early_trend_bear_raw  and (early_trend_sess_only   ? in_session[1] : true)
 
+// — Trend Continuation: full spatial stacking (not just color), fires once at London open
+// Bull: Base body fully above HTF1 body, HTF1 body fully above HTF2 body
+// Bear: Base body fully below HTF1 body, HTF1 body fully below HTF2 body
+stack_bull_raw = sha_bot_b > sha_top_1 and sha_bot_1 > sha_top_2
+stack_bear_raw = sha_top_b < sha_bot_1 and sha_top_1 < sha_bot_2
+
+trend_cont_bull = show_trend_cont and lon_just_opened and stack_bull_raw
+trend_cont_bear = show_trend_cont and lon_just_opened and stack_bear_raw
+
 // ============================================================================
 // MARKER SIZE HELPER
 // ============================================================================
@@ -459,6 +477,12 @@ if early_trend_bull
     label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=early_trend_bull_col, textcolor=color.white, size=f_sz(early_trend_size))
 if early_trend_bear
     label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=early_trend_bear_col, textcolor=color.white, size=f_sz(early_trend_size))
+
+// Trend Continuation markers — star shape, labeled "LON→NY" to flag the session bucket nature
+if trend_cont_bull
+    label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=trend_cont_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
+if trend_cont_bear
+    label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=trend_cont_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
 
 // ============================================================================
 // DRAW SHA CANDLES — HTF2 → HTF1 → Base
