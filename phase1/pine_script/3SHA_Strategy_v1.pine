@@ -181,6 +181,13 @@ partial_pct       = input.float(50.0, "Partial Close Size (% of position)", minv
 move_to_be        = input.bool(true, "Move SL to Breakeven + Buffer after Partial Close", group=grp_trail)
 be_buffer         = input.float(1.0, "Breakeven Buffer (pips, covers spread/commission)", minval=0, step=0.5, group=grp_trail)
 
+// Text size controls — individual per label type
+entry_label_size    = input.string("Small", "Entry Price Label Size",       options=["Tiny","Small","Normal","Large"], group=grp_trail)
+exit_label_size     = input.string("Small", "Exit Price Label Size",        options=["Tiny","Small","Normal","Large"], group=grp_trail)
+exit_pnl_label_size = input.string("Tiny",  "Exit P&L Label Size",          options=["Tiny","Small","Normal","Large"], group=grp_trail)
+partial_px_label_size  = input.string("Small", "Partial Close Price Label Size", options=["Tiny","Small","Normal","Large"], group=grp_trail)
+partial_pnl_label_size = input.string("Tiny",  "Partial Close P&L Label Size",   options=["Tiny","Small","Normal","Large"], group=grp_trail)
+
 // Trail method for remainder
 trail_trigger = input.string("Touch", "Trail Stop Trigger", options=["Touch","Close Beyond"], group=grp_trail)
 trail_method = input.string("Rolling Candle Low/High", "Trail Method",
@@ -220,6 +227,8 @@ daily_loss_pct  = input.float(3.0, "Max Daily Loss (% of equity)",    group=grp_
 grp_hud     = "State HUD"
 show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
 hud_pos_inp = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
+hud_main_size = input.string("Normal", "HUD Main Text Size", options=["Tiny","Small","Normal","Large"], group=grp_hud)
+hud_sub_size  = input.string("Small",  "HUD Subtitle Text Size", options=["Tiny","Small","Normal","Large"], group=grp_hud)
 
 // ============================================================================
 // COMPUTE SHA LAYERS
@@ -546,7 +555,7 @@ if entry_long
     strategy.entry("Long", strategy.long, qty=qty)
     trail_level   := f_trail_long()
     trade_open    := true
-    label.new(bar_index, low - atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_up, color=BLUE, textcolor=WHITE, size=size.small)
+    label.new(bar_index, low - atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_up, color=BLUE, textcolor=WHITE, size=f_sz(entry_label_size))
     if show_sl_dot
         label.new(bar_index, entry_sl, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
@@ -560,7 +569,7 @@ if entry_short
     strategy.entry("Short", strategy.short, qty=qty)
     trail_level   := f_trail_short()
     trade_open    := true
-    label.new(bar_index, high + atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=size.small)
+    label.new(bar_index, high + atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=f_sz(entry_label_size))
     if show_sl_dot
         label.new(bar_index, entry_sl, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
@@ -582,8 +591,8 @@ if strategy.position_size > 0
             close_qty = strategy.position_size * (partial_pct / 100.0)
             strategy.close("Long", qty=close_qty, comment="Partial " + partial_rr)
             partial_pnl = (target_px - last_entry_px) * close_qty
-            label.new(bar_index, high + atr14 * 1.5, str.tostring(target_px, format.mintick), style=label.style_label_down, color=GREEN, textcolor=WHITE, size=size.small)
-            label.new(bar_index, high + atr14 * 2.3, "+$" + str.tostring(math.round(partial_pnl, 2), "#,###.00"), style=label.style_label_down, color=GREEN, textcolor=WHITE, size=size.tiny)
+            label.new(bar_index, high + atr14 * 1.5, str.tostring(target_px, format.mintick), style=label.style_label_down, color=GREEN, textcolor=WHITE, size=f_sz(partial_px_label_size))
+            label.new(bar_index, high + atr14 * 2.3, "+$" + str.tostring(math.round(partial_pnl, 2), "#,###.00"), style=label.style_label_down, color=GREEN, textcolor=WHITE, size=f_sz(partial_pnl_label_size))
             partial_done := true
             if move_to_be
                 entry_sl := entry_px + be_buffer * pip_divisor
@@ -603,8 +612,8 @@ if strategy.position_size > 0
         exit_col   = is_profit ? GREEN : BLACK
         pnl_txt    = pnl_amt >= 0 ? "+$" + str.tostring(math.round(pnl_amt, 2), "#,###.00") : "-$" + str.tostring(math.abs(math.round(pnl_amt, 2)), "#,###.00")
         strategy.close("Long", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
-        label.new(bar_index, high + atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_down, color=exit_col, textcolor=WHITE, size=size.small)
-        label.new(bar_index, high + atr14 * 2.3, pnl_txt, style=label.style_label_down, color=exit_col, textcolor=WHITE, size=size.tiny)
+        label.new(bar_index, high + atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_down, color=exit_col, textcolor=WHITE, size=f_sz(exit_label_size))
+        label.new(bar_index, high + atr14 * 2.3, pnl_txt, style=label.style_label_down, color=exit_col, textcolor=WHITE, size=f_sz(exit_pnl_label_size))
         trail_level := na
         trade_open  := false
 
@@ -616,8 +625,8 @@ if strategy.position_size < 0
             close_qty = math.abs(strategy.position_size) * (partial_pct / 100.0)
             strategy.close("Short", qty=close_qty, comment="Partial " + partial_rr)
             partial_pnl = (last_entry_px - target_px) * close_qty
-            label.new(bar_index, low - atr14 * 1.5, str.tostring(target_px, format.mintick), style=label.style_label_up, color=GREEN, textcolor=WHITE, size=size.small)
-            label.new(bar_index, low - atr14 * 2.3, "+$" + str.tostring(math.round(partial_pnl, 2), "#,###.00"), style=label.style_label_up, color=GREEN, textcolor=WHITE, size=size.tiny)
+            label.new(bar_index, low - atr14 * 1.5, str.tostring(target_px, format.mintick), style=label.style_label_up, color=GREEN, textcolor=WHITE, size=f_sz(partial_px_label_size))
+            label.new(bar_index, low - atr14 * 2.3, "+$" + str.tostring(math.round(partial_pnl, 2), "#,###.00"), style=label.style_label_up, color=GREEN, textcolor=WHITE, size=f_sz(partial_pnl_label_size))
             partial_done := true
             if move_to_be
                 entry_sl := entry_px - be_buffer * pip_divisor
@@ -637,8 +646,8 @@ if strategy.position_size < 0
         exit_col   = is_profit ? GREEN : BLACK
         pnl_txt    = pnl_amt >= 0 ? "+$" + str.tostring(math.round(pnl_amt, 2), "#,###.00") : "-$" + str.tostring(math.abs(math.round(pnl_amt, 2)), "#,###.00")
         strategy.close("Short", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
-        label.new(bar_index, low - atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_up, color=exit_col, textcolor=WHITE, size=size.small)
-        label.new(bar_index, low - atr14 * 2.3, pnl_txt, style=label.style_label_up, color=exit_col, textcolor=WHITE, size=size.tiny)
+        label.new(bar_index, low - atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_up, color=exit_col, textcolor=WHITE, size=f_sz(exit_label_size))
+        label.new(bar_index, low - atr14 * 2.3, pnl_txt, style=label.style_label_up, color=exit_col, textcolor=WHITE, size=f_sz(exit_pnl_label_size))
         trail_level := na
         trade_open  := false
 
@@ -856,8 +865,9 @@ dl_txt    = daily_limit_hit ? "LIMIT HIT" : "OK"
 W  = color.white
 BK = color.new(#212121, 0)
 GR = color.new(#888888, 0)
-SZ = size.normal
-SS = size.small
+f_hud_size(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+SZ = f_hud_size(hud_main_size)
+SS = f_hud_size(hud_sub_size)
 
 var table hud = table.new(f_hud_pos(hud_pos_inp), 2, 12, frame_color=color.new(#CCCCCC, 0), frame_width=1, border_color=color.new(#DDDDDD, 0), border_width=1)
 
