@@ -420,3 +420,23 @@ plotcandle(htf1_ready and htf1_show ? h1O : na, htf1_ready and htf1_show ? h1H :
 
 plotcandle(base_ready and base_show ? bO : na, base_ready and base_show ? bH : na, base_ready and base_show ? bL : na, base_ready and base_show ? bC : na,
      title="Base SHA", color=bC>=bO?BLUE:ORANGE, bordercolor=color.new(#000000,0))
+
+// ============================================================================
+// DIAGNOSTIC DEBUG TABLE — temporary, shows why markers may not be firing
+// ============================================================================
+var table dbg = table.new(position.bottom_left, 2, 7, frame_color=color.gray, frame_width=1, border_color=color.gray, border_width=1)
+if barstate.islast
+    table.cell(dbg, 0, 0, "all_ready",  text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 0, str.tostring(all_ready), text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 0, 1, "ema_allow_long",  text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 1, str.tostring(ema_allow_long), text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 0, 2, "in_session",  text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 2, str.tostring(in_session), text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 0, 3, "gap_bar",  text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 3, str.tostring(gap_bar), text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 0, 4, "pullback_bull_sig",  text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 4, str.tostring(pullback_resume_bull_sig), text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 0, 5, "pb_bull_dipped",  text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 5, str.tostring(pb_bull_dipped), text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 0, 6, "position_size",  text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 6, str.tostring(strategy.position_size), text_color=color.black, bgcolor=color.white)
