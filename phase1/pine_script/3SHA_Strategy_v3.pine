@@ -1,0 +1,483 @@
+//@version=6
+// ============================================================================
+// 3SHA VISUAL v4 — Entry Condition Markers
+// Builds on v3 visuals + adds three independent entry marker systems:
+//   Cascade    — all 3 SHA flip into agreement
+//   C1         — first adjacent SHA pair agreement (Base+HTF1 or HTF1+HTF2)
+//   C2         — price closes beyond all 3 SHA bodies
+// All markers appear on the OPEN of the NEXT bar after condition confirmed
+// Color blind safe: Blue (bull) vs Orange (bear)
+// ============================================================================
+strategy("3SHA Strategy v3 — From Verified Visual", shorttitle="3SHA-v3", overlay=true,
+         initial_capital=100000, currency=currency.USD,
+         default_qty_type=strategy.fixed, default_qty_value=1,
+         calc_on_every_tick=false, process_orders_on_close=false,
+         max_bars_back=5000, max_boxes_count=500, max_labels_count=500, max_lines_count=500)
+
+// ============================================================================
+// SHA FUNCTION — Two-pass: EMA → HA → EMA
+// ============================================================================
+f_sha(_len1, _len2, _o, _h, _l, _c) =>
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
+    haC = (o1 + h1 + l1 + c1) / 4.0
+    var float haO = na
+    haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
+    haH = math.max(h1, math.max(haO, haC))
+    haL = math.min(l1, math.min(haO, haC))
+    o2  = ta.ema(haO, _len2)
+    h2  = ta.ema(haH, _len2)
+    l2  = ta.ema(haL, _len2)
+    c2  = ta.ema(haC, _len2)
+    [o2, h2, l2, c2]
+
+// ============================================================================
+// INPUTS — BROKER TIME REFERENCE
+// ============================================================================
+grp_time        = "Broker Time Reference"
+your_local_hour = input.int(18,  "Your Current Local Hour (24h)",                 minval=0,   maxval=23, group=grp_time)
+your_local_day  = input.int(28,  "Your Current Local Day",                         minval=1,   maxval=31, group=grp_time)
+broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                      minval=0,   maxval=23, group=grp_time)
+broker_day_now  = input.int(29,  "Broker Current Day",                             minval=1,   maxval=31, group=grp_time)
+your_utc_offset = input.int(-7,  "Your UTC Offset (PDT=-7 PST=-8 EST=-5 EDT=-4)", minval=-12, maxval=14, group=grp_time)
+
+// ============================================================================
+// BROKER OFFSET CALCULATION
+// ============================================================================
+utc_hour_raw  = your_local_hour - your_utc_offset
+utc_hour_adj  = utc_hour_raw >= 24 ? utc_hour_raw - 24 : utc_hour_raw < 0 ? utc_hour_raw + 24 : utc_hour_raw
+day_crossed   = your_local_day != broker_day_now
+broker_offset = day_crossed ? broker_hour_now + (24 - utc_hour_adj) : broker_hour_now - utc_hour_adj
+f_norm(_h)   => _h >= 24 ? _h - 24 : _h < 0 ? _h + 24 : _h
+
+lon_full_o = f_norm(8  + broker_offset)
+lon_full_c = f_norm(17 + broker_offset)
+lon_tw_o   = f_norm(8  + broker_offset)
+lon_tw_c   = f_norm(10 + broker_offset)
+ny_full_o  = f_norm(13 + broker_offset)
+ny_full_c  = f_norm(22 + broker_offset)
+ny_tw_o    = f_norm(13 + broker_offset)
+ny_tw_c    = f_norm(16 + broker_offset)
+
+// ============================================================================
+// INPUTS — TRADE SESSIONS
+// ============================================================================
+grp_sess          = "Trade Sessions"
+pip_divisor       = input.float(0.0001,   "Pip Size (Forex=0.0001  JPY/Gold=0.01)", minval=0.00001, step=0.00001, group=grp_sess)
+sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
+sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
+show_london       = input.bool(true,                    "Show London Session",           group=grp_sess)
+lon_full_fill     = input.color(color.new(#0077BB, 85), "London — Full Session Color",   group=grp_sess)
+lon_tw_fill       = input.color(color.new(#0077BB, 65), "London — Trade Window Color",   group=grp_sess)
+lon_border        = input.color(color.new(#0077BB, 20), "London — Border Color",         group=grp_sess)
+lon_label_col     = input.color(color.new(#0077BB, 0),  "London — Label Color",          group=grp_sess)
+show_ny           = input.bool(true,                    "Show New York Session",         group=grp_sess)
+ny_full_fill      = input.color(color.new(#33BBEE, 85), "New York — Full Session Color", group=grp_sess)
+ny_tw_fill        = input.color(color.new(#33BBEE, 65), "New York — Trade Window Color", group=grp_sess)
+ny_border         = input.color(color.new(#33BBEE, 20), "New York — Border Color",       group=grp_sess)
+ny_label_col      = input.color(color.new(#33BBEE, 0),  "New York — Label Color",        group=grp_sess)
+
+// ============================================================================
+// INPUTS — GLOBAL DISPLAY
+// ============================================================================
+grp_global   = "Global Display"
+show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
+show_borders = input.bool(true, "Show Borders (all layers)", group=grp_global)
+
+// ============================================================================
+// INPUTS — BASE SHA
+// ============================================================================
+grp_base     = "Base SHA  [Chart TF — auto]"
+base_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_base)
+base_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_base)
+base_show    = input.bool(true, "Show Base SHA Candles",      group=grp_base)
+base_bull    = input.color(color.new(#0077BB, 0), "Bull Color",   group=grp_base)
+base_bear    = input.color(color.new(#EE7733, 0), "Bear Color",   group=grp_base)
+base_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_base)
+base_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_base)
+base_opacity = input.int(0,  "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_base)
+
+// ============================================================================
+// INPUTS — HTF1 SHA
+// ============================================================================
+grp_htf1     = "HTF1 SHA  [Mid Timeframe]"
+htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
+htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
+htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
+htf1_show    = input.bool(true, "Show HTF1 SHA Candles",      group=grp_htf1)
+htf1_bull    = input.color(color.new(#33BBEE, 0), "Bull Color",   group=grp_htf1)
+htf1_bear    = input.color(color.new(#CC3311, 0), "Bear Color",   group=grp_htf1)
+htf1_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf1)
+htf1_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf1)
+htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf1)
+
+// ============================================================================
+// INPUTS — HTF2 SHA
+// ============================================================================
+grp_htf2     = "HTF2 SHA  [High Timeframe]"
+htf2_tf      = input.timeframe("240", "HTF2 Timeframe",       group=grp_htf2)
+htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf2)
+htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf2)
+htf2_show    = input.bool(true, "Show HTF2 SHA Candles",      group=grp_htf2)
+htf2_bull    = input.color(color.new(#004488, 0), "Bull Color",   group=grp_htf2)
+htf2_bear    = input.color(color.new(#AA3377, 0), "Bear Color",   group=grp_htf2)
+htf2_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf2)
+htf2_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf2)
+htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf2)
+
+// ============================================================================
+// INPUTS — ENTRY CONDITIONS
+// ============================================================================
+grp_entry = "Entry Conditions"
+
+// Cascade
+show_cascade      = input.bool(true,  "Show Cascade Marker  (all 3 SHA agree)",    group=grp_entry)
+cascade_sess_only = input.bool(true,  "Cascade — In Session Only",                 group=grp_entry)
+cascade_bull_col  = input.color(color.new(#0077BB, 0), "Cascade Bull Color",       group=grp_entry)
+cascade_bear_col  = input.color(color.new(#EE7733, 0), "Cascade Bear Color",       group=grp_entry)
+cascade_size      = input.string("Small", "Cascade Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+
+// C1 — Adjacent SHA Agreement
+
+// C2 — Price Cross All 3 SHA Bodies
+show_c2           = input.bool(true,  "Show C2 Marker  (price closes beyond all 3 SHA)", group=grp_entry)
+c2_sess_only      = input.bool(false, "C2 — In Session Only",                             group=grp_entry)
+c2_bull_col       = input.color(color.new(#0077BB, 0), "C2 Bull Color",                   group=grp_entry)
+c2_bear_col       = input.color(color.new(#EE7733, 0), "C2 Bear Color",                   group=grp_entry)
+c2_size           = input.string("Small", "C2 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+
+// C3 — Pullback Resume
+show_c3           = input.bool(true,  "Show C3 Marker  (pullback then resume above/below all 3 SHA)", group=grp_entry)
+c3_sess_only      = input.bool(false, "C3 — In Session Only",                             group=grp_entry)
+c3_bull_col       = input.color(color.new(#004488, 0), "C3 Bull Color",                   group=grp_entry)
+c3_bear_col       = input.color(color.new(#AA3377, 0), "C3 Bear Color",                   group=grp_entry)
+c3_size           = input.string("Small", "C3 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+
+// ============================================================================
+// INPUTS — STATE HUD
+// ============================================================================
+grp_hud     = "State HUD"
+show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
+hud_pos_inp = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
+
+// ============================================================================
+// SESSION DETECTION — IANA timezone, DST-safe
+// ============================================================================
+in_lon_full = show_london and not na(time("", "0300-1200", "America/New_York"))
+in_lon_tw   = show_london and not na(time("", "0300-0500", "America/New_York"))
+in_ny_full  = show_ny     and not na(time("", "0800-1700", "America/New_York"))
+in_ny_tw    = show_ny     and not na(time("", "0800-1100", "America/New_York"))
+in_session  = in_lon_full or in_ny_full
+in_tw       = in_lon_tw   or in_ny_tw
+sess_name   = in_lon_tw ? "LONDON  Trade Window" : in_lon_full ? "LONDON" : in_ny_tw ? "NEW YORK  Trade Window" : in_ny_full ? "NEW YORK" : "CLOSED"
+
+// ============================================================================
+// SESSION BOX HELPERS
+// ============================================================================
+f_sess_lbl_size(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.large
+f_pips(_move)       => str.tostring(math.round(_move / pip_divisor, 1))
+
+// ============================================================================
+// LONDON BOX
+// ============================================================================
+var box   lon_box     = na
+var box   lon_tw_box  = na
+var label lon_lbl     = na
+var float lon_open_px = na
+var float lon_hi      = na
+var float lon_lo      = na
+var float lon_tw_hi   = na
+var float lon_tw_lo   = na
+
+lon_just_opened = in_lon_full and not in_lon_full[1]
+lon_just_closed = not in_lon_full and in_lon_full[1]
+lon_tw_opened   = in_lon_tw and not in_lon_tw[1]
+lon_tw_closed   = not in_lon_tw and in_lon_tw[1]
+
+if lon_just_opened
+    lon_open_px := open
+    lon_hi      := high
+    lon_lo      := low
+    lon_box     := box.new(bar_index, high, bar_index + 1, low, border_color=lon_border, border_width=sess_border_width, bgcolor=lon_full_fill)
+    lon_lbl     := label.new(bar_index, high, "LONDON  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=lon_label_col, size=f_sess_lbl_size(sess_label_size))
+
+if in_lon_full and not lon_just_opened and not na(lon_box)
+    lon_hi  := math.max(lon_hi, high)
+    lon_lo  := math.min(lon_lo, low)
+    box.set_top(lon_box,    lon_hi)
+    box.set_bottom(lon_box, lon_lo)
+    box.set_right(lon_box,  bar_index + 1)
+    pip_move = close - lon_open_px
+    pip_txt  = pip_move >= 0 ? "+" + f_pips(pip_move) + " pips" : f_pips(pip_move) + " pips"
+    label.set_xy(lon_lbl,   bar_index, lon_hi)
+    label.set_text(lon_lbl, "LONDON  " + pip_txt)
+    label.set_textcolor(lon_lbl, pip_move >= 0 ? lon_label_col : color.new(#EE7733, 0))
+
+if lon_just_closed and not na(lon_box)
+    box.set_right(lon_box, bar_index - 1)
+
+if lon_tw_opened
+    lon_tw_hi  := high
+    lon_tw_lo  := low
+    lon_tw_box := box.new(bar_index, high, bar_index + 1, low, border_color=lon_border, border_width=sess_border_width, bgcolor=lon_tw_fill)
+
+if in_lon_tw and not lon_tw_opened and not na(lon_tw_box)
+    lon_tw_hi := math.max(lon_tw_hi, high)
+    lon_tw_lo := math.min(lon_tw_lo, low)
+    box.set_top(lon_tw_box,    lon_tw_hi)
+    box.set_bottom(lon_tw_box, lon_tw_lo)
+    box.set_right(lon_tw_box,  bar_index + 1)
+
+if lon_tw_closed and not na(lon_tw_box)
+    box.set_right(lon_tw_box, bar_index - 1)
+
+// ============================================================================
+// NEW YORK BOX
+// ============================================================================
+var box   ny_box     = na
+var box   ny_tw_box  = na
+var label ny_lbl     = na
+var float ny_open_px = na
+var float ny_hi      = na
+var float ny_lo      = na
+var float ny_tw_hi   = na
+var float ny_tw_lo   = na
+
+ny_just_opened = in_ny_full and not in_ny_full[1]
+ny_just_closed = not in_ny_full and in_ny_full[1]
+ny_tw_opened   = in_ny_tw and not in_ny_tw[1]
+ny_tw_closed   = not in_ny_tw and in_ny_tw[1]
+
+if ny_just_opened
+    ny_open_px := open
+    ny_hi      := high
+    ny_lo      := low
+    ny_box     := box.new(bar_index, high, bar_index + 1, low, border_color=ny_border, border_width=sess_border_width, bgcolor=ny_full_fill)
+    ny_lbl     := label.new(bar_index, high, "NEW YORK  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=ny_label_col, size=f_sess_lbl_size(sess_label_size))
+
+if in_ny_full and not ny_just_opened and not na(ny_box)
+    ny_hi  := math.max(ny_hi, high)
+    ny_lo  := math.min(ny_lo, low)
+    box.set_top(ny_box,    ny_hi)
+    box.set_bottom(ny_box, ny_lo)
+    box.set_right(ny_box,  bar_index + 1)
+    pip_move = close - ny_open_px
+    pip_txt  = pip_move >= 0 ? "+" + f_pips(pip_move) + " pips" : f_pips(pip_move) + " pips"
+    label.set_xy(ny_lbl,   bar_index, ny_hi)
+    label.set_text(ny_lbl, "NEW YORK  " + pip_txt)
+    label.set_textcolor(ny_lbl, pip_move >= 0 ? ny_label_col : color.new(#EE7733, 0))
+
+if ny_just_closed and not na(ny_box)
+    box.set_right(ny_box, bar_index - 1)
+
+if ny_tw_opened
+    ny_tw_hi  := high
+    ny_tw_lo  := low
+    ny_tw_box := box.new(bar_index, high, bar_index + 1, low, border_color=ny_border, border_width=sess_border_width, bgcolor=ny_tw_fill)
+
+if in_ny_full and not ny_tw_opened and not na(ny_tw_box)
+    ny_tw_hi := math.max(ny_tw_hi, high)
+    ny_tw_lo := math.min(ny_tw_lo, low)
+    box.set_top(ny_tw_box,    ny_tw_hi)
+    box.set_bottom(ny_tw_box, ny_tw_lo)
+    box.set_right(ny_tw_box,  bar_index + 1)
+
+if ny_tw_closed and not na(ny_tw_box)
+    box.set_right(ny_tw_box, bar_index - 1)
+
+// ============================================================================
+// COMPUTE SHA LAYERS
+// ============================================================================
+[bO, bH, bL, bC] = f_sha(base_len1, base_len2, open, high, low, close)
+
+htf1_o = request.security(syminfo.tickerid, htf1_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
+htf1_h = request.security(syminfo.tickerid, htf1_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
+htf1_l = request.security(syminfo.tickerid, htf1_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
+htf1_c = request.security(syminfo.tickerid, htf1_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
+[h1O, h1H, h1L, h1C] = f_sha(htf1_len1, htf1_len2, htf1_o, htf1_h, htf1_l, htf1_c)
+
+htf2_o = request.security(syminfo.tickerid, htf2_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
+htf2_h = request.security(syminfo.tickerid, htf2_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
+htf2_l = request.security(syminfo.tickerid, htf2_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
+htf2_c = request.security(syminfo.tickerid, htf2_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
+[h2O, h2H, h2L, h2C] = f_sha(htf2_len1, htf2_len2, htf2_o, htf2_h, htf2_l, htf2_c)
+
+// ============================================================================
+// LAYER DIRECTION
+// ============================================================================
+base_ready    = not na(bO)  and not na(bC)
+htf1_ready    = not na(h1O) and not na(h1C)
+htf2_ready    = not na(h2O) and not na(h2C)
+all_ready     = base_ready and htf1_ready and htf2_ready
+
+base_bull_bar = bC  >= bO
+htf1_bull_bar = h1C >= h1O
+htf2_bull_bar = h2C >= h2O
+base_bear_bar = bC  < bO
+htf1_bear_bar = h1C < h1O
+htf2_bear_bar = h2C < h2O
+
+all_bull = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
+all_bear = all_ready and base_bear_bar and htf1_bear_bar and htf2_bear_bar
+
+// ============================================================================
+// ENTRY CONDITIONS — evaluated on previous bar, marker on current bar open
+// ============================================================================
+
+// — Cascade: all 3 flip into agreement
+cascade_bull_raw = all_bull[1] and not all_bull[2]
+cascade_bear_raw = all_bear[1] and not all_bear[2]
+
+// — C1: first adjacent SHA pair agreement
+
+
+// — C2: price closes beyond all 3 SHA bodies
+sha_top_b = math.max(bO,  bC)
+sha_top_1 = math.max(h1O, h1C)
+sha_top_2 = math.max(h2O, h2C)
+sha_bot_b = math.min(bO,  bC)
+sha_bot_1 = math.min(h1O, h1C)
+sha_bot_2 = math.min(h2O, h2C)
+
+// C2 — true full cluster cross in one candle
+// Bull: previous bar closed BELOW all three SHA bodies, this bar closes ABOVE all three
+// Bear: previous bar closed ABOVE all three SHA bodies, this bar closes BELOW all three
+was_below_all = close[1] < sha_bot_b[1] and close[1] < sha_bot_1[1] and close[1] < sha_bot_2[1]
+was_above_all = close[1] > sha_top_b[1] and close[1] > sha_top_1[1] and close[1] > sha_top_2[1]
+now_above_all = close > sha_top_b and close > sha_top_1 and close > sha_top_2
+now_below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
+
+c2_bull_raw = was_below_all and now_above_all
+c2_bear_raw = was_above_all and now_below_all
+
+// C3 — Pullback Resume
+// Price closes above all 3 SHA bodies this bar, was NOT fully above all 3 last bar
+// Broader than C2 — catches shallow and deep pullbacks, not just full cluster crosses
+c3_bull_raw = now_above_all and not now_above_all[1]
+c3_bear_raw = now_below_all and not now_below_all[1]
+
+// — Session gates (applied per condition)
+cascade_bull = show_cascade and cascade_bull_raw and (cascade_sess_only ? in_session[1] : true)
+cascade_bear = show_cascade and cascade_bear_raw and (cascade_sess_only ? in_session[1] : true)
+c2_bull      = show_c2      and c2_bull_raw      and (c2_sess_only      ? in_session[1] : true)
+c2_bear      = show_c2      and c2_bear_raw      and (c2_sess_only      ? in_session[1] : true)
+c3_bull      = show_c3      and c3_bull_raw      and (c3_sess_only      ? in_session[1] : true)
+c3_bear      = show_c3      and c3_bear_raw      and (c3_sess_only      ? in_session[1] : true)
+
+// ============================================================================
+// MARKER SIZE HELPER
+// ============================================================================
+f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+atr14 = ta.atr(14)
+
+// ============================================================================
+// DRAW ENTRY MARKERS — all on current bar open (next bar after signal)
+// Cascade  : filled arrow  ▲▼  above/below bar
+// C1       : diamond shape  ◆   further out
+// C2       : circle dot     ●   furthest out
+// ============================================================================
+
+// Cascade — filled arrow
+if cascade_bull
+    label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=cascade_bull_col, textcolor=color.white, size=f_sz(cascade_size))
+if cascade_bear
+    label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_sz(cascade_size))
+
+// C1 — diamond (label_diamond style), slightly further from bar
+
+// C2 — circle dot, furthest from bar
+if c2_bull
+    label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=c2_bull_col, textcolor=color.white, size=f_sz(c2_size))
+if c2_bear
+    label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=c2_bear_col, textcolor=color.white, size=f_sz(c2_size))
+
+// C3 markers — square shape, furthest out
+if c3_bull
+    label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=c3_bull_col, textcolor=color.white, size=f_sz(c3_size))
+if c3_bear
+    label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=c3_bear_col, textcolor=color.white, size=f_sz(c3_size))
+
+// ============================================================================
+// DRAW SHA CANDLES — HTF2 → HTF1 → Base
+// ============================================================================
+htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
+htf2_wick_col = show_wicks   ? color.new(htf2_wick,   htf2_opacity) : na
+htf2_brdr_col = show_borders ? color.new(htf2_border, htf2_opacity) : htf2_body_col
+htf2_pH       = show_wicks ? h2H : math.max(h2O, h2C)
+htf2_pL       = show_wicks ? h2L : math.min(h2O, h2C)
+
+plotcandle(htf2_ready and htf2_show ? h2O     : na, htf2_ready and htf2_show ? htf2_pH : na,
+           htf2_ready and htf2_show ? htf2_pL : na, htf2_ready and htf2_show ? h2C     : na,
+           title="HTF2 SHA", color=htf2_ready and htf2_show ? htf2_body_col : na,
+           wickcolor=htf2_ready and htf2_show ? htf2_wick_col : na,
+           bordercolor=htf2_ready and htf2_show ? htf2_brdr_col : na)
+
+htf1_body_col = h1C >= h1O ? color.new(htf1_bull, htf1_opacity) : color.new(htf1_bear, htf1_opacity)
+htf1_wick_col = show_wicks   ? color.new(htf1_wick,   htf1_opacity) : na
+htf1_brdr_col = show_borders ? color.new(htf1_border, htf1_opacity) : htf1_body_col
+htf1_pH       = show_wicks ? h1H : math.max(h1O, h1C)
+htf1_pL       = show_wicks ? h1L : math.min(h1O, h1C)
+
+plotcandle(htf1_ready and htf1_show ? h1O     : na, htf1_ready and htf1_show ? htf1_pH : na,
+           htf1_ready and htf1_show ? htf1_pL : na, htf1_ready and htf1_show ? h1C     : na,
+           title="HTF1 SHA", color=htf1_ready and htf1_show ? htf1_body_col : na,
+           wickcolor=htf1_ready and htf1_show ? htf1_wick_col : na,
+           bordercolor=htf1_ready and htf1_show ? htf1_brdr_col : na)
+
+base_body_col = bC >= bO ? color.new(base_bull, base_opacity) : color.new(base_bear, base_opacity)
+base_wick_col = show_wicks   ? color.new(base_wick,   base_opacity) : na
+base_brdr_col = show_borders ? color.new(base_border, base_opacity) : base_body_col
+base_pH       = show_wicks ? bH : math.max(bO, bC)
+base_pL       = show_wicks ? bL : math.min(bO, bC)
+
+plotcandle(base_ready and base_show ? bO      : na, base_ready and base_show ? base_pH : na,
+           base_ready and base_show ? base_pL : na, base_ready and base_show ? bC      : na,
+           title="Base SHA", color=base_ready and base_show ? base_body_col : na,
+           wickcolor=base_ready and base_show ? base_wick_col : na,
+           bordercolor=base_ready and base_show ? base_brdr_col : na)
+
+// ============================================================================
+// STATE HUD
+// ============================================================================
+f_hud_pos(_s) => _s == "Top Left" ? position.top_left : _s == "Top Right" ? position.top_right : _s == "Bottom Left" ? position.bottom_left : position.bottom_right
+f_dir_str(_bull, _bear) => _bull ? "BULLISH" : _bear ? "BEARISH" : "FLAT"
+f_dir_col(_bull, _bear) => _bull ? color.new(#0077BB, 0) : _bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
+
+align_txt = all_bull ? "ALL BULL  ▲" : all_bear ? "ALL BEAR  ▼" : "MIXED  —"
+align_col = all_bull ? color.new(#0077BB, 0) : all_bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
+sess_col  = in_tw ? color.new(#0077BB, 0) : in_session ? color.new(#33BBEE, 0) : color.new(#888888, 0)
+
+W  = color.white
+BK = color.new(#212121, 0)
+GR = color.new(#888888, 0)
+SZ = size.normal
+SS = size.small
+
+var table hud = table.new(f_hud_pos(hud_pos_inp), 2, 8, frame_color=color.new(#CCCCCC, 0), frame_width=1, border_color=color.new(#DDDDDD, 0), border_width=1)
+
+if show_hud and barstate.islast
+    table.cell(hud, 0, 0, "3SHA STATE",  bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 0, htf2_tf + " / " + htf1_tf + " / Base", bgcolor=W, text_color=GR, text_size=SS)
+
+    table.cell(hud, 0, 1, "HTF2 (" + htf2_tf + ")", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 1, f_dir_str(htf2_bull_bar, htf2_bear_bar), bgcolor=W, text_color=f_dir_col(htf2_bull_bar, htf2_bear_bar), text_size=SZ)
+
+    table.cell(hud, 0, 2, "HTF1 (" + htf1_tf + ")", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 2, f_dir_str(htf1_bull_bar, htf1_bear_bar), bgcolor=W, text_color=f_dir_col(htf1_bull_bar, htf1_bear_bar), text_size=SZ)
+
+    table.cell(hud, 0, 3, "Base (Chart)", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 3, f_dir_str(base_bull_bar, base_bear_bar), bgcolor=W, text_color=f_dir_col(base_bull_bar, base_bear_bar), text_size=SZ)
+
+    table.cell(hud, 0, 4, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+    table.cell(hud, 1, 4, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+
+    table.cell(hud, 0, 5, "Alignment", bgcolor=W, text_color=BK,       text_size=SZ)
+    table.cell(hud, 1, 5, align_txt,   bgcolor=W, text_color=align_col, text_size=SZ)
+
+    table.cell(hud, 0, 6, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+    table.cell(hud, 1, 6, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+
+    table.cell(hud, 0, 7, "Session",  bgcolor=W, text_color=BK,      text_size=SZ)
+    table.cell(hud, 1, 7, sess_name,  bgcolor=W, text_color=sess_col, text_size=SZ)
