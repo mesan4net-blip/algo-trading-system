@@ -11,7 +11,7 @@
 strategy("3SHA Strategy v3 — From Verified Visual", shorttitle="3SHA-v3", overlay=true,
          initial_capital=100000, currency=currency.USD,
          default_qty_type=strategy.fixed, default_qty_value=1,
-         calc_on_every_tick=false, process_orders_on_close=false,
+         calc_on_every_tick=true, process_orders_on_close=false,
          max_bars_back=5000, max_boxes_count=500, max_labels_count=500, max_lines_count=500)
 
 // ============================================================================
