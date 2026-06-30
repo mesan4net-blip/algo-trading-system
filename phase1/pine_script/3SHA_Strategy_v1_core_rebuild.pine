@@ -62,9 +62,27 @@ ema_len = input.int(200, "EMA Length", minval=1, group=grp_ema)
 grp_entry = "Entry Conditions"
 use_sess_filter = input.bool(true, "Session Filter — London + New York Only", group=grp_entry)
 use_gap_filter  = input.bool(true, "Block Gap Bar Entries", group=grp_entry)
-show_cascade = input.bool(false, "Cascade — All 3 SHA agree", group=grp_entry)
-show_c2      = input.bool(false, "C2 — Full cluster cross", group=grp_entry)
-show_c3      = input.bool(true,  "C3 — Valid pullback resume", group=grp_entry)
+
+show_full_alignment = input.bool(false, "Full Alignment",
+     tooltip="All three SHA layers (Base, HTF1, HTF2) are now pointing the same direction. Highest confidence, but slowest to fire.",
+     group=grp_entry)
+
+show_cluster_cross = input.bool(false, "Full Cluster Cross",
+     tooltip="Price has broken completely through all three SHA layers in a single move — from fully below to fully above (or vice versa). Strong, decisive momentum signal.",
+     group=grp_entry)
+
+show_pullback_resume = input.bool(true, "Pullback Resume",
+     tooltip="Base price dipped into the trend (as far as HTF2) and has now recovered back in the original direction. Classic 'buy the dip' / 'sell the rally' continuation signal.",
+     group=grp_entry)
+
+show_early_trend = input.bool(false, "Early Trend Signal",
+     tooltip="Base and HTF1 are now aligned with each other, while HTF2 (the slowest layer) is still catching up. Fires earlier than Full Alignment, at the cost of some confirmation.",
+     group=grp_entry)
+
+early_trend_tier = input.string("Tier 1 — Early Cross", "Early Trend Signal — Confirmation Level",
+     options=["Tier 1 — Early Cross", "Tier 2 — Confirmed Cross"],
+     tooltip="Tier 1 — Early Cross: Base has closed past HTF2. HTF1 agrees in direction, but hasn't crossed HTF2 itself yet.\n\nTier 2 — Confirmed Cross: Both Base AND HTF1 have closed past HTF2. Stronger confirmation than Tier 1, still earlier than waiting for HTF2 to flip.",
+     group=grp_entry)
 
 // ============================================================================
 // INPUTS — STOP LOSS
@@ -165,17 +183,17 @@ sha_bot_1 = math.min(h1O, h1C)
 sha_bot_2 = math.min(h2O, h2C)
 
 // ============================================================================
-// C2 — true full cluster cross
+// FULL CLUSTER CROSS — price breaks completely through all 3 SHA layers
 // ============================================================================
 was_below_all = close[1] < sha_bot_b[1] and close[1] < sha_bot_1[1] and close[1] < sha_bot_2[1]
 was_above_all = close[1] > sha_top_b[1] and close[1] > sha_top_1[1] and close[1] > sha_top_2[1]
 now_above_all = close > sha_top_b and close > sha_top_1 and close > sha_top_2
 now_below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
-c2_bull_sig = was_below_all and now_above_all
-c2_bear_sig = was_above_all and now_below_all
+cluster_cross_bull_sig = was_below_all and now_above_all
+cluster_cross_bear_sig = was_above_all and now_below_all
 
 // ============================================================================
-// C3 — Valid Pullback: Base dips below/above HTF1 body, HTF2 holds, then recovers
+// PULLBACK RESUME — Base dips below/above HTF1 body (as far as HTF2), then recovers
 // ============================================================================
 var bool pb_bull_dipped = false
 var bool pb_bear_dipped = false
@@ -202,20 +220,46 @@ if bear_dip_condition
 if bear_dip_invalidated or bear_recovery
     pb_bear_dipped := false
 
-c3_bull_sig = bull_recovery and pb_bull_dipped[1] and htf2_bull_bar
-c3_bear_sig = bear_recovery and pb_bear_dipped[1] and htf2_bear_bar
+pullback_resume_bull_sig = bull_recovery and pb_bull_dipped[1] and htf2_bull_bar
+pullback_resume_bear_sig = bear_recovery and pb_bear_dipped[1] and htf2_bear_bar
 
 // ============================================================================
-// CASCADE
+// FULL ALIGNMENT — all 3 SHA layers flip into the same direction together
 // ============================================================================
-casc_bull_sig = all_bull and not all_bull[1]
-casc_bear_sig = all_bear and not all_bear[1]
+full_alignment_bull_sig = all_bull and not all_bull[1]
+full_alignment_bear_sig = all_bear and not all_bear[1]
+
+// ============================================================================
+// EARLY TREND SIGNAL — Base + HTF1 agree while HTF2 still catching up
+// Tier 1 — Early Cross:     Base closes past HTF2, HTF1 agrees in direction
+// Tier 2 — Confirmed Cross: Both Base AND HTF1 close past HTF2
+// ============================================================================
+base_htf1_agree_bull = base_bull_bar and htf1_bull_bar
+base_htf1_agree_bear = base_bear_bar and htf1_bear_bar
+
+base_crossed_htf2_bull = bC  > sha_top_2
+htf1_crossed_htf2_bull = h1C > sha_top_2
+base_crossed_htf2_bear = bC  < sha_bot_2
+htf1_crossed_htf2_bear = h1C < sha_bot_2
+
+early_trend_tier1_bull = base_htf1_agree_bull and base_crossed_htf2_bull
+early_trend_tier1_bear = base_htf1_agree_bear and base_crossed_htf2_bear
+
+early_trend_tier2_bull = base_htf1_agree_bull and base_crossed_htf2_bull and htf1_crossed_htf2_bull
+early_trend_tier2_bear = base_htf1_agree_bear and base_crossed_htf2_bear and htf1_crossed_htf2_bear
+
+early_trend_sig_bull_raw = early_trend_tier == "Tier 1 — Early Cross" ? early_trend_tier1_bull : early_trend_tier2_bull
+early_trend_sig_bear_raw = early_trend_tier == "Tier 1 — Early Cross" ? early_trend_tier1_bear : early_trend_tier2_bear
+
+// Fire only on the bar the condition first becomes true — not every bar it remains true
+early_trend_sig_bull = early_trend_sig_bull_raw and not early_trend_sig_bull_raw[1]
+early_trend_sig_bear = early_trend_sig_bear_raw and not early_trend_sig_bear_raw[1]
 
 // ============================================================================
 // ENTRY LOGIC — toggle ON = trade trigger, no pyramiding in this core build
 // ============================================================================
-entry_sig_bull = (show_cascade and casc_bull_sig) or (show_c2 and c2_bull_sig) or (show_c3 and c3_bull_sig)
-entry_sig_bear = (show_cascade and casc_bear_sig) or (show_c2 and c2_bear_sig) or (show_c3 and c3_bear_sig)
+entry_sig_bull = (show_full_alignment and full_alignment_bull_sig) or (show_cluster_cross and cluster_cross_bull_sig) or (show_pullback_resume and pullback_resume_bull_sig) or (show_early_trend and early_trend_sig_bull)
+entry_sig_bear = (show_full_alignment and full_alignment_bear_sig) or (show_cluster_cross and cluster_cross_bear_sig) or (show_pullback_resume and pullback_resume_bear_sig) or (show_early_trend and early_trend_sig_bear)
 
 entry_long_raw  = entry_sig_bull[1] and ema_allow_long  and (not use_sess_filter or in_session[1]) and (not use_gap_filter or not gap_bar) and all_ready
 entry_short_raw = entry_sig_bear[1] and ema_allow_short and (not use_sess_filter or in_session[1]) and (not use_gap_filter or not gap_bar) and all_ready
