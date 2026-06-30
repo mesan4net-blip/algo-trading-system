@@ -336,6 +336,22 @@ all_bull = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
 all_bear = all_ready and base_bear_bar and htf1_bear_bar and htf2_bear_bar
 
 // ============================================================================
+// DATA WINDOW — cursor-following SHA direction at ANY bar
+// Hover over any candle on the chart and the Data Window panel (right side)
+// shows these values live for that exact bar — not just the latest bar
+// 1 = Bullish, -1 = Bearish
+// ============================================================================
+base_dir_dw = base_bull_bar ? 1 : -1
+htf1_dir_dw = htf1_bull_bar ? 1 : -1
+htf2_dir_dw = htf2_bull_bar ? 1 : -1
+align_dw    = all_bull ? 1 : all_bear ? -1 : 0   // 1=All Bull, -1=All Bear, 0=Mixed
+
+plot(base_dir_dw, title="Base Direction (1=Bull -1=Bear)", display=display.data_window)
+plot(htf1_dir_dw, title="HTF1 Direction (1=Bull -1=Bear)", display=display.data_window)
+plot(htf2_dir_dw, title="HTF2 Direction (1=Bull -1=Bear)", display=display.data_window)
+plot(align_dw,    title="Alignment (1=All Bull -1=All Bear 0=Mixed)", display=display.data_window)
+
+// ============================================================================
 // ENTRY CONDITIONS — evaluated on previous bar, marker on current bar open
 // ============================================================================
 
