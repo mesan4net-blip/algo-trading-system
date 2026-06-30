@@ -107,9 +107,10 @@ htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
 htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
 htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
 htf1_show    = input.bool(true, "Show HTF1 SHA Candles",      group=grp_htf1)
-htf1_bull    = input.color(color.new(#33BBEE, 0), "Bull Color",   group=grp_htf1)
-htf1_bear    = input.color(color.new(#CC3311, 0), "Bear Color",   group=grp_htf1)
-htf1_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf1)
+htf1_bull    = input.color(color.new(#33BBEE, 0), "Bull Color",          group=grp_htf1)
+htf1_bear    = input.color(color.new(#CC3311, 0), "Bear Color",          group=grp_htf1)
+htf1_border_bull = input.color(color.new(#000000, 0), "Bull Border Color", group=grp_htf1)
+htf1_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group=grp_htf1)
 htf1_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf1)
 htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf1)
 
@@ -121,9 +122,10 @@ htf2_tf      = input.timeframe("240", "HTF2 Timeframe",       group=grp_htf2)
 htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf2)
 htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf2)
 htf2_show    = input.bool(true, "Show HTF2 SHA Candles",      group=grp_htf2)
-htf2_bull    = input.color(color.new(#004488, 0), "Bull Color",   group=grp_htf2)
-htf2_bear    = input.color(color.new(#AA3377, 0), "Bear Color",   group=grp_htf2)
-htf2_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_htf2)
+htf2_bull    = input.color(color.new(#004488, 0), "Bull Color",          group=grp_htf2)
+htf2_bear    = input.color(color.new(#AA3377, 0), "Bear Color",          group=grp_htf2)
+htf2_border_bull = input.color(color.new(#000000, 0), "Bull Border Color", group=grp_htf2)
+htf2_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group=grp_htf2)
 htf2_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf2)
 htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf2)
 
@@ -490,7 +492,7 @@ if trend_cont_bear
 // ============================================================================
 htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
 htf2_wick_col = show_wicks   ? color.new(htf2_wick,   htf2_opacity) : na
-htf2_brdr_col = show_borders ? color.new(htf2_border, htf2_opacity) : htf2_body_col
+htf2_brdr_col = show_borders ? (h2C >= h2O ? color.new(htf2_border_bull, htf2_opacity) : color.new(htf2_border_bear, htf2_opacity)) : htf2_body_col
 htf2_pH       = show_wicks ? h2H : math.max(h2O, h2C)
 htf2_pL       = show_wicks ? h2L : math.min(h2O, h2C)
 
@@ -502,7 +504,7 @@ plotcandle(htf2_ready and htf2_show ? h2O     : na, htf2_ready and htf2_show ? h
 
 htf1_body_col = h1C >= h1O ? color.new(htf1_bull, htf1_opacity) : color.new(htf1_bear, htf1_opacity)
 htf1_wick_col = show_wicks   ? color.new(htf1_wick,   htf1_opacity) : na
-htf1_brdr_col = show_borders ? color.new(htf1_border, htf1_opacity) : htf1_body_col
+htf1_brdr_col = show_borders ? (h1C >= h1O ? color.new(htf1_border_bull, htf1_opacity) : color.new(htf1_border_bear, htf1_opacity)) : htf1_body_col
 htf1_pH       = show_wicks ? h1H : math.max(h1O, h1C)
 htf1_pL       = show_wicks ? h1L : math.min(h1O, h1C)
 
