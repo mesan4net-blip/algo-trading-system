@@ -451,12 +451,15 @@ f_sl_short() =>
 
 // ============================================================================
 // POSITION SIZING — dynamic, 1% equity risk
+// Returns UNITS of the instrument (not lots) — required by strategy.entry(qty=)
+// 1 standard lot = 100,000 units for forex pairs
 // ============================================================================
 f_qty(_entry, _sl) =>
     risk_usd  = strategy.equity * (risk_pct / 100.0)
     sl_pips   = math.abs(_entry - _sl) / pip_divisor
     lots      = sl_pips > 0 ? risk_usd / (sl_pips * pip_value_per_lot) : 1.0
-    math.max(lots, 0.01)
+    units     = lots * 100000
+    math.max(units, 1000)
 
 // ============================================================================
 // TRAILING STOP STATE
