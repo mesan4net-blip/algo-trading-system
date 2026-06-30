@@ -58,8 +58,7 @@ f_norm(_h)   => _h >= 24 ? _h - 24 : _h < 0 ? _h + 24 : _h
 // ============================================================================
 grp_sess          = "Trade Sessions"
 pip_divisor       = input.float(0.0001,   "Pip Size (Forex=0.0001  JPY/Gold=0.01)", minval=0.00001, step=0.00001, group=grp_sess)
-auto_pip_value    = input.bool(true,      "Auto-Calculate Pip Value Per Lot",        group=grp_sess)
-pip_value_manual  = input.float(10.0,     "Manual Pip Value Override (USD)  — only used if Auto is OFF", minval=0.01, group=grp_sess)
+pip_value_per_lot = input.float(10.0,     "Pip Value Per Lot (USD)",                minval=0.01,                  group=grp_sess)
 sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
 sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
 show_london       = input.bool(true,                    "Show London Session",           group=grp_sess)
@@ -449,16 +448,6 @@ f_sl_short() =>
                 highest := high[i]
         sl := highest + sl_buffer * pip_divisor
     sl
-
-// ============================================================================
-// AUTO PIP VALUE CALCULATION
-// syminfo.pointvalue = USD value of a 1.0 price move for 1 unit of the instrument,
-// as reported by the broker/exchange data feed — already accounts for contract
-// size and (where applicable) quote-currency conversion.
-// Pip value per STANDARD LOT = pip_size × pointvalue × 100,000 units
-// ============================================================================
-pip_value_auto_calc = pip_divisor * syminfo.pointvalue * 100000
-pip_value_per_lot   = auto_pip_value ? pip_value_auto_calc : pip_value_manual
 
 // ============================================================================
 // POSITION SIZING — dynamic, 1% equity risk
