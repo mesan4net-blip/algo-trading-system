@@ -316,17 +316,16 @@ if ny_tw_closed and not na(ny_tw_box)
 // ============================================================================
 [bO, bH, bL, bC] = f_sha(base_len1, base_len2, open, high, low, close)
 
-htf1_o = request.security(syminfo.tickerid, htf1_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
-htf1_h = request.security(syminfo.tickerid, htf1_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
-htf1_l = request.security(syminfo.tickerid, htf1_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
-htf1_c = request.security(syminfo.tickerid, htf1_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
-[h1O, h1H, h1L, h1C] = f_sha(htf1_len1, htf1_len2, htf1_o, htf1_h, htf1_l, htf1_c)
+// CRITICAL: SHA smoothing for HTF1/HTF2 must run NATIVELY on that timeframe's
+// own bar stream — computed inside request.security() — not recomputed on the
+// chart's own (lower) timeframe using already-fetched OHLC. Recomputing locally
+// makes the EMA internal state chart-timeframe-dependent, producing a DIFFERENT
+// SHA color for the same underlying HTF candle depending on which chart you view
+// it from. Wrapping f_sha() inside request.security() ensures the EMA only
+// updates once per real HTF bar close, identical no matter which chart you're on.
+[h1O, h1H, h1L, h1C] = request.security(syminfo.tickerid, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 
-htf2_o = request.security(syminfo.tickerid, htf2_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
-htf2_h = request.security(syminfo.tickerid, htf2_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
-htf2_l = request.security(syminfo.tickerid, htf2_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
-htf2_c = request.security(syminfo.tickerid, htf2_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
-[h2O, h2H, h2L, h2C] = f_sha(htf2_len1, htf2_len2, htf2_o, htf2_h, htf2_l, htf2_c)
+[h2O, h2H, h2L, h2C] = request.security(syminfo.tickerid, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 
 // ============================================================================
 // LAYER DIRECTION
