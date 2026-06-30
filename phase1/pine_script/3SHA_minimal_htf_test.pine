@@ -1,0 +1,56 @@
+//@version=6
+strategy("3SHA Minimal HTF Test", shorttitle="3SHA-HTF-Test", overlay=true)
+
+htf1_tf = input.timeframe("60", "HTF1 Timeframe")
+htf2_tf = input.timeframe("240", "HTF2 Timeframe")
+
+f_sha(_len1, _len2, _o, _h, _l, _c) =>
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
+    haC = (o1 + h1 + l1 + c1) / 4.0
+    var float haO = na
+    haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
+    haH = math.max(h1, math.max(haO, haC))
+    haL = math.min(l1, math.min(haO, haC))
+    o2  = ta.ema(haO, _len2)
+    h2  = ta.ema(haH, _len2)
+    l2  = ta.ema(haL, _len2)
+    c2  = ta.ema(haC, _len2)
+    [o2, h2, l2, c2]
+
+[bO, bH, bL, bC] = f_sha(4, 8, open, high, low, close)
+base_ready = not na(bO) and not na(bC)
+
+htf1_o = request.security(syminfo.tickerid, htf1_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
+htf1_h = request.security(syminfo.tickerid, htf1_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
+htf1_l = request.security(syminfo.tickerid, htf1_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
+htf1_c = request.security(syminfo.tickerid, htf1_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
+[h1O, h1H, h1L, h1C] = f_sha(4, 8, htf1_o, htf1_h, htf1_l, htf1_c)
+htf1_ready = not na(h1O) and not na(h1C)
+
+htf2_o = request.security(syminfo.tickerid, htf2_tf, open,  barmerge.gaps_off, barmerge.lookahead_off)
+htf2_h = request.security(syminfo.tickerid, htf2_tf, high,  barmerge.gaps_off, barmerge.lookahead_off)
+htf2_l = request.security(syminfo.tickerid, htf2_tf, low,   barmerge.gaps_off, barmerge.lookahead_off)
+htf2_c = request.security(syminfo.tickerid, htf2_tf, close, barmerge.gaps_off, barmerge.lookahead_off)
+[h2O, h2H, h2L, h2C] = f_sha(4, 8, htf2_o, htf2_h, htf2_l, htf2_c)
+htf2_ready = not na(h2O) and not na(h2C)
+
+plotcandle(htf2_ready ? h2O : na, htf2_ready ? h2H : na, htf2_ready ? h2L : na, htf2_ready ? h2C : na,
+     title="HTF2 SHA", color=h2C>=h2O?color.new(color.green,50):color.new(color.red,50), bordercolor=color.new(color.black,50))
+
+plotcandle(htf1_ready ? h1O : na, htf1_ready ? h1H : na, htf1_ready ? h1L : na, htf1_ready ? h1C : na,
+     title="HTF1 SHA", color=h1C>=h1O?color.new(color.purple,25):color.new(color.yellow,25), bordercolor=color.new(color.black,25))
+
+plotcandle(base_ready ? bO : na, base_ready ? bH : na, base_ready ? bL : na, base_ready ? bC : na,
+     title="Base SHA", color=bC>=bO?color.blue:color.orange, bordercolor=color.black)
+
+var table dbg = table.new(position.top_right, 2, 3)
+if barstate.islast
+    table.cell(dbg, 0, 0, "Base Ready", text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 0, str.tostring(base_ready), text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 0, 1, "HTF1 Ready", text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 1, str.tostring(htf1_ready), text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 0, 2, "HTF2 Ready", text_color=color.black, bgcolor=color.white)
+    table.cell(dbg, 1, 2, str.tostring(htf2_ready), text_color=color.black, bgcolor=color.white)
