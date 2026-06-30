@@ -36,7 +36,7 @@ f_sha(_len1, _len2, _o, _h, _l, _c) =>
 // ============================================================================
 // INPUTS — BROKER TIME REFERENCE
 // ============================================================================
-grp_time        = "Broker Time Reference"
+grp_time        = "① ━━━ BROKER TIME REFERENCE ━━━"
 your_local_hour = input.int(18,  "Your Current Local Hour (24h)",                 minval=0,   maxval=23, group=grp_time)
 your_local_day  = input.int(28,  "Your Current Local Day",                         minval=1,   maxval=31, group=grp_time)
 broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                      minval=0,   maxval=23, group=grp_time)
@@ -64,7 +64,7 @@ ny_tw_c    = f_norm(16 + broker_offset)
 // ============================================================================
 // INPUTS — TRADE SESSIONS
 // ============================================================================
-grp_sess          = "Trade Sessions"
+grp_sess          = "② ━━━ TRADE SESSIONS ━━━"
 pip_divisor       = input.float(0.0001,   "Pip Size (Forex=0.0001  JPY/Gold=0.01)", minval=0.00001, step=0.00001, group=grp_sess)
 sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
 sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
@@ -82,14 +82,14 @@ ny_label_col      = input.color(color.new(#33BBEE, 0),  "New York — Label Colo
 // ============================================================================
 // INPUTS — GLOBAL DISPLAY
 // ============================================================================
-grp_global   = "Global Display"
+grp_global   = "③ ━━━ GLOBAL DISPLAY ━━━"
 show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
 show_borders = input.bool(true, "Show Borders (all layers)", group=grp_global)
 
 // ============================================================================
 // INPUTS — BASE SHA
 // ============================================================================
-grp_base     = "Base SHA  [Chart TF — auto]"
+grp_base     = "④ ━━━ BASE SHA  [Chart TF — auto] ━━━"
 base_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_base)
 base_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_base)
 base_show    = input.bool(true, "Show Base SHA Candles",      group=grp_base)
@@ -102,7 +102,7 @@ base_opacity = input.int(0,  "Opacity (0=solid 100=invisible)", minval=0, maxval
 // ============================================================================
 // INPUTS — HTF1 SHA
 // ============================================================================
-grp_htf1     = "HTF1 SHA  [Mid Timeframe]"
+grp_htf1     = "⑤ ━━━ HTF1 SHA  [Mid Timeframe] ━━━"
 htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
 htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
 htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
@@ -116,7 +116,7 @@ htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval
 // ============================================================================
 // INPUTS — HTF2 SHA
 // ============================================================================
-grp_htf2     = "HTF2 SHA  [High Timeframe]"
+grp_htf2     = "⑥ ━━━ HTF2 SHA  [High Timeframe] ━━━"
 htf2_tf      = input.timeframe("240", "HTF2 Timeframe",       group=grp_htf2)
 htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf2)
 htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf2)
@@ -130,57 +130,59 @@ htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval
 // ============================================================================
 // INPUTS — ENTRY CONDITIONS
 // ============================================================================
-grp_entry = "Entry Conditions"
+grp_entry_casc  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Cascade"
+grp_entry_c2    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ C2 — Cluster Cross"
+grp_entry_c3    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ C3 — Pullback Resume"
+grp_entry_early = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Early Trend Signal"
+grp_entry_cont  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Trend Continuation"
 
 // Cascade
-show_cascade      = input.bool(true,  "Show Cascade Marker  (all 3 SHA agree)",    group=grp_entry)
-cascade_sess_only = input.bool(true,  "Cascade — In Session Only",                 group=grp_entry)
-cascade_bull_col  = input.color(color.new(#0077BB, 0), "Cascade Bull Color",       group=grp_entry)
-cascade_bear_col  = input.color(color.new(#EE7733, 0), "Cascade Bear Color",       group=grp_entry)
-cascade_size      = input.string("Small", "Cascade Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
-
-// C1 — Adjacent SHA Agreement
+show_cascade      = input.bool(true,  "Show Cascade Marker  (all 3 SHA agree)",    group=grp_entry_casc)
+cascade_sess_only = input.bool(true,  "Cascade — In Session Only",                 group=grp_entry_casc)
+cascade_bull_col  = input.color(color.new(#0077BB, 0), "Cascade Bull Color",       group=grp_entry_casc)
+cascade_bear_col  = input.color(color.new(#EE7733, 0), "Cascade Bear Color",       group=grp_entry_casc)
+cascade_size      = input.string("Small", "Cascade Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_casc)
 
 // C2 — Price Cross All 3 SHA Bodies
-show_c2           = input.bool(true,  "Show C2 Marker  (price closes beyond all 3 SHA)", group=grp_entry)
-c2_sess_only      = input.bool(false, "C2 — In Session Only",                             group=grp_entry)
-c2_bull_col       = input.color(color.new(#0077BB, 0), "C2 Bull Color",                   group=grp_entry)
-c2_bear_col       = input.color(color.new(#EE7733, 0), "C2 Bear Color",                   group=grp_entry)
-c2_size           = input.string("Small", "C2 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+show_c2           = input.bool(true,  "Show C2 Marker  (price closes beyond all 3 SHA)", group=grp_entry_c2)
+c2_sess_only      = input.bool(false, "C2 — In Session Only",                             group=grp_entry_c2)
+c2_bull_col       = input.color(color.new(#0077BB, 0), "C2 Bull Color",                   group=grp_entry_c2)
+c2_bear_col       = input.color(color.new(#EE7733, 0), "C2 Bear Color",                   group=grp_entry_c2)
+c2_size           = input.string("Small", "C2 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c2)
 
 // C3 — Pullback Resume
-show_c3           = input.bool(true,  "Show C3 Marker  (pullback then resume above/below all 3 SHA)", group=grp_entry)
-c3_sess_only      = input.bool(false, "C3 — In Session Only",                             group=grp_entry)
-c3_bull_col       = input.color(color.new(#004488, 0), "C3 Bull Color",                   group=grp_entry)
-c3_bear_col       = input.color(color.new(#AA3377, 0), "C3 Bear Color",                   group=grp_entry)
-c3_size           = input.string("Small", "C3 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+show_c3           = input.bool(true,  "Show C3 Marker  (pullback then resume above/below all 3 SHA)", group=grp_entry_c3)
+c3_sess_only      = input.bool(false, "C3 — In Session Only",                             group=grp_entry_c3)
+c3_bull_col       = input.color(color.new(#004488, 0), "C3 Bull Color",                   group=grp_entry_c3)
+c3_bear_col       = input.color(color.new(#AA3377, 0), "C3 Bear Color",                   group=grp_entry_c3)
+c3_size           = input.string("Small", "C3 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c3)
 
 // Early Trend Signal — Base + HTF1 agree while HTF2 still catching up
 show_early_trend  = input.bool(false, "Show Early Trend Marker  (Base/HTF1 cross HTF2 before full flip)",
      tooltip="Base and HTF1 are now aligned with each other, while HTF2 (the slowest layer) is still catching up. Fires earlier than Cascade, at the cost of some confirmation.",
-     group=grp_entry)
+     group=grp_entry_early)
 early_trend_tier  = input.string("Tier 1 — Early Cross", "Early Trend — Confirmation Level",
      options=["Tier 1 — Early Cross", "Tier 2 — Confirmed Cross"],
      tooltip="Tier 1 — Early Cross: Base alone has closed past HTF2. HTF1 agrees in direction, but hasn't crossed HTF2 itself yet.\n\nTier 2 — Confirmed Cross: Both Base AND HTF1 have closed past HTF2. Stronger confirmation than Tier 1, still earlier than waiting for HTF2 to flip.",
-     group=grp_entry)
-early_trend_sess_only = input.bool(false, "Early Trend — In Session Only", group=grp_entry)
-early_trend_bull_col  = input.color(color.new(#0077BB, 0), "Early Trend Bull Color", group=grp_entry)
-early_trend_bear_col  = input.color(color.new(#EE7733, 0), "Early Trend Bear Color", group=grp_entry)
-early_trend_size      = input.string("Small", "Early Trend Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+     group=grp_entry_early)
+early_trend_sess_only = input.bool(false, "Early Trend — In Session Only", group=grp_entry_early)
+early_trend_bull_col  = input.color(color.new(#0077BB, 0), "Early Trend Bull Color", group=grp_entry_early)
+early_trend_bear_col  = input.color(color.new(#EE7733, 0), "Early Trend Bear Color", group=grp_entry_early)
+early_trend_size      = input.string("Small", "Early Trend Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_early)
 
 // Trend Continuation — full spatial stacking of Base/HTF1/HTF2 bodies, fires once at London open
 // Bucket: opens at London open, closes at end of NY session — separate from trail/flip/R:R system
 show_trend_cont   = input.bool(false, "Show Trend Continuation Marker  (LON open → NY close bucket)",
      tooltip="Fires once, only at London session open, when Base/HTF1/HTF2 bodies are fully stacked in order (not just same color). Position closes automatically at end of NY session — a separate session-bound bucket from the trail/flip/R:R exit system.",
-     group=grp_entry)
-trend_cont_bull_col = input.color(color.new(#0077BB, 0), "Trend Continuation Bull Color", group=grp_entry)
-trend_cont_bear_col = input.color(color.new(#EE7733, 0), "Trend Continuation Bear Color", group=grp_entry)
-trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry)
+     group=grp_entry_cont)
+trend_cont_bull_col = input.color(color.new(#0077BB, 0), "Trend Continuation Bull Color", group=grp_entry_cont)
+trend_cont_bear_col = input.color(color.new(#EE7733, 0), "Trend Continuation Bear Color", group=grp_entry_cont)
+trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_cont)
 
 // ============================================================================
 // INPUTS — STATE HUD
 // ============================================================================
-grp_hud     = "State HUD"
+grp_hud     = "⑧ ━━━ STATE HUD ━━━"
 show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
 hud_pos_inp = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
 
