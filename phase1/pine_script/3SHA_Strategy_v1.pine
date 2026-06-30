@@ -159,17 +159,30 @@ c3_size           = input.string("Small", "C3 Size", options=["Tiny","Small","No
 // INPUTS — STOP LOSS
 // ============================================================================
 // ============================================================================
-// INPUTS — INITIAL STOP LOSS
+// INPUTS — STOP LOSS
 // ============================================================================
-grp_sl       = "Initial Stop Loss"
+grp_sl       = "Stop Loss"
 sl_method    = input.string("Prev N Bars Low/High", "SL Placement Method", options=["Trade Candle Low/High","Prev N Bars Low/High"], group=grp_sl)
 sl_lookback  = input.int(30,  "Lookback N Bars  (Prev N Bars method only)", minval=1, maxval=100, group=grp_sl)
 sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)",             minval=0, step=0.5,  group=grp_sl)
+show_sl_dot  = input.bool(true, "Show Initial SL Dot Marker", group=grp_sl)
+sl_dot_col   = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_sl)
+sl_dot_size  = input.string("Tiny", "SL Dot Size", options=["Tiny","Small","Normal"], group=grp_sl)
 
 // ============================================================================
-// INPUTS — TRAIL — HOW THE STOP MOVES
+// INPUTS — TRAIL & PROFIT MANAGEMENT
 // ============================================================================
-grp_trail    = "Trail — How The Stop Moves"
+grp_trail        = "Trail & Profit Management"
+
+// Partial close at R:R
+use_partial       = input.bool(true, "Enable Partial Close at R:R Target",  group=grp_trail)
+partial_rr        = input.string("2:1", "Partial Close R:R Target", options=["1:1","1.5:1","2:1","2.5:1","3:1","4:1"], group=grp_trail)
+partial_pct       = input.float(50.0, "Partial Close Size (% of position)", minval=10, maxval=90, step=5, group=grp_trail)
+move_to_be        = input.bool(true, "Move SL to Breakeven + Buffer after Partial Close", group=grp_trail)
+be_buffer         = input.float(1.0, "Breakeven Buffer (pips, covers spread/commission)", minval=0, step=0.5, group=grp_trail)
+
+// Trail method for remainder
+trail_trigger = input.string("Touch", "Trail Stop Trigger", options=["Touch","Close Beyond"], group=grp_trail)
 trail_method = input.string("Rolling Candle Low/High", "Trail Method",
      options=["Rolling Candle Low/High","SHA Body"], group=grp_trail)
 trail_src    = input.string("Real Price", "Price Source  (Rolling Candle only)",
@@ -179,17 +192,12 @@ show_trail   = input.bool(true,  "Show Trail Line on Chart", group=grp_trail)
 trail_col    = input.color(color.new(#EE7733, 0), "Trail Line Color",       group=grp_trail)
 trail_width  = input.int(1, "Trail Line Width", minval=1, maxval=4,          group=grp_trail)
 
-// ============================================================================
-// INPUTS — EXIT — WHAT TRIGGERS THE CLOSE
-// ============================================================================
-grp_exit          = "Exit — What Triggers The Close"
-exit_trigger      = input.string("Touch", "Trail Stop Trigger",
-     options=["Touch","Close Beyond"], group=grp_exit)
+// Additional exit mechanisms for the position
 exit_flip_mode    = input.string("None", "Exit On SHA Flip",
-     options=["None","Any One Layer","All Three Layers"], group=grp_exit)
+     options=["None","Any One Layer","All Three Layers"], group=grp_trail)
 exit_sha_layer    = input.string("Base SHA", "Which Layer  (only used if 'Any One Layer' selected)",
-     options=["Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_exit)
-exit_sess_end     = input.bool(false, "Close all positions at session end", group=grp_exit)
+     options=["Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_trail)
+exit_sess_end     = input.bool(false, "Close all positions at session end", group=grp_trail)
 
 // ============================================================================
 // INPUTS — POSITION SIZING
@@ -486,11 +494,22 @@ sha_layer_flipped_against_short = exit_flip_mode == "Any One Layer"   ? single_l
 sess_just_ended = in_session[1] and not in_session
 
 // ============================================================================
-// EXECUTE ENTRIES + ENTRY PRICE LABELS
+// R:R RATIO PARSING — converts dropdown string to numeric multiplier
 // ============================================================================
-var float entry_sl     = na
-var float entry_px     = na
-var bool  trade_open   = false   // tracks whether a trade is currently open
+f_rr_value(_s) =>
+    _s == "1:1" ? 1.0 : _s == "1.5:1" ? 1.5 : _s == "2:1" ? 2.0 : _s == "2.5:1" ? 2.5 : _s == "3:1" ? 3.0 : 4.0
+
+rr_multiple = f_rr_value(partial_rr)
+
+// ============================================================================
+// EXECUTE ENTRIES + ENTRY PRICE LABELS + SL DOT
+// ============================================================================
+var float entry_sl       = na
+var float entry_px       = na
+var float initial_risk   = na   // distance from entry to original SL, in price terms
+var bool  partial_done   = false
+var bool  be_moved       = false
+var bool  trade_open     = false
 
 BLUE   = color.new(#0077BB, 0)
 ORANGE = color.new(#EE7733, 0)
@@ -498,64 +517,112 @@ GREEN  = color.new(#009900, 0)
 BLACK  = color.new(#000000, 0)
 WHITE  = color.white
 f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : size.normal
 atr14  = ta.atr(14)
 
 if entry_long
-    entry_px    := open
-    entry_sl    := f_sl_long()
-    qty          = f_qty(entry_px, entry_sl)
+    entry_px      := open
+    entry_sl      := f_sl_long()
+    initial_risk  := entry_px - entry_sl
+    partial_done  := false
+    be_moved      := false
+    qty            = f_qty(entry_px, entry_sl)
     strategy.entry("Long", strategy.long, qty=qty)
-    trail_level := f_trail_long()
-    trade_open  := true
+    trail_level   := f_trail_long()
+    trade_open    := true
     label.new(bar_index, low - atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_up, color=BLUE, textcolor=WHITE, size=size.small)
+    if show_sl_dot
+        label.new(bar_index, entry_sl, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 if entry_short
-    entry_px    := open
-    entry_sl    := f_sl_short()
-    qty          = f_qty(entry_px, entry_sl)
+    entry_px      := open
+    entry_sl      := f_sl_short()
+    initial_risk  := entry_sl - entry_px
+    partial_done  := false
+    be_moved      := false
+    qty            = f_qty(entry_px, entry_sl)
     strategy.entry("Short", strategy.short, qty=qty)
-    trail_level := f_trail_short()
-    trade_open  := true
+    trail_level   := f_trail_short()
+    trade_open    := true
     label.new(bar_index, high + atr14 * 1.5, str.tostring(entry_px, format.mintick), style=label.style_label_down, color=ORANGE, textcolor=WHITE, size=size.small)
+    if show_sl_dot
+        label.new(bar_index, entry_sl, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ============================================================================
-// MANAGE OPEN POSITIONS — trail update + exits + exit price labels
+// MANAGE OPEN POSITIONS
+// 1. Partial close at R:R target (once) → move SL to breakeven + buffer
+// 2. Trail update for remainder
+// 3. Exit checks — trail hit, SHA flip, session end
 // ============================================================================
 var float last_entry_px = na
 if entry_long or entry_short
     last_entry_px := entry_px
 
 if strategy.position_size > 0
-    new_trail  = f_trail_long()
+    // Partial close at R:R target
+    if use_partial and not partial_done and not na(initial_risk) and initial_risk > 0
+        target_px = entry_px + initial_risk * rr_multiple
+        if high >= target_px
+            close_qty = strategy.position_size * (partial_pct / 100.0)
+            strategy.close("Long", qty=close_qty, comment="Partial " + partial_rr)
+            partial_pnl = (target_px - last_entry_px) * close_qty
+            label.new(bar_index, high + atr14 * 1.5, str.tostring(target_px, format.mintick), style=label.style_label_down, color=GREEN, textcolor=WHITE, size=size.small)
+            label.new(bar_index, high + atr14 * 2.3, "+$" + str.tostring(math.round(partial_pnl, 2), "#,###.00"), style=label.style_label_down, color=GREEN, textcolor=WHITE, size=size.tiny)
+            partial_done := true
+            if move_to_be
+                entry_sl := entry_px + be_buffer * pip_divisor
+                be_moved := true
+
+    new_trail = f_trail_long()
     if not na(new_trail) and (na(trail_level) or new_trail > trail_level)
         trail_level := new_trail
     trail_stop = math.min(trail_level, entry_sl)
-    trail_hit  = exit_trigger == "Touch" ? low <= trail_stop : close <= trail_stop
+    trail_hit  = trail_trigger == "Touch" ? low <= trail_stop : close <= trail_stop
     flip_exit  = sha_layer_flipped_against_long
     sess_exit  = exit_sess_end and sess_just_ended
     if trail_hit or flip_exit or sess_exit
         exit_px    = trail_hit ? math.min(open, trail_stop) : close
+        pnl_amt    = (exit_px - last_entry_px) * strategy.position_size
         is_profit  = exit_px > last_entry_px
         exit_col   = is_profit ? GREEN : BLACK
+        pnl_txt    = pnl_amt >= 0 ? "+$" + str.tostring(math.round(pnl_amt, 2), "#,###.00") : "-$" + str.tostring(math.abs(math.round(pnl_amt, 2)), "#,###.00")
         strategy.close("Long", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
         label.new(bar_index, high + atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_down, color=exit_col, textcolor=WHITE, size=size.small)
+        label.new(bar_index, high + atr14 * 2.3, pnl_txt, style=label.style_label_down, color=exit_col, textcolor=WHITE, size=size.tiny)
         trail_level := na
         trade_open  := false
 
 if strategy.position_size < 0
-    new_trail  = f_trail_short()
+    // Partial close at R:R target
+    if use_partial and not partial_done and not na(initial_risk) and initial_risk > 0
+        target_px = entry_px - initial_risk * rr_multiple
+        if low <= target_px
+            close_qty = math.abs(strategy.position_size) * (partial_pct / 100.0)
+            strategy.close("Short", qty=close_qty, comment="Partial " + partial_rr)
+            partial_pnl = (last_entry_px - target_px) * close_qty
+            label.new(bar_index, low - atr14 * 1.5, str.tostring(target_px, format.mintick), style=label.style_label_up, color=GREEN, textcolor=WHITE, size=size.small)
+            label.new(bar_index, low - atr14 * 2.3, "+$" + str.tostring(math.round(partial_pnl, 2), "#,###.00"), style=label.style_label_up, color=GREEN, textcolor=WHITE, size=size.tiny)
+            partial_done := true
+            if move_to_be
+                entry_sl := entry_px - be_buffer * pip_divisor
+                be_moved := true
+
+    new_trail = f_trail_short()
     if not na(new_trail) and (na(trail_level) or new_trail < trail_level)
         trail_level := new_trail
     trail_stop = math.max(trail_level, entry_sl)
-    trail_hit  = exit_trigger == "Touch" ? high >= trail_stop : close >= trail_stop
+    trail_hit  = trail_trigger == "Touch" ? high >= trail_stop : close >= trail_stop
     flip_exit  = sha_layer_flipped_against_short
     sess_exit  = exit_sess_end and sess_just_ended
     if trail_hit or flip_exit or sess_exit
         exit_px    = trail_hit ? math.max(open, trail_stop) : close
+        pnl_amt    = (last_entry_px - exit_px) * math.abs(strategy.position_size)
         is_profit  = exit_px < last_entry_px
         exit_col   = is_profit ? GREEN : BLACK
+        pnl_txt    = pnl_amt >= 0 ? "+$" + str.tostring(math.round(pnl_amt, 2), "#,###.00") : "-$" + str.tostring(math.abs(math.round(pnl_amt, 2)), "#,###.00")
         strategy.close("Short", comment=flip_exit ? "SHA Flip" : sess_exit ? "Sess End" : "Trail")
         label.new(bar_index, low - atr14 * 1.5, str.tostring(exit_px, format.mintick), style=label.style_label_up, color=exit_col, textcolor=WHITE, size=size.small)
+        label.new(bar_index, low - atr14 * 2.3, pnl_txt, style=label.style_label_up, color=exit_col, textcolor=WHITE, size=size.tiny)
         trail_level := na
         trade_open  := false
 
