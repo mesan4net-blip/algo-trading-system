@@ -454,13 +454,22 @@ f_trail_short() =>
     t
 
 // SHA layer flip checks for exit
-sha_layer_flipped_against_long  = exit_sha_layer == "Base SHA"  ? base_bear_bar :
-                                   exit_sha_layer == "HTF1 SHA" ? htf1_bear_bar :
-                                   exit_sha_layer == "HTF2 SHA" ? htf2_bear_bar : false
+// Only fires on the TRANSITION moment — layer just turned against the position
+// A transition INTO alignment (e.g. bearish→bullish while long) must never exit
+base_just_bear = base_bear_bar and not base_bear_bar[1]
+htf1_just_bear = htf1_bear_bar and not htf1_bear_bar[1]
+htf2_just_bear = htf2_bear_bar and not htf2_bear_bar[1]
+base_just_bull = base_bull_bar and not base_bull_bar[1]
+htf1_just_bull = htf1_bull_bar and not htf1_bull_bar[1]
+htf2_just_bull = htf2_bull_bar and not htf2_bull_bar[1]
 
-sha_layer_flipped_against_short = exit_sha_layer == "Base SHA"  ? base_bull_bar :
-                                   exit_sha_layer == "HTF1 SHA" ? htf1_bull_bar :
-                                   exit_sha_layer == "HTF2 SHA" ? htf2_bull_bar : false
+sha_layer_flipped_against_long  = exit_sha_layer == "Base SHA"  ? base_just_bear :
+                                   exit_sha_layer == "HTF1 SHA" ? htf1_just_bear :
+                                   exit_sha_layer == "HTF2 SHA" ? htf2_just_bear : false
+
+sha_layer_flipped_against_short = exit_sha_layer == "Base SHA"  ? base_just_bull :
+                                   exit_sha_layer == "HTF1 SHA" ? htf1_just_bull :
+                                   exit_sha_layer == "HTF2 SHA" ? htf2_just_bull : false
 
 // Session end exit
 sess_just_ended = in_session[1] and not in_session
@@ -511,7 +520,7 @@ if strategy.position_size > 0
         trail_level := new_trail
     trail_stop = math.min(trail_level, entry_sl)
     trail_hit  = exit_trigger == "Touch" ? low <= trail_stop : close <= trail_stop
-    flip_exit  = (exit_on_3flip and all_bear) or sha_layer_flipped_against_long
+    flip_exit  = (exit_on_3flip and all_bear and not all_bear[1]) or sha_layer_flipped_against_long
     sess_exit  = exit_sess_end and sess_just_ended
     if trail_hit or flip_exit or sess_exit
         exit_px    = trail_hit ? math.min(open, trail_stop) : close
@@ -528,7 +537,7 @@ if strategy.position_size < 0
         trail_level := new_trail
     trail_stop = math.max(trail_level, entry_sl)
     trail_hit  = exit_trigger == "Touch" ? high >= trail_stop : close >= trail_stop
-    flip_exit  = (exit_on_3flip and all_bull) or sha_layer_flipped_against_short
+    flip_exit  = (exit_on_3flip and all_bull and not all_bull[1]) or sha_layer_flipped_against_short
     sess_exit  = exit_sess_end and sess_just_ended
     if trail_hit or flip_exit or sess_exit
         exit_px    = trail_hit ? math.max(open, trail_stop) : close
