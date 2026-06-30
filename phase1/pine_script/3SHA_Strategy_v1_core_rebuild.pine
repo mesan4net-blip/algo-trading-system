@@ -8,6 +8,7 @@ strategy("3SHA Strategy — Core Rebuild", shorttitle="3SHA-Core", overlay=true,
          initial_capital=100000, currency=currency.USD,
          default_qty_type=strategy.fixed, default_qty_value=1,
          calc_on_every_tick=false, process_orders_on_close=false,
+         max_labels_count=500, max_boxes_count=500,
          max_bars_back=5000)
 
 // ============================================================================
@@ -420,3 +421,10 @@ plotcandle(htf1_ready and htf1_show ? h1O : na, htf1_ready and htf1_show ? h1H :
 
 plotcandle(base_ready and base_show ? bO : na, base_ready and base_show ? bH : na, base_ready and base_show ? bL : na, base_ready and base_show ? bC : na,
      title="Base SHA", color=bC>=bO?BLUE:ORANGE, wickcolor=color.new(#000000,100), bordercolor=color.new(#000000,0))
+
+// ============================================================================
+// UNCONDITIONAL TEST LABEL — fires every single bar, no logic dependency
+// If this doesn't show, labels themselves are not rendering in this environment
+// ============================================================================
+if barstate.islast
+    label.new(bar_index, high, "TEST LABEL — IF YOU SEE THIS, LABELS WORK", style=label.style_label_down, color=color.fuchsia, textcolor=color.white, size=size.large)
