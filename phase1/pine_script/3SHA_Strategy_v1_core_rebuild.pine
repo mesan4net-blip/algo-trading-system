@@ -176,19 +176,26 @@ c2_bear_sig = was_above_all and now_below_all
 var bool pb_bull_dipped = false
 var bool pb_bear_dipped = false
 
-bull_dip_condition = bC < sha_bot_1 and htf2_bull_bar
-bull_recovery       = bC > sha_top_1 and htf2_bull_bar
-bear_dip_condition = bC > sha_top_1 and htf2_bear_bar
-bear_recovery       = bC < sha_bot_1 and htf2_bear_bar
+// Valid dip — Base has crossed below HTF1's body (entering pullback zone),
+// dip zone extends all the way through HTF2's body — still a valid pullback
+// as long as Base does NOT close fully below HTF2's bottom.
+bull_dip_condition  = bC < sha_top_1 and bC >= sha_bot_2
+// Invalid — Base closes fully below HTF2's bottom = trend break, not a pullback
+bull_dip_invalidated = bC < sha_bot_2
+bull_recovery        = bC > sha_top_1
+
+bear_dip_condition   = bC > sha_bot_1 and bC <= sha_top_2
+bear_dip_invalidated = bC > sha_top_2
+bear_recovery        = bC < sha_bot_1
 
 if bull_dip_condition
     pb_bull_dipped := true
-if not htf2_bull_bar or bull_recovery
+if bull_dip_invalidated or bull_recovery
     pb_bull_dipped := false
 
 if bear_dip_condition
     pb_bear_dipped := true
-if not htf2_bear_bar or bear_recovery
+if bear_dip_invalidated or bear_recovery
     pb_bear_dipped := false
 
 c3_bull_sig = bull_recovery and pb_bull_dipped[1] and htf2_bull_bar
