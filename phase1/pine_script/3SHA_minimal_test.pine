@@ -1,0 +1,24 @@
+//@version=6
+strategy("3SHA Minimal Test", shorttitle="3SHA-Test", overlay=true)
+
+f_sha(_len1, _len2, _o, _h, _l, _c) =>
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
+    haC = (o1 + h1 + l1 + c1) / 4.0
+    var float haO = na
+    haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
+    haH = math.max(h1, math.max(haO, haC))
+    haL = math.min(l1, math.min(haO, haC))
+    o2  = ta.ema(haO, _len2)
+    h2  = ta.ema(haH, _len2)
+    l2  = ta.ema(haL, _len2)
+    c2  = ta.ema(haC, _len2)
+    [o2, h2, l2, c2]
+
+[bO, bH, bL, bC] = f_sha(4, 8, open, high, low, close)
+base_ready = not na(bO) and not na(bC)
+
+plotcandle(base_ready ? bO : na, base_ready ? bH : na, base_ready ? bL : na, base_ready ? bC : na,
+     title="Base SHA", color=bC>=bO?color.blue:color.orange, bordercolor=color.black)
