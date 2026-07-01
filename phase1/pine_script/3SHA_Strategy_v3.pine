@@ -132,32 +132,32 @@ htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval
 // ============================================================================
 // INPUTS — ENTRY CONDITIONS
 // ============================================================================
-grp_entry_casc  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Cascade"
-grp_entry_c2    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ C2 — Cluster Cross"
-grp_entry_c3    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ C3 — Pullback Resume"
+grp_entry_casc  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Alignment"
+grp_entry_c2    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Cluster Cross"
+grp_entry_c3    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Pullback Resume"
 grp_entry_early = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Early Trend Signal"
 grp_entry_cont  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Trend Continuation"
 
 // Cascade
-show_cascade      = input.bool(true,  "Show Cascade Marker  (all 3 SHA agree)",    group=grp_entry_casc)
-cascade_sess_only = input.bool(true,  "Cascade — In Session Only",                 group=grp_entry_casc)
-cascade_bull_col  = input.color(color.new(#0077BB, 0), "Cascade Bull Color",       group=grp_entry_casc)
-cascade_bear_col  = input.color(color.new(#EE7733, 0), "Cascade Bear Color",       group=grp_entry_casc)
-cascade_size      = input.string("Small", "Cascade Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_casc)
+show_cascade      = input.bool(true,  "Full Alignment  — all 3 SHA layers agree in the same direction",    group=grp_entry_casc)
+cascade_sess_only = input.bool(true,  "Full Alignment — In Session Only",                 group=grp_entry_casc)
+cascade_bull_col  = input.color(color.new(#0077BB, 0), "Full Alignment Bull Color",       group=grp_entry_casc)
+cascade_bear_col  = input.color(color.new(#EE7733, 0), "Full Alignment Bear Color",       group=grp_entry_casc)
+cascade_size      = input.string("Small", "Full Alignment Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_casc)
 
-// C2 — Price Cross All 3 SHA Bodies
-show_c2           = input.bool(true,  "Show C2 Marker  (price closes beyond all 3 SHA)", group=grp_entry_c2)
-c2_sess_only      = input.bool(false, "C2 — In Session Only",                             group=grp_entry_c2)
-c2_bull_col       = input.color(color.new(#0077BB, 0), "C2 Bull Color",                   group=grp_entry_c2)
-c2_bear_col       = input.color(color.new(#EE7733, 0), "C2 Bear Color",                   group=grp_entry_c2)
-c2_size           = input.string("Small", "C2 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c2)
+// Full Cluster Cross — Price Breaks Through All 3 SHA Bodies
+show_c2           = input.bool(true,  "Full Cluster Cross  — price breaks completely through all 3 SHA layers in one move", group=grp_entry_c2)
+c2_sess_only      = input.bool(false, "Full Cluster Cross — In Session Only",                             group=grp_entry_c2)
+c2_bull_col       = input.color(color.new(#0077BB, 0), "Full Cluster Cross Bull Color",                   group=grp_entry_c2)
+c2_bear_col       = input.color(color.new(#EE7733, 0), "Full Cluster Cross Bear Color",                   group=grp_entry_c2)
+c2_size           = input.string("Small", "Full Cluster Cross Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c2)
 
 // C3 — Pullback Resume
-show_c3           = input.bool(true,  "Show C3 Marker  (pullback then resume above/below all 3 SHA)", group=grp_entry_c3)
-c3_sess_only      = input.bool(false, "C3 — In Session Only",                             group=grp_entry_c3)
-c3_bull_col       = input.color(color.new(#004488, 0), "C3 Bull Color",                   group=grp_entry_c3)
-c3_bear_col       = input.color(color.new(#AA3377, 0), "C3 Bear Color",                   group=grp_entry_c3)
-c3_size           = input.string("Small", "C3 Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c3)
+show_c3           = input.bool(true,  "Pullback Resume  — price dips into the trend then recovers in the original direction", group=grp_entry_c3)
+c3_sess_only      = input.bool(false, "Pullback Resume — In Session Only",                             group=grp_entry_c3)
+c3_bull_col       = input.color(color.new(#004488, 0), "Pullback Resume Bull Color",                   group=grp_entry_c3)
+c3_bear_col       = input.color(color.new(#AA3377, 0), "Pullback Resume Bear Color",                   group=grp_entry_c3)
+c3_size           = input.string("Small", "Pullback Resume Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c3)
 
 // Early Trend Signal — Base + HTF1 agree while HTF2 still catching up
 show_early_trend  = input.bool(false, "Show Early Trend Marker  (Base/HTF1 cross HTF2 before full flip)",
@@ -382,7 +382,7 @@ sha_bot_b = math.min(bO,  bC)
 sha_bot_1 = math.min(h1O, h1C)
 sha_bot_2 = math.min(h2O, h2C)
 
-// C2 — true full cluster cross in one candle
+// Full Cluster Cross — true full cluster cross in one candle
 // Bull: previous bar closed BELOW all three SHA bodies, this bar closes ABOVE all three
 // Bear: previous bar closed ABOVE all three SHA bodies, this bar closes BELOW all three
 was_below_all = close[1] < sha_bot_b[1] and close[1] < sha_bot_1[1] and close[1] < sha_bot_2[1]
@@ -452,10 +452,10 @@ atr14 = ta.atr(14)
 // DRAW ENTRY MARKERS — all on current bar open (next bar after signal)
 // Cascade  : filled arrow  ▲▼  above/below bar
 // C1       : diamond shape  ◆   further out
-// C2       : circle dot     ●   furthest out
+// Full Cluster Cross : circle dot     ●   furthest out
 // ============================================================================
 
-// Cascade — filled arrow
+// Full Alignment — filled arrow
 if cascade_bull
     label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=cascade_bull_col, textcolor=color.white, size=f_sz(cascade_size))
 if cascade_bear
@@ -463,13 +463,13 @@ if cascade_bear
 
 // C1 — diamond (label_diamond style), slightly further from bar
 
-// C2 — circle dot, furthest from bar
+// Full Cluster Cross — circle dot, furthest from bar
 if c2_bull
     label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=c2_bull_col, textcolor=color.white, size=f_sz(c2_size))
 if c2_bear
     label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=c2_bear_col, textcolor=color.white, size=f_sz(c2_size))
 
-// C3 markers — square shape, furthest out
+// Pullback Resume markers — square shape, furthest out
 if c3_bull
     label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=c3_bull_col, textcolor=color.white, size=f_sz(c3_size))
 if c3_bear
