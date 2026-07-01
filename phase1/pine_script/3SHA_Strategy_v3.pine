@@ -536,8 +536,8 @@ f_sl_short_preview() =>
         ta.highest(high, sl_lookback)[1] + sl_buffer * pip_divisor
 
 // Any bull signal firing → show SL preview dot on the actual SL candle
-any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull
-any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear
+any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull or htf2_cross_up
+any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear or htf2_cross_down
 
 // Find which bar index holds the SL candle (the lowest/highest bar in the lookback)
 f_sl_bar_offset_long() =>
