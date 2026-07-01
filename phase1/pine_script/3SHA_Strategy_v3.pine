@@ -184,6 +184,7 @@ trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", o
 // ============================================================================
 grp_htf2_cross      = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ HTF2 Price Cross Alert"
 show_htf2_cross     = input.bool(true,  "HTF2 Price Cross Alert", tooltip="Fires once when price CLOSES beyond the HTF2 SHA body boundary — either direction, regardless of trend. A warning that price has closed outside the HTF2 zone.", group=grp_htf2_cross)
+trade_htf2_cross    = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time the HTF2 Price Cross Alert fires and passes all filters.", group=grp_htf2_cross)
 htf2_cross_col      = input.color(color.new(#FF0000, 0), "HTF2 Cross Alert Color", group=grp_htf2_cross)
 htf2_cross_size     = input.string("Small", "HTF2 Cross Alert Size", options=["Tiny","Small","Normal","Large"], group=grp_htf2_cross)
 
