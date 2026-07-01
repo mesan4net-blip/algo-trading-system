@@ -41,7 +41,7 @@ your_local_hour = input.int(18,  "Your Current Local Hour (24h)",               
 your_local_day  = input.int(28,  "Your Current Local Day",                         minval=1,   maxval=31, group=grp_time)
 broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                      minval=0,   maxval=23, group=grp_time)
 broker_day_now  = input.int(29,  "Broker Current Day",                             minval=1,   maxval=31, group=grp_time)
-your_utc_offset = input.int(-7,  "Your UTC Offset (PDT=-7 PST=-8 EST=-5 EDT=-4)", minval=-12, maxval=14, group=grp_time)
+your_utc_offset = input.int(-7,  "Your UTC Offset", minval=-12, maxval=14, tooltip="PDT=-7  PST=-8  EST=-5  EDT=-4  UTC=0  BST=+1  IST=+5.5", group=grp_time)
 
 // ============================================================================
 // BROKER OFFSET CALCULATION
@@ -65,7 +65,7 @@ ny_tw_c    = f_norm(16 + broker_offset)
 // INPUTS — TRADE SESSIONS
 // ============================================================================
 grp_sess          = "② ━━━ TRADE SESSIONS ━━━"
-pip_divisor       = input.float(0.0001,   "Pip Size (Forex=0.0001  JPY/Gold=0.01)", minval=0.00001, step=0.00001, group=grp_sess)
+pip_divisor       = input.float(0.0001,   "Pip Size", minval=0.00001, step=0.00001, tooltip="Standard forex pairs: 0.0001 | JPY pairs and Gold: 0.01", group=grp_sess)
 sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
 sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
 show_london       = input.bool(true,                    "Show London Session",           group=grp_sess)
@@ -139,33 +139,33 @@ grp_entry_early = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Early Trend Sig
 grp_entry_cont  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Trend Continuation"
 
 // Cascade
-show_cascade      = input.bool(true,  "Full Alignment  — all 3 SHA layers agree in the same direction",    group=grp_entry_casc)
-trade_cascade     = input.bool(false, "Trade This Signal  — open position when Full Alignment fires",       group=grp_entry_casc)
+show_cascade      = input.bool(true,  "Full Alignment", tooltip="All three SHA layers (Base, HTF1, HTF2) are pointing the same direction. Highest confidence — slowest to fire.", group=grp_entry_casc)
+trade_cascade     = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Full Alignment fires and passes all filters.", group=grp_entry_casc)
 cascade_sess_only = input.bool(true,  "Full Alignment — In Session Only",                 group=grp_entry_casc)
 cascade_bull_col  = input.color(color.new(#0077BB, 0), "Full Alignment Bull Color",       group=grp_entry_casc)
 cascade_bear_col  = input.color(color.new(#EE7733, 0), "Full Alignment Bear Color",       group=grp_entry_casc)
 cascade_size      = input.string("Small", "Full Alignment Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_casc)
 
 // Full Cluster Cross — Price Breaks Through All 3 SHA Bodies
-show_c2           = input.bool(true,  "Full Cluster Cross  — price breaks completely through all 3 SHA layers in one move", group=grp_entry_c2)
-trade_c2          = input.bool(false, "Trade This Signal  — open position when Full Cluster Cross fires",    group=grp_entry_c2)
+show_c2           = input.bool(true,  "Full Cluster Cross", tooltip="Price has broken completely through all 3 SHA layers in a single move — from fully below to fully above, or vice versa.", group=grp_entry_c2)
+trade_c2          = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Full Cluster Cross fires and passes all filters.", group=grp_entry_c2)
 c2_sess_only      = input.bool(false, "Full Cluster Cross — In Session Only",                             group=grp_entry_c2)
 c2_bull_col       = input.color(color.new(#0077BB, 0), "Full Cluster Cross Bull Color",                   group=grp_entry_c2)
 c2_bear_col       = input.color(color.new(#EE7733, 0), "Full Cluster Cross Bear Color",                   group=grp_entry_c2)
 c2_size           = input.string("Small", "Full Cluster Cross Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c2)
 
 // C3 — Pullback Resume
-show_c3           = input.bool(true,  "Pullback Resume  — price dips into the trend then recovers in the original direction", group=grp_entry_c3)
-trade_c3          = input.bool(false, "Trade This Signal  — open position when Pullback Resume fires",       group=grp_entry_c3)
+show_c3           = input.bool(true,  "Pullback Resume", tooltip="Price dips into the trend (as far as HTF2) then recovers back in the original direction. Classic pullback continuation entry.", group=grp_entry_c3)
+trade_c3          = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Pullback Resume fires and passes all filters.", group=grp_entry_c3)
 c3_sess_only      = input.bool(false, "Pullback Resume — In Session Only",                             group=grp_entry_c3)
 c3_bull_col       = input.color(color.new(#004488, 0), "Pullback Resume Bull Color",                   group=grp_entry_c3)
 c3_bear_col       = input.color(color.new(#AA3377, 0), "Pullback Resume Bear Color",                   group=grp_entry_c3)
 c3_size           = input.string("Small", "Pullback Resume Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c3)
 
 // Early Trend Signal — Base + HTF1 agree while HTF2 still catching up
-show_early_trend      = input.bool(false, "Show Early Trend Marker  (Base+HTF1 cross HTF2 before full flip — fires earlier than Full Alignment)", group=grp_entry_early)
-trade_early_trend     = input.bool(false, "Trade This Signal  — open position when Early Trend Signal fires",    group=grp_entry_early)
-early_trend_tier      = input.string("Tier 1 — Early Cross", "Early Trend — Confirmation Level  (Tier 1: Base past HTF2, HTF1 agrees direction  |  Tier 2: Both Base AND HTF1 past HTF2)", options=["Tier 1 — Early Cross", "Tier 2 — Confirmed Cross"], group=grp_entry_early)
+show_early_trend      = input.bool(false, "Early Trend Signal", tooltip="Base and HTF1 are aligned while HTF2 is still catching up. Fires earlier than Full Alignment at the cost of some confirmation.", group=grp_entry_early)
+trade_early_trend     = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Early Trend Signal fires and passes all filters.", group=grp_entry_early)
+early_trend_tier      = input.string("Tier 1 — Early Cross", "Confirmation Level", options=["Tier 1 — Early Cross", "Tier 2 — Confirmed Cross"], tooltip="Tier 1: Base alone has closed past HTF2, HTF1 agrees in direction. Tier 2: Both Base AND HTF1 have closed past HTF2 — stronger confirmation.", group=grp_entry_early)
 early_trend_sess_only = input.bool(false, "Early Trend — In Session Only", group=grp_entry_early)
 early_trend_bull_col  = input.color(color.new(#0077BB, 0), "Early Trend Bull Color", group=grp_entry_early)
 early_trend_bear_col  = input.color(color.new(#EE7733, 0), "Early Trend Bear Color", group=grp_entry_early)
@@ -173,8 +173,8 @@ early_trend_size      = input.string("Small", "Early Trend Marker Size", options
 
 // Trend Continuation — full spatial stacking of Base/HTF1/HTF2 bodies, fires once at London open
 // Bucket: opens at London open, closes at end of NY session — separate from trail/flip/R:R system
-show_trend_cont     = input.bool(false, "Show Trend Continuation Marker  (LON open → NY close — fires once at London open when all 3 bodies fully stacked)", group=grp_entry_cont)
-trade_trend_cont    = input.bool(false, "Trade This Signal  — open LON→NY session-bound position when Trend Continuation fires", group=grp_entry_cont)
+show_trend_cont     = input.bool(false, "Trend Continuation", tooltip="Fires once at London open when Base/HTF1/HTF2 bodies are fully stacked in order. Session-bound: opens at London open, closes at NY session end.", group=grp_entry_cont)
+trade_trend_cont    = input.bool(false, "Trade This Signal", tooltip="When ON: opens a LON→NY session-bound position. Closes automatically at NY session end — separate from trail/flip/R:R exit system.", group=grp_entry_cont)
 trend_cont_bull_col = input.color(color.new(#0077BB, 0), "Trend Continuation Bull Color", group=grp_entry_cont)
 trend_cont_bear_col = input.color(color.new(#EE7733, 0), "Trend Continuation Bear Color", group=grp_entry_cont)
 trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_cont)
@@ -186,7 +186,7 @@ grp_sl       = "⑧ ━━━ INITIAL STOP LOSS ━━━"
 sl_method    = input.string("Prev N Bars Low/High", "SL Placement Method", options=["Trade Candle Low/High","Prev N Bars Low/High"], group=grp_sl)
 sl_lookback  = input.int(30,   "Lookback N Bars  (Prev N Bars method only)", minval=1, maxval=100, group=grp_sl)
 sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)",              minval=0, step=0.5,  group=grp_sl)
-show_sl_dot  = input.bool(true,  "Show Initial SL Dot Marker  (only appears when Trade This Signal is ON in any Entry Condition above)", group=grp_sl)
+show_sl_dot  = input.bool(true,  "Show Initial SL Dot", tooltip="Places a dot on the chart at the initial stop loss level. Only visible when Trade This Signal is ON in any Entry Condition above.", group=grp_sl)
 sl_dot_col   = input.color(color.new(#000000, 0), "SL Dot Color",  group=grp_sl)
 sl_dot_size  = input.string("Tiny", "SL Dot Size", options=["Tiny","Small","Normal"], group=grp_sl)
 
