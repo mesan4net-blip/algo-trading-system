@@ -180,9 +180,20 @@ trend_cont_bear_col = input.color(color.new(#EE7733, 0), "Trend Continuation Bea
 trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_cont)
 
 // ============================================================================
+// INPUTS — INITIAL STOP LOSS
+// ============================================================================
+grp_sl       = "⑧ ━━━ INITIAL STOP LOSS ━━━"
+sl_method    = input.string("Prev N Bars Low/High", "SL Placement Method", options=["Trade Candle Low/High","Prev N Bars Low/High"], group=grp_sl)
+sl_lookback  = input.int(30,   "Lookback N Bars  (Prev N Bars method only)", minval=1, maxval=100, group=grp_sl)
+sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)",              minval=0, step=0.5,  group=grp_sl)
+show_sl_dot  = input.bool(true,  "Show Initial SL Dot Marker", group=grp_sl)
+sl_dot_col   = input.color(color.new(#000000, 0), "SL Dot Color",  group=grp_sl)
+sl_dot_size  = input.string("Tiny", "SL Dot Size", options=["Tiny","Small","Normal"], group=grp_sl)
+
+// ============================================================================
 // INPUTS — STATE HUD
 // ============================================================================
-grp_hud     = "⑧ ━━━ STATE HUD ━━━"
+grp_hud     = "⑨ ━━━ STATE HUD ━━━"
 show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
 hud_pos_inp = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
 
