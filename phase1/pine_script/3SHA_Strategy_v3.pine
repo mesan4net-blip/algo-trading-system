@@ -497,7 +497,41 @@ if trend_cont_bear
     label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=trend_cont_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
 
 // ============================================================================
-// DRAW SHA CANDLES — HTF2 → HTF1 → Base
+// SL PREVIEW DOT — shows where the initial SL would be placed for any signal
+// Purely visual — no trade execution required
+// Appears on every signal bar where show_sl_dot is ON, regardless of trade_* toggle
+// ============================================================================
+f_sl_long_preview() =>
+    if sl_method == "Trade Candle Low/High"
+        low - sl_buffer * pip_divisor
+    else
+        lowest = low[1]
+        for i = 1 to sl_lookback
+            if low[i] < lowest
+                lowest := low[i]
+        lowest - sl_buffer * pip_divisor
+
+f_sl_short_preview() =>
+    if sl_method == "Trade Candle Low/High"
+        high + sl_buffer * pip_divisor
+    else
+        highest = high[1]
+        for i = 1 to sl_lookback
+            if high[i] > highest
+                highest := high[i]
+        highest + sl_buffer * pip_divisor
+
+f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : size.normal
+
+// Any bull signal firing → show SL preview dot below entry
+any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull
+any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear
+
+if show_sl_dot and any_bull_signal
+    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+if show_sl_dot and any_bear_signal
+    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+
 // ============================================================================
 htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
 htf2_wick_col = show_wicks   ? color.new(htf2_wick,   htf2_opacity) : na
