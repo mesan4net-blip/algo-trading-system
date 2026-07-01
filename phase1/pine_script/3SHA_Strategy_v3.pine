@@ -513,9 +513,9 @@ if trend_cont_bear
 
 // HTF2 Price Cross Alert — ⚡ fires when real price crosses HTF2 body boundary
 if htf2_cross_down
-    label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
-if htf2_cross_up
     label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
+if htf2_cross_up
+    label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
 // ============================================================================
 // SL PREVIEW DOT — shows where the initial SL would be placed for any signal
