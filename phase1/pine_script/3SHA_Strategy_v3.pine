@@ -503,23 +503,15 @@ if trend_cont_bear
 // ============================================================================
 f_sl_long_preview() =>
     if sl_method == "Trade Candle Low/High"
-        low - sl_buffer * pip_divisor
+        low[1] - sl_buffer * pip_divisor
     else
-        lowest = low[1]
-        for i = 1 to sl_lookback
-            if low[i] < lowest
-                lowest := low[i]
-        lowest - sl_buffer * pip_divisor
+        ta.lowest(low, sl_lookback)[1] - sl_buffer * pip_divisor
 
 f_sl_short_preview() =>
     if sl_method == "Trade Candle Low/High"
-        high + sl_buffer * pip_divisor
+        high[1] + sl_buffer * pip_divisor
     else
-        highest = high[1]
-        for i = 1 to sl_lookback
-            if high[i] > highest
-                highest := high[i]
-        highest + sl_buffer * pip_divisor
+        ta.highest(high, sl_lookback)[1] + sl_buffer * pip_divisor
 
 f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : size.normal
 
