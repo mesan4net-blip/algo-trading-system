@@ -186,7 +186,7 @@ grp_sl       = "⑧ ━━━ INITIAL STOP LOSS ━━━"
 sl_method    = input.string("Prev N Bars Low/High", "SL Placement Method", options=["Trade Candle Low/High","Prev N Bars Low/High"], group=grp_sl)
 sl_lookback  = input.int(30,   "Lookback N Bars  (Prev N Bars method only)", minval=1, maxval=100, group=grp_sl)
 sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)",              minval=0, step=0.5,  group=grp_sl)
-show_sl_dot  = input.bool(true,  "Show Initial SL Dot Marker", group=grp_sl)
+show_sl_dot  = input.bool(true,  "Show Initial SL Dot Marker  (only appears when Trade This Signal is ON in any Entry Condition above)", group=grp_sl)
 sl_dot_col   = input.color(color.new(#000000, 0), "SL Dot Color",  group=grp_sl)
 sl_dot_size  = input.string("Tiny", "SL Dot Size", options=["Tiny","Small","Normal"], group=grp_sl)
 
