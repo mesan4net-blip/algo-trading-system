@@ -188,7 +188,6 @@ sl_lookback  = input.int(30,   "Lookback N Bars  (Prev N Bars method only)", min
 sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)",              minval=0, step=0.5,  group=grp_sl)
 show_sl_dot  = input.bool(true,  "Show Initial SL Dot", tooltip="Places a dot on the chart at the initial stop loss level. Only visible when Trade This Signal is ON in any Entry Condition above.", group=grp_sl)
 sl_dot_col   = input.color(color.new(#000000, 0), "SL Dot Color",  group=grp_sl)
-sl_dot_size  = input.string("Tiny", "SL Dot Size", options=["Tiny","Small","Normal"], group=grp_sl)
 
 // ============================================================================
 // INPUTS — STATE HUD
@@ -513,16 +512,37 @@ f_sl_short_preview() =>
     else
         ta.highest(high, sl_lookback)[1] + sl_buffer * pip_divisor
 
-f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : size.normal
-
-// Any bull signal firing → show SL preview dot below entry
+// Any bull signal firing → show SL preview dot on the actual SL candle
 any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull
 any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear
 
+// Find which bar index holds the SL candle (the lowest/highest bar in the lookback)
+f_sl_bar_offset_long() =>
+    int offset = 1
+    float lowest = low[1]
+    for i = 2 to sl_lookback
+        if low[i] < lowest
+            lowest := low[i]
+            offset := i
+    offset
+
+f_sl_bar_offset_short() =>
+    int offset = 1
+    float highest = high[1]
+    for i = 2 to sl_lookback
+        if high[i] > highest
+            highest := high[i]
+            offset := i
+    offset
+
+// Draw SL dot on the actual candle that sets the SL level
+// size.auto renders smaller than size.tiny — the smallest option available in Pine Script
 if show_sl_dot and any_bull_signal
-    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_long()
+    label.new(bar_index - sl_offset + 0, low[sl_offset] - sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 if show_sl_dot and any_bear_signal
-    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_short()
+    label.new(bar_index - sl_offset + 0, high[sl_offset] + sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 
 // ============================================================================
 htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
