@@ -180,14 +180,6 @@ trend_cont_bear_col = input.color(color.new(#EE7733, 0), "Trend Continuation Bea
 trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_cont)
 
 // ============================================================================
-// HTF2 Price Cross Alert — fires when real price crosses into/through HTF2 body
-// ============================================================================
-grp_htf2_cross      = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ HTF2 Price Cross Alert"
-show_htf2_cross     = input.bool(true,  "HTF2 Price Cross Alert", tooltip="Fires once when real price (high/low) crosses the HTF2 SHA body boundary — either direction, regardless of trend. A warning that price has entered the HTF2 zone.", group=grp_htf2_cross)
-htf2_cross_col      = input.color(color.new(#FF0000, 0), "HTF2 Cross Alert Color", group=grp_htf2_cross)
-htf2_cross_size     = input.string("Small", "HTF2 Cross Alert Size", options=["Tiny","Small","Normal","Large"], group=grp_htf2_cross)
-
-// ============================================================================
 // INPUTS — INITIAL STOP LOSS
 // ============================================================================
 grp_sl       = "⑧ ━━━ INITIAL STOP LOSS ━━━"
@@ -202,7 +194,7 @@ sl_dot_col   = input.color(color.new(#000000, 0), "SL Dot Color",  group=grp_sl)
 // ============================================================================
 grp_hud     = "⑨ ━━━ STATE HUD ━━━"
 show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
-hud_pos_inp = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
+hud_pos_inp = input.string("Bottom Left", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
 
 // ============================================================================
 // SESSION DETECTION — IANA timezone, DST-safe
@@ -458,14 +450,6 @@ stack_bear_raw = sha_top_b < sha_bot_1 and sha_top_1 < sha_bot_2
 trend_cont_bull = show_trend_cont and lon_just_opened and stack_bull_raw
 trend_cont_bear = show_trend_cont and lon_just_opened and stack_bear_raw
 
-// — HTF2 Price Cross Alert
-// Fires once when price (high/low) first crosses either boundary of the HTF2 SHA body
-// Pure price position — no trend direction context
-price_below_htf2 = low  <= sha_bot_2
-price_above_htf2 = high >= sha_top_2
-htf2_cross_down  = show_htf2_cross and price_below_htf2 and not price_below_htf2[1]
-htf2_cross_up    = show_htf2_cross and price_above_htf2 and not price_above_htf2[1]
-
 // ============================================================================
 // MARKER SIZE HELPER
 // ============================================================================
@@ -510,12 +494,6 @@ if trend_cont_bull
     label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=trend_cont_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
 if trend_cont_bear
     label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=trend_cont_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
-
-// HTF2 Price Cross Alert — ⚡ fires when real price crosses HTF2 body boundary
-if htf2_cross_down
-    label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
-if htf2_cross_up
-    label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
 // ============================================================================
 // SL PREVIEW DOT — shows where the initial SL would be placed for any signal
