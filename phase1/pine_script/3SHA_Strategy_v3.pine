@@ -467,6 +467,9 @@ price_above_htf2 = close >= sha_top_2
 htf2_cross_down  = show_htf2_cross and price_below_htf2 and not price_below_htf2[1]
 htf2_cross_up    = show_htf2_cross and price_above_htf2 and not price_above_htf2[1]
 
+any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull or htf2_cross_up
+any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear or htf2_cross_down
+
 // ============================================================================
 // PENDING OPPOSING SIGNAL STATE MACHINE
 // When in a trade and an opposing signal fires:
@@ -595,8 +598,6 @@ f_sl_short_preview() =>
         ta.highest(high, sl_lookback)[1] + sl_buffer * pip_divisor
 
 // Any bull signal firing → show SL preview dot on the actual SL candle
-any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull or htf2_cross_up
-any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear or htf2_cross_down
 
 // Find which bar index holds the SL candle (the lowest/highest bar in the lookback)
 f_sl_bar_offset_long() =>
