@@ -468,6 +468,58 @@ htf2_cross_down  = show_htf2_cross and price_below_htf2 and not price_below_htf2
 htf2_cross_up    = show_htf2_cross and price_above_htf2 and not price_above_htf2[1]
 
 // ============================================================================
+// PENDING OPPOSING SIGNAL STATE MACHINE
+// When in a trade and an opposing signal fires:
+//   - Record it (pending direction + which signal type)
+//   - Do NOT close the trade
+//   - Do NOT open opposite trade yet
+//   - If SL is subsequently hit → close current + open pending opposite
+//   - If same-direction signal fires again → cancel pending
+//   - If no trade open → pending clears automatically
+// ============================================================================
+PENDING_GREY = color.new(#888888, 30)
+
+var string pending_dir  = "none"   // "bull", "bear", or "none"
+var string pending_type = "none"   // which signal type is pending
+
+is_long  = strategy.position_size > 0
+is_short = strategy.position_size < 0
+is_flat  = strategy.position_size == 0
+
+// What fired this bar
+new_bull = any_bull_signal
+new_bear = any_bear_signal
+
+// Cancel pending if same direction fires again or position is flat
+if is_flat
+    pending_dir  := "none"
+    pending_type := "none"
+
+// Register opposing signal as pending (only while in a trade)
+if is_long and new_bear and pending_dir != "bear"
+    pending_dir  := "bear"
+    pending_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
+
+if is_short and new_bull and pending_dir != "bull"
+    pending_dir  := "bull"
+    pending_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
+
+// Cancel pending if same-direction signal fires while in trade
+if is_long and new_bull
+    pending_dir  := "none"
+    pending_type := "none"
+if is_short and new_bear
+    pending_dir  := "none"
+    pending_type := "none"
+
+// Pending marker symbol — same shape as original signal, greyed out with → prefix
+f_pending_sym(_type) =>
+    _type == "cascade" ? "→▲" : _type == "c2" ? "→●" : _type == "c3" ? "→■" : _type == "early" ? "→◆" : _type == "cont" ? "→★" : "→⚡"
+
+show_pending_bull = pending_dir == "bull"
+show_pending_bear = pending_dir == "bear"
+
+// ============================================================================
 // MARKER SIZE HELPER
 // ============================================================================
 f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
@@ -517,6 +569,13 @@ if htf2_cross_down
     label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 if htf2_cross_up
     label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
+
+// Pending Opposing Signal — greyed-out version of the signal shape with → prefix
+// Shown every bar while the pending signal is registered and we're still in a trade
+if show_pending_bull and is_short
+    label.new(bar_index, low  - atr14 * 0.8, f_pending_sym(pending_type), style=label.style_label_up,   color=PENDING_GREY, textcolor=color.white, size=size.small)
+if show_pending_bear and is_long
+    label.new(bar_index, high + atr14 * 0.8, f_pending_sym(pending_type), style=label.style_label_down, color=PENDING_GREY, textcolor=color.white, size=size.small)
 
 // ============================================================================
 // SL PREVIEW DOT — shows where the initial SL would be placed for any signal
