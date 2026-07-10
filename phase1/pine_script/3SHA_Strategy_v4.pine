@@ -495,103 +495,83 @@ f_sl_short_preview() =>
 
 
 // ============================================================================
-// PENDING OPPOSING SIGNAL STATE MACHINE
-// Tracks active signal direction purely from marker firing — independent of
-// strategy.position_size so it works even when Trade This Signal is OFF.
-// active_dir: records which direction a signal last fired ("bull","bear","none")
-// pending_dir: records an opposing signal that fired while active_dir was set
-// SL breach: when price closes past the active SL level → clear active, activate pending
+// ACTIVE SIGNAL TRACKING — Respect Active SL
+// When Respect Active SL is ON for a marker:
+//   1. First signal in a direction sets active_dir and active_sl
+//   2. Same-direction markers suppressed while active_dir holds
+//   3. Opposing markers shown as grey pending (→) on the ONE bar they first fire
+//   4. When close breaches active_sl → active_dir clears, opposing direction becomes active
 // ============================================================================
 PENDING_GREY = color.new(#888888, 30)
 
-var string active_dir   = "none"   // direction of the currently active signal
-var float  active_sl    = na       // SL level of the active signal
-var string pending_dir  = "none"   // direction of pending opposing signal
-var string pending_type = "none"   // which signal type is pending
+var string active_dir = "none"
+var float  active_sl  = na
+var string pend_dir   = "none"
+var string pend_type  = "none"
 
-// What fired this bar
 new_bull = any_bull_signal
 new_bear = any_bear_signal
 
-// Which signals have Respect Active SL enabled
-bear_respects_sl = (cascade_bear     and respect_sl_cascade) or
-                   (c2_bear          and respect_sl_c2)      or
-                   (c3_bear          and respect_sl_c3)      or
-                   (early_trend_bear and respect_sl_early)   or
-                   (trend_cont_bear  and respect_sl_cont)    or
-                   (htf2_cross_down  and respect_sl_htf2)
+// Per-signal respect_sl check — which firing signal has it ON
+this_bull_respects = (cascade_bull     and respect_sl_cascade) or (c2_bull      and respect_sl_c2) or (c3_bull           and respect_sl_c3) or (early_trend_bull and respect_sl_early) or (trend_cont_bull  and respect_sl_cont) or (htf2_cross_up    and respect_sl_htf2)
+this_bear_respects = (cascade_bear     and respect_sl_cascade) or (c2_bear      and respect_sl_c2) or (c3_bear           and respect_sl_c3) or (early_trend_bear and respect_sl_early) or (trend_cont_bear  and respect_sl_cont) or (htf2_cross_down  and respect_sl_htf2)
 
-bull_respects_sl = (cascade_bull     and respect_sl_cascade) or
-                   (c2_bull          and respect_sl_c2)      or
-                   (c3_bull          and respect_sl_c3)      or
-                   (early_trend_bull and respect_sl_early)   or
-                   (trend_cont_bull  and respect_sl_cont)    or
-                   (htf2_cross_up    and respect_sl_htf2)
+// SL breach clears active direction
+if active_dir == "bull" and not na(active_sl) and close < active_sl
+    active_dir := pend_dir
+    active_sl  := active_dir == "bear" ? f_sl_short_preview() : na
+    pend_dir   := "none"
+    pend_type  := "none"
 
-// Check if SL has been breached (candle close past active SL level)
-sl_breached_long  = active_dir == "bull" and not na(active_sl) and close < active_sl
-sl_breached_short = active_dir == "bear" and not na(active_sl) and close > active_sl
-sl_breached = sl_breached_long or sl_breached_short
+if active_dir == "bear" and not na(active_sl) and close > active_sl
+    active_dir := pend_dir
+    active_sl  := active_dir == "bull" ? f_sl_long_preview() : na
+    pend_dir   := "none"
+    pend_type  := "none"
 
-// SL breach — clear active, activate pending
-if sl_breached
-    active_dir  := pending_dir
-    active_sl   := na
-    pending_dir := "none"
-    pending_type := "none"
-
-// New bull signal fires
+// Bull signal fires
 if new_bull
     if active_dir == "none"
-        // No active signal — set as new active
-        active_dir  := "bull"
-        active_sl   := f_sl_long_preview()
-        pending_dir := "none"
-        pending_type := "none"
-    else if active_dir == "bear" and bull_respects_sl and pending_dir == "none"
-        // Opposing signal with Respect SL ON — register as pending ONLY if nothing pending yet
-        pending_dir  := "bull"
-        pending_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
+        active_dir := "bull"
+        active_sl  := f_sl_long_preview()
+        pend_dir   := "none"
+        pend_type  := "none"
+    else if active_dir == "bear" and this_bull_respects and pend_dir == "none"
+        pend_dir  := "bull"
+        pend_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
     else if active_dir == "bull"
-        // Same direction — cancel any pending bear, update SL
-        pending_dir  := "none"
-        pending_type := "none"
-        active_sl    := f_sl_long_preview()
+        pend_dir := "none"
+        pend_type := "none"
+        active_sl := f_sl_long_preview()
 
-// New bear signal fires
+// Bear signal fires
 if new_bear
     if active_dir == "none"
-        active_dir  := "bear"
-        active_sl   := f_sl_short_preview()
-        pending_dir := "none"
-        pending_type := "none"
-    else if active_dir == "bull" and bear_respects_sl and pending_dir == "none"
-        // Opposing signal with Respect SL ON — register as pending ONLY if nothing pending yet
-        pending_dir  := "bear"
-        pending_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
+        active_dir := "bear"
+        active_sl  := f_sl_short_preview()
+        pend_dir   := "none"
+        pend_type  := "none"
+    else if active_dir == "bull" and this_bear_respects and pend_dir == "none"
+        pend_dir  := "bear"
+        pend_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
     else if active_dir == "bear"
-        pending_dir  := "none"
-        pending_type := "none"
-        active_sl    := f_sl_short_preview()
+        pend_dir := "none"
+        pend_type := "none"
+        active_sl := f_sl_short_preview()
 
-// Gate helpers — suppress same-direction markers when Respect SL is ON and signal is active
-// Use previous bar's active_dir — marker drawing and state update happen on same bar,
-// so we must check the state BEFORE this bar's signal fired to correctly suppress
-is_bull_active  = active_dir[1] == "bull"
-is_bear_active  = active_dir[1] == "bear"
+// Suppress same-direction markers using PREVIOUS bar state
+is_bull_active = active_dir[1] == "bull"
+is_bear_active = active_dir[1] == "bear"
 
 f_show_bull(_sig, _respect) => _sig and (not _respect or not is_bull_active)
 f_show_bear(_sig, _respect) => _sig and (not _respect or not is_bear_active)
 
-// Pending marker symbol — same shape as original signal, greyed out with → prefix
-f_pending_sym(_type) =>
-    _type == "cascade" ? "→▲" : _type == "c2" ? "→●" : _type == "c3" ? "→■" : _type == "early" ? "→◆" : _type == "cont" ? "→★" : "→⚡"
+f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "c2" ? "→●" : _t == "c3" ? "→■" : _t == "early" ? "→◆" : _t == "cont" ? "→★" : "→⚡"
 
-// Pending fires only on the bar the pending state FIRST becomes set — not every subsequent bar
-show_pending_bull = pending_dir == "bull" and pending_dir[1] != "bull"
-show_pending_bear = pending_dir == "bear" and pending_dir[1] != "bear"
+// Show pending marker ONCE — only on the bar pend_dir first becomes set
+show_pending_bull = pend_dir == "bull" and pend_dir[1] != "bull"
+show_pending_bear = pend_dir == "bear" and pend_dir[1] != "bear"
 
-// is_long/is_short/is_flat still needed for pending marker display
 is_long  = active_dir == "bull"
 is_short = active_dir == "bear"
 
@@ -655,12 +635,11 @@ if f_show_bear(htf2_cross_down, respect_sl_htf2)
 if f_show_bull(htf2_cross_up, respect_sl_htf2)
     label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
-// Pending Opposing Signal — greyed-out version of the signal shape with → prefix
-// Shown every bar while the pending signal is registered and we're still in a trade
-if show_pending_bull and is_short
-    label.new(bar_index, low  - atr14 * 0.8, f_pending_sym(pending_type), style=label.style_label_up,   color=PENDING_GREY, textcolor=color.white, size=size.small)
-if show_pending_bear and is_long
-    label.new(bar_index, high + atr14 * 0.8, f_pending_sym(pending_type), style=label.style_label_down, color=PENDING_GREY, textcolor=color.white, size=size.small)
+// Pending marker — fires ONCE on the bar the opposing signal first registers
+if show_pending_bull
+    label.new(bar_index, low  - atr14 * 0.8, f_pending_sym(pend_type), style=label.style_label_up,   color=PENDING_GREY, textcolor=color.white, size=size.small)
+if show_pending_bear
+    label.new(bar_index, high + atr14 * 0.8, f_pending_sym(pend_type), style=label.style_label_down, color=PENDING_GREY, textcolor=color.white, size=size.small)
 
 // Any bull signal firing → show SL preview dot on the actual SL candle
 
