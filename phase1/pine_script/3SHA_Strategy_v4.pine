@@ -586,8 +586,9 @@ f_show_bear(_sig, _respect) => _sig and (not _respect or not is_bear_active)
 f_pending_sym(_type) =>
     _type == "cascade" ? "→▲" : _type == "c2" ? "→●" : _type == "c3" ? "→■" : _type == "early" ? "→◆" : _type == "cont" ? "→★" : "→⚡"
 
-show_pending_bull = pending_dir == "bull"
-show_pending_bear = pending_dir == "bear"
+// Pending fires only on the bar the pending state FIRST becomes set — not every subsequent bar
+show_pending_bull = pending_dir == "bull" and pending_dir[1] != "bull"
+show_pending_bear = pending_dir == "bear" and pending_dir[1] != "bear"
 
 // is_long/is_short/is_flat still needed for pending marker display
 is_long  = active_dir == "bull"
