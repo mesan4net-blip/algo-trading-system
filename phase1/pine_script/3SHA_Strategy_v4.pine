@@ -531,7 +531,8 @@ if active_dir == "bear" and not na(active_sl) and close > active_sl
 
 // Bull signal fires
 if new_bull
-    if active_dir == "none"
+    if active_dir == "none" or (active_dir == "bear" and not this_bull_respects)
+        // No active signal, OR opposing but this signal doesn't respect SL — take over
         active_dir := "bull"
         active_sl  := f_sl_long_preview()
         pend_dir   := "none"
@@ -546,7 +547,8 @@ if new_bull
 
 // Bear signal fires
 if new_bear
-    if active_dir == "none"
+    if active_dir == "none" or (active_dir == "bull" and not this_bear_respects)
+        // No active signal, OR opposing but this signal doesn't respect SL — take over
         active_dir := "bear"
         active_sl  := f_sl_short_preview()
         pend_dir   := "none"
