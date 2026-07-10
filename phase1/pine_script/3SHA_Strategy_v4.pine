@@ -556,42 +556,53 @@ atr14 = ta.atr(14)
 // Full Cluster Cross : circle dot     ●   furthest out
 // ============================================================================
 
+// ============================================================================
+// MARKER DRAWING
+// When Respect Active SL is ON for a marker:
+//   - Same direction while in trade → suppress (already in the trade)
+//   - Opposing direction while in trade → show as pending → (handled by state machine)
+//   - Flat → show normally
+// When Respect Active SL is OFF → always show regardless of trade state
+// ============================================================================
+
+// Gate helpers — suppress same-direction if respect_sl is ON and already in that trade
+f_show_bull(_sig, _respect) => _sig and (not _respect or is_flat or is_short)
+f_show_bear(_sig, _respect) => _sig and (not _respect or is_flat or is_long)
+
 // Full Alignment — filled arrow
-if cascade_bull
+if f_show_bull(cascade_bull, respect_sl_cascade)
     label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=cascade_bull_col, textcolor=color.white, size=f_sz(cascade_size))
-if cascade_bear
+if f_show_bear(cascade_bear, respect_sl_cascade)
     label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_sz(cascade_size))
 
-// C1 — diamond (label_diamond style), slightly further from bar
-
-// Full Cluster Cross — circle dot, furthest from bar
-if c2_bull
+// Full Cluster Cross — circle dot
+if f_show_bull(c2_bull, respect_sl_c2)
     label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=c2_bull_col, textcolor=color.white, size=f_sz(c2_size))
-if c2_bear
+if f_show_bear(c2_bear, respect_sl_c2)
     label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=c2_bear_col, textcolor=color.white, size=f_sz(c2_size))
 
-// Pullback Resume markers — square shape, furthest out
-if c3_bull
+// Pullback Resume — square shape
+if f_show_bull(c3_bull, respect_sl_c3)
     label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=c3_bull_col, textcolor=color.white, size=f_sz(c3_size))
-if c3_bear
+if f_show_bear(c3_bear, respect_sl_c3)
     label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=c3_bear_col, textcolor=color.white, size=f_sz(c3_size))
 
-// Early Trend markers — diamond shape, closest to bar (fires earliest, before others)
-if early_trend_bull
+// Early Trend — diamond shape
+if f_show_bull(early_trend_bull, respect_sl_early)
     label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=early_trend_bull_col, textcolor=color.white, size=f_sz(early_trend_size))
-if early_trend_bear
+if f_show_bear(early_trend_bear, respect_sl_early)
     label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=early_trend_bear_col, textcolor=color.white, size=f_sz(early_trend_size))
 
-// Trend Continuation markers — star shape, labeled "LON→NY" to flag the session bucket nature
-if trend_cont_bull
+// Trend Continuation — star shape
+if f_show_bull(trend_cont_bull, respect_sl_cont)
     label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=trend_cont_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
-if trend_cont_bear
+if f_show_bear(trend_cont_bear, respect_sl_cont)
     label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=trend_cont_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
 
-// HTF2 Price Cross Alert — ⚡ fires when real price crosses HTF2 body boundary
-if htf2_cross_down
+// HTF2 Price Cross Alert — ⚡ (down = closed below HTF2, up = closed above HTF2)
+if f_show_bear(htf2_cross_down, respect_sl_htf2)
     label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
-if htf2_cross_up
+if f_show_bull(htf2_cross_up, respect_sl_htf2)
     label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
 // Pending Opposing Signal — greyed-out version of the signal shape with → prefix
