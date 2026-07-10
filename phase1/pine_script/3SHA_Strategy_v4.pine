@@ -1,0 +1,730 @@
+//@version=6
+// ============================================================================
+// 3SHA VISUAL v4 — Entry Condition Markers
+// Builds on v3 visuals + adds three independent entry marker systems:
+//   Cascade    — all 3 SHA flip into agreement
+//   C1         — first adjacent SHA pair agreement (Base+HTF1 or HTF1+HTF2)
+//   C2         — price closes beyond all 3 SHA bodies
+// All markers appear on the OPEN of the NEXT bar after condition confirmed
+// Color blind safe: Blue (bull) vs Orange (bear)
+// ============================================================================
+strategy("3SHA Strategy v4", shorttitle="3SHA-v4", overlay=true,
+         initial_capital=100000, currency=currency.USD,
+         default_qty_type=strategy.fixed, default_qty_value=1,
+         calc_on_every_tick=true, process_orders_on_close=false,
+         max_bars_back=5000, max_boxes_count=500, max_labels_count=500, max_lines_count=500)
+
+// ============================================================================
+// SHA FUNCTION — Two-pass: EMA → HA → EMA
+// ============================================================================
+f_sha(_len1, _len2, _o, _h, _l, _c) =>
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
+    haC = (o1 + h1 + l1 + c1) / 4.0
+    var float haO = na
+    haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
+    haH = math.max(h1, math.max(haO, haC))
+    haL = math.min(l1, math.min(haO, haC))
+    o2  = ta.ema(haO, _len2)
+    h2  = ta.ema(haH, _len2)
+    l2  = ta.ema(haL, _len2)
+    c2  = ta.ema(haC, _len2)
+    [o2, h2, l2, c2]
+
+// ============================================================================
+// INPUTS — BROKER TIME REFERENCE
+// ============================================================================
+grp_time        = "① ━━━ BROKER TIME REFERENCE ━━━"
+your_local_hour = input.int(18,  "Your Current Local Hour (24h)",                 minval=0,   maxval=23, group=grp_time)
+your_local_day  = input.int(28,  "Your Current Local Day",                         minval=1,   maxval=31, group=grp_time)
+broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                      minval=0,   maxval=23, group=grp_time)
+broker_day_now  = input.int(29,  "Broker Current Day",                             minval=1,   maxval=31, group=grp_time)
+your_utc_offset = input.int(-7,  "Your UTC Offset", minval=-12, maxval=14, tooltip="PDT=-7  PST=-8  EST=-5  EDT=-4  UTC=0  BST=+1  IST=+5.5", group=grp_time)
+
+// ============================================================================
+// BROKER OFFSET CALCULATION
+// ============================================================================
+utc_hour_raw  = your_local_hour - your_utc_offset
+utc_hour_adj  = utc_hour_raw >= 24 ? utc_hour_raw - 24 : utc_hour_raw < 0 ? utc_hour_raw + 24 : utc_hour_raw
+day_crossed   = your_local_day != broker_day_now
+broker_offset = day_crossed ? broker_hour_now + (24 - utc_hour_adj) : broker_hour_now - utc_hour_adj
+f_norm(_h)   => _h >= 24 ? _h - 24 : _h < 0 ? _h + 24 : _h
+
+lon_full_o = f_norm(8  + broker_offset)
+lon_full_c = f_norm(17 + broker_offset)
+lon_tw_o   = f_norm(8  + broker_offset)
+lon_tw_c   = f_norm(10 + broker_offset)
+ny_full_o  = f_norm(13 + broker_offset)
+ny_full_c  = f_norm(22 + broker_offset)
+ny_tw_o    = f_norm(13 + broker_offset)
+ny_tw_c    = f_norm(16 + broker_offset)
+
+// ============================================================================
+// INPUTS — TRADE SESSIONS
+// ============================================================================
+grp_sess          = "② ━━━ TRADE SESSIONS ━━━"
+pip_divisor       = input.float(0.0001,   "Pip Size", minval=0.00001, step=0.00001, tooltip="Standard forex pairs: 0.0001 | JPY pairs and Gold: 0.01", group=grp_sess)
+sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
+sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
+show_london       = input.bool(true,                    "Show London Session",           group=grp_sess)
+lon_full_fill     = input.color(color.new(#0077BB, 85), "London — Full Session Color",   group=grp_sess)
+lon_tw_fill       = input.color(color.new(#0077BB, 65), "London — Trade Window Color",   group=grp_sess)
+lon_border        = input.color(color.new(#0077BB, 20), "London — Border Color",         group=grp_sess)
+lon_label_col     = input.color(color.new(#0077BB, 0),  "London — Label Color",          group=grp_sess)
+show_ny           = input.bool(true,                    "Show New York Session",         group=grp_sess)
+ny_full_fill      = input.color(color.new(#33BBEE, 85), "New York — Full Session Color", group=grp_sess)
+ny_tw_fill        = input.color(color.new(#33BBEE, 65), "New York — Trade Window Color", group=grp_sess)
+ny_border         = input.color(color.new(#33BBEE, 20), "New York — Border Color",       group=grp_sess)
+ny_label_col      = input.color(color.new(#33BBEE, 0),  "New York — Label Color",        group=grp_sess)
+
+// ============================================================================
+// INPUTS — GLOBAL DISPLAY
+// ============================================================================
+grp_global   = "③ ━━━ GLOBAL DISPLAY ━━━"
+show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
+show_borders = input.bool(true, "Show Borders (all layers)", group=grp_global)
+
+// ============================================================================
+// INPUTS — BASE SHA
+// ============================================================================
+grp_base     = "④ ━━━ BASE SHA  [Chart TF — auto] ━━━"
+base_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_base)
+base_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_base)
+base_show    = input.bool(true, "Show Base SHA Candles",      group=grp_base)
+base_bull    = input.color(color.new(#0077BB, 0), "Bull Color",   group=grp_base)
+base_bear    = input.color(color.new(#EE7733, 0), "Bear Color",   group=grp_base)
+base_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_base)
+base_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_base)
+base_opacity = input.int(0,  "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_base)
+
+// ============================================================================
+// INPUTS — HTF1 SHA
+// ============================================================================
+grp_htf1     = "⑤ ━━━ HTF1 SHA  [Mid Timeframe] ━━━"
+htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
+htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
+htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
+htf1_show    = input.bool(true, "Show HTF1 SHA Candles",      group=grp_htf1)
+htf1_bull    = input.color(color.new(#33BBEE, 0), "Bull Color",          group=grp_htf1)
+htf1_bear    = input.color(color.new(#CC3311, 0), "Bear Color",          group=grp_htf1)
+htf1_border_bull = input.color(color.new(#000000, 0), "Bull Border Color", group=grp_htf1)
+htf1_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group=grp_htf1)
+htf1_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf1)
+htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf1)
+
+// ============================================================================
+// INPUTS — HTF2 SHA
+// ============================================================================
+grp_htf2     = "⑥ ━━━ HTF2 SHA  [High Timeframe] ━━━"
+htf2_tf      = input.timeframe("240", "HTF2 Timeframe",       group=grp_htf2)
+htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf2)
+htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf2)
+htf2_show    = input.bool(true, "Show HTF2 SHA Candles",      group=grp_htf2)
+htf2_bull    = input.color(color.new(#004488, 0), "Bull Color",          group=grp_htf2)
+htf2_bear    = input.color(color.new(#AA3377, 0), "Bear Color",          group=grp_htf2)
+htf2_border_bull = input.color(color.new(#000000, 0), "Bull Border Color", group=grp_htf2)
+htf2_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group=grp_htf2)
+htf2_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_htf2)
+htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf2)
+
+// ============================================================================
+// INPUTS — ENTRY CONDITIONS
+// ============================================================================
+grp_entry_casc  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Alignment"
+grp_entry_c2    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Cluster Cross"
+grp_entry_c3    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Pullback Resume"
+grp_entry_early = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Early Trend Signal"
+grp_entry_cont  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Trend Continuation"
+
+// Cascade
+show_cascade      = input.bool(true,  "Full Alignment", tooltip="All three SHA layers (Base, HTF1, HTF2) are pointing the same direction. Highest confidence — slowest to fire.", group=grp_entry_casc)
+respect_sl_cascade  = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_entry_casc)
+trade_cascade       = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Full Alignment fires and passes all filters.", group=grp_entry_casc)
+cascade_sess_only = input.bool(true,  "Full Alignment — In Session Only",                 group=grp_entry_casc)
+cascade_bull_col  = input.color(color.new(#0077BB, 0), "Full Alignment Bull Color",       group=grp_entry_casc)
+cascade_bear_col  = input.color(color.new(#EE7733, 0), "Full Alignment Bear Color",       group=grp_entry_casc)
+cascade_size      = input.string("Small", "Full Alignment Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_casc)
+
+// Full Cluster Cross — Price Breaks Through All 3 SHA Bodies
+show_c2           = input.bool(true,  "Full Cluster Cross", tooltip="Price has broken completely through all 3 SHA layers in a single move — from fully below to fully above, or vice versa.", group=grp_entry_c2)
+respect_sl_c2       = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_entry_c2)
+trade_c2            = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Full Cluster Cross fires and passes all filters.", group=grp_entry_c2)
+c2_sess_only      = input.bool(false, "Full Cluster Cross — In Session Only",                             group=grp_entry_c2)
+c2_bull_col       = input.color(color.new(#0077BB, 0), "Full Cluster Cross Bull Color",                   group=grp_entry_c2)
+c2_bear_col       = input.color(color.new(#EE7733, 0), "Full Cluster Cross Bear Color",                   group=grp_entry_c2)
+c2_size           = input.string("Small", "Full Cluster Cross Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c2)
+
+// C3 — Pullback Resume
+show_c3           = input.bool(true,  "Pullback Resume", tooltip="Price dips into the trend (as far as HTF2) then recovers back in the original direction. Classic pullback continuation entry.", group=grp_entry_c3)
+respect_sl_c3       = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_entry_c3)
+trade_c3            = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Pullback Resume fires and passes all filters.", group=grp_entry_c3)
+c3_sess_only      = input.bool(false, "Pullback Resume — In Session Only",                             group=grp_entry_c3)
+c3_bull_col       = input.color(color.new(#004488, 0), "Pullback Resume Bull Color",                   group=grp_entry_c3)
+c3_bear_col       = input.color(color.new(#AA3377, 0), "Pullback Resume Bear Color",                   group=grp_entry_c3)
+c3_size           = input.string("Small", "Pullback Resume Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c3)
+
+// Early Trend Signal — Base + HTF1 agree while HTF2 still catching up
+show_early_trend      = input.bool(false, "Early Trend Signal", tooltip="Base and HTF1 are aligned while HTF2 is still catching up. Fires earlier than Full Alignment at the cost of some confirmation.", group=grp_entry_early)
+respect_sl_early    = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_entry_early)
+trade_early_trend   = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Early Trend Signal fires and passes all filters.", group=grp_entry_early)
+early_trend_tier      = input.string("Tier 1 — Early Cross", "Confirmation Level", options=["Tier 1 — Early Cross", "Tier 2 — Confirmed Cross"], tooltip="Tier 1: Base alone has closed past HTF2, HTF1 agrees in direction. Tier 2: Both Base AND HTF1 have closed past HTF2 — stronger confirmation.", group=grp_entry_early)
+early_trend_sess_only = input.bool(false, "Early Trend — In Session Only", group=grp_entry_early)
+early_trend_bull_col  = input.color(color.new(#0077BB, 0), "Early Trend Bull Color", group=grp_entry_early)
+early_trend_bear_col  = input.color(color.new(#EE7733, 0), "Early Trend Bear Color", group=grp_entry_early)
+early_trend_size      = input.string("Small", "Early Trend Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_early)
+
+// Trend Continuation — full spatial stacking of Base/HTF1/HTF2 bodies, fires once at London open
+// Bucket: opens at London open, closes at end of NY session — separate from trail/flip/R:R system
+show_trend_cont     = input.bool(false, "Trend Continuation", tooltip="Fires once at London open when Base/HTF1/HTF2 bodies are fully stacked in order. Session-bound: opens at London open, closes at NY session end.", group=grp_entry_cont)
+respect_sl_cont     = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_entry_cont)
+trade_trend_cont    = input.bool(false, "Trade This Signal", tooltip="When ON: opens a LON→NY session-bound position. Closes automatically at NY session end — separate from trail/flip/R:R exit system.", group=grp_entry_cont)
+trend_cont_bull_col = input.color(color.new(#0077BB, 0), "Trend Continuation Bull Color", group=grp_entry_cont)
+trend_cont_bear_col = input.color(color.new(#EE7733, 0), "Trend Continuation Bear Color", group=grp_entry_cont)
+trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_cont)
+
+// ============================================================================
+// HTF2 Price Cross Alert — fires when real price crosses into/through HTF2 body
+// ============================================================================
+grp_htf2_cross      = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ HTF2 Price Cross Alert"
+show_htf2_cross     = input.bool(true,  "HTF2 Price Cross Alert", tooltip="Fires once when price CLOSES beyond the HTF2 SHA body boundary — either direction, regardless of trend. A warning that price has closed outside the HTF2 zone.", group=grp_htf2_cross)
+respect_sl_htf2     = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_htf2_cross)
+trade_htf2_cross    = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time the HTF2 Price Cross Alert fires and passes all filters.", group=grp_htf2_cross)
+htf2_cross_col      = input.color(color.new(#FF0000, 0), "HTF2 Cross Alert Color", group=grp_htf2_cross)
+htf2_cross_size     = input.string("Small", "HTF2 Cross Alert Size", options=["Tiny","Small","Normal","Large"], group=grp_htf2_cross)
+
+// ============================================================================
+// INPUTS — INITIAL STOP LOSS
+// ============================================================================
+grp_sl       = "⑧ ━━━ INITIAL STOP LOSS ━━━"
+sl_method    = input.string("Prev N Bars Low/High", "SL Placement Method", options=["Trade Candle Low/High","Prev N Bars Low/High"], tooltip="Determines WHERE the SL level is set. The dot on the chart marks this level.\n\nIMPORTANT: The trade will NOT close when price merely touches or wicks below/above this level. The trade closes ONLY when a candle CLOSES beyond the SL level. This filters out wicks and false breakouts.", group=grp_sl)
+sl_lookback  = input.int(30,   "Lookback N Bars  (Prev N Bars method only)", minval=1, maxval=100, tooltip="Number of bars to look back for the lowest low (bull) or highest high (bear). The SL is placed at that level minus/plus the buffer.", group=grp_sl)
+sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)", minval=0, step=0.5, tooltip="Extra distance added beyond the identified low/high, in pips. Provides room for normal price noise around the SL level.", group=grp_sl)
+show_sl_dot  = input.bool(true,  "Show Initial SL Dot", tooltip="Places a dot on the chart at the initial stop loss level. Only visible when Trade This Signal is ON in any Entry Condition above.", group=grp_sl)
+sl_dot_col   = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_sl)
+
+// ============================================================================
+// INPUTS — STATE HUD
+// ============================================================================
+grp_hud     = "⑨ ━━━ STATE HUD ━━━"
+show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
+hud_pos_inp = input.string("Bottom Left", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
+
+// ============================================================================
+// SESSION DETECTION — IANA timezone, DST-safe
+// ============================================================================
+in_lon_full = show_london and not na(time("", "0300-1200", "America/New_York"))
+in_lon_tw   = show_london and not na(time("", "0300-0500", "America/New_York"))
+in_ny_full  = show_ny     and not na(time("", "0800-1700", "America/New_York"))
+in_ny_tw    = show_ny     and not na(time("", "0800-1100", "America/New_York"))
+in_session  = in_lon_full or in_ny_full
+in_tw       = in_lon_tw   or in_ny_tw
+sess_name   = in_lon_tw ? "LONDON  Trade Window" : in_lon_full ? "LONDON" : in_ny_tw ? "NEW YORK  Trade Window" : in_ny_full ? "NEW YORK" : "CLOSED"
+
+// ============================================================================
+// SESSION BOX HELPERS
+// ============================================================================
+f_sess_lbl_size(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.large
+f_pips(_move)       => str.tostring(math.round(_move / pip_divisor, 1))
+
+// ============================================================================
+// LONDON BOX
+// ============================================================================
+var box   lon_box     = na
+var box   lon_tw_box  = na
+var label lon_lbl     = na
+var float lon_open_px = na
+var float lon_hi      = na
+var float lon_lo      = na
+var float lon_tw_hi   = na
+var float lon_tw_lo   = na
+
+lon_just_opened = in_lon_full and not in_lon_full[1]
+lon_just_closed = not in_lon_full and in_lon_full[1]
+lon_tw_opened   = in_lon_tw and not in_lon_tw[1]
+lon_tw_closed   = not in_lon_tw and in_lon_tw[1]
+
+if lon_just_opened
+    lon_open_px := open
+    lon_hi      := high
+    lon_lo      := low
+    lon_box     := box.new(bar_index, high, bar_index + 1, low, border_color=lon_border, border_width=sess_border_width, bgcolor=lon_full_fill)
+    lon_lbl     := label.new(bar_index, high, "LONDON  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=lon_label_col, size=f_sess_lbl_size(sess_label_size))
+
+if in_lon_full and not lon_just_opened and not na(lon_box)
+    lon_hi  := math.max(lon_hi, high)
+    lon_lo  := math.min(lon_lo, low)
+    box.set_top(lon_box,    lon_hi)
+    box.set_bottom(lon_box, lon_lo)
+    box.set_right(lon_box,  bar_index + 1)
+    pip_move = close - lon_open_px
+    pip_txt  = pip_move >= 0 ? "+" + f_pips(pip_move) + " pips" : f_pips(pip_move) + " pips"
+    label.set_xy(lon_lbl,   bar_index, lon_hi)
+    label.set_text(lon_lbl, "LONDON  " + pip_txt)
+    label.set_textcolor(lon_lbl, pip_move >= 0 ? lon_label_col : color.new(#EE7733, 0))
+
+if lon_just_closed and not na(lon_box)
+    box.set_right(lon_box, bar_index - 1)
+
+if lon_tw_opened
+    lon_tw_hi  := high
+    lon_tw_lo  := low
+    lon_tw_box := box.new(bar_index, high, bar_index + 1, low, border_color=lon_border, border_width=sess_border_width, bgcolor=lon_tw_fill)
+
+if in_lon_tw and not lon_tw_opened and not na(lon_tw_box)
+    lon_tw_hi := math.max(lon_tw_hi, high)
+    lon_tw_lo := math.min(lon_tw_lo, low)
+    box.set_top(lon_tw_box,    lon_tw_hi)
+    box.set_bottom(lon_tw_box, lon_tw_lo)
+    box.set_right(lon_tw_box,  bar_index + 1)
+
+if lon_tw_closed and not na(lon_tw_box)
+    box.set_right(lon_tw_box, bar_index - 1)
+
+// ============================================================================
+// NEW YORK BOX
+// ============================================================================
+var box   ny_box     = na
+var box   ny_tw_box  = na
+var label ny_lbl     = na
+var float ny_open_px = na
+var float ny_hi      = na
+var float ny_lo      = na
+var float ny_tw_hi   = na
+var float ny_tw_lo   = na
+
+ny_just_opened = in_ny_full and not in_ny_full[1]
+ny_just_closed = not in_ny_full and in_ny_full[1]
+ny_tw_opened   = in_ny_tw and not in_ny_tw[1]
+ny_tw_closed   = not in_ny_tw and in_ny_tw[1]
+
+if ny_just_opened
+    ny_open_px := open
+    ny_hi      := high
+    ny_lo      := low
+    ny_box     := box.new(bar_index, high, bar_index + 1, low, border_color=ny_border, border_width=sess_border_width, bgcolor=ny_full_fill)
+    ny_lbl     := label.new(bar_index, high, "NEW YORK  +0.0 pips", style=label.style_label_down, color=color.new(#FFFFFF, 100), textcolor=ny_label_col, size=f_sess_lbl_size(sess_label_size))
+
+if in_ny_full and not ny_just_opened and not na(ny_box)
+    ny_hi  := math.max(ny_hi, high)
+    ny_lo  := math.min(ny_lo, low)
+    box.set_top(ny_box,    ny_hi)
+    box.set_bottom(ny_box, ny_lo)
+    box.set_right(ny_box,  bar_index + 1)
+    pip_move = close - ny_open_px
+    pip_txt  = pip_move >= 0 ? "+" + f_pips(pip_move) + " pips" : f_pips(pip_move) + " pips"
+    label.set_xy(ny_lbl,   bar_index, ny_hi)
+    label.set_text(ny_lbl, "NEW YORK  " + pip_txt)
+    label.set_textcolor(ny_lbl, pip_move >= 0 ? ny_label_col : color.new(#EE7733, 0))
+
+if ny_just_closed and not na(ny_box)
+    box.set_right(ny_box, bar_index - 1)
+
+if ny_tw_opened
+    ny_tw_hi  := high
+    ny_tw_lo  := low
+    ny_tw_box := box.new(bar_index, high, bar_index + 1, low, border_color=ny_border, border_width=sess_border_width, bgcolor=ny_tw_fill)
+
+if in_ny_full and not ny_tw_opened and not na(ny_tw_box)
+    ny_tw_hi := math.max(ny_tw_hi, high)
+    ny_tw_lo := math.min(ny_tw_lo, low)
+    box.set_top(ny_tw_box,    ny_tw_hi)
+    box.set_bottom(ny_tw_box, ny_tw_lo)
+    box.set_right(ny_tw_box,  bar_index + 1)
+
+if ny_tw_closed and not na(ny_tw_box)
+    box.set_right(ny_tw_box, bar_index - 1)
+
+// ============================================================================
+// COMPUTE SHA LAYERS
+// ============================================================================
+[bO, bH, bL, bC] = f_sha(base_len1, base_len2, open, high, low, close)
+
+// CRITICAL: SHA smoothing for HTF1/HTF2 must run NATIVELY on that timeframe's
+// own bar stream — computed inside request.security() — not recomputed on the
+// chart's own (lower) timeframe using already-fetched OHLC. Recomputing locally
+// makes the EMA internal state chart-timeframe-dependent, producing a DIFFERENT
+// SHA color for the same underlying HTF candle depending on which chart you view
+// it from. Wrapping f_sha() inside request.security() ensures the EMA only
+// updates once per real HTF bar close, identical no matter which chart you're on.
+[h1O, h1H, h1L, h1C] = request.security(syminfo.tickerid, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+
+[h2O, h2H, h2L, h2C] = request.security(syminfo.tickerid, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+
+// ============================================================================
+// LAYER DIRECTION
+// ============================================================================
+base_ready    = not na(bO)  and not na(bC)
+htf1_ready    = not na(h1O) and not na(h1C)
+htf2_ready    = not na(h2O) and not na(h2C)
+all_ready     = base_ready and htf1_ready and htf2_ready
+
+base_bull_bar = bC  >= bO
+htf1_bull_bar = h1C >= h1O
+htf2_bull_bar = h2C >= h2O
+base_bear_bar = bC  < bO
+htf1_bear_bar = h1C < h1O
+htf2_bear_bar = h2C < h2O
+
+all_bull = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
+all_bear = all_ready and base_bear_bar and htf1_bear_bar and htf2_bear_bar
+
+// ============================================================================
+// DATA WINDOW — cursor-following SHA direction at ANY bar
+// Hover over any candle on the chart and the Data Window panel (right side)
+// shows these values live for that exact bar — not just the latest bar
+// 1 = Bullish, -1 = Bearish
+// ============================================================================
+base_dir_dw = base_bull_bar ? 1 : -1
+htf1_dir_dw = htf1_bull_bar ? 1 : -1
+htf2_dir_dw = htf2_bull_bar ? 1 : -1
+align_dw    = all_bull ? 1 : all_bear ? -1 : 0   // 1=All Bull, -1=All Bear, 0=Mixed
+
+plot(base_dir_dw, title="Base Direction (1=Bull -1=Bear)", display=display.data_window)
+plot(htf1_dir_dw, title="HTF1 Direction (1=Bull -1=Bear)", display=display.data_window)
+plot(htf2_dir_dw, title="HTF2 Direction (1=Bull -1=Bear)", display=display.data_window)
+plot(align_dw,    title="Alignment (1=All Bull -1=All Bear 0=Mixed)", display=display.data_window)
+
+// ============================================================================
+// ENTRY CONDITIONS — evaluated on previous bar, marker on current bar open
+// ============================================================================
+
+// — Cascade: all 3 flip into agreement
+cascade_bull_raw = all_bull[1] and not all_bull[2]
+cascade_bear_raw = all_bear[1] and not all_bear[2]
+
+// — C1: first adjacent SHA pair agreement
+
+
+// — C2: price closes beyond all 3 SHA bodies
+sha_top_b = math.max(bO,  bC)
+sha_top_1 = math.max(h1O, h1C)
+sha_top_2 = math.max(h2O, h2C)
+sha_bot_b = math.min(bO,  bC)
+sha_bot_1 = math.min(h1O, h1C)
+sha_bot_2 = math.min(h2O, h2C)
+
+// Full Cluster Cross — true full cluster cross in one candle
+// Bull: previous bar closed BELOW all three SHA bodies, this bar closes ABOVE all three
+// Bear: previous bar closed ABOVE all three SHA bodies, this bar closes BELOW all three
+was_below_all = close[1] < sha_bot_b[1] and close[1] < sha_bot_1[1] and close[1] < sha_bot_2[1]
+was_above_all = close[1] > sha_top_b[1] and close[1] > sha_top_1[1] and close[1] > sha_top_2[1]
+now_above_all = close > sha_top_b and close > sha_top_1 and close > sha_top_2
+now_below_all = close < sha_bot_b and close < sha_bot_1 and close < sha_bot_2
+
+c2_bull_raw = was_below_all and now_above_all
+c2_bear_raw = was_above_all and now_below_all
+
+// C3 — Pullback Resume
+// Price closes above all 3 SHA bodies this bar, was NOT fully above all 3 last bar
+// Broader than C2 — catches shallow and deep pullbacks, not just full cluster crosses
+c3_bull_raw = now_above_all and not now_above_all[1]
+c3_bear_raw = now_below_all and not now_below_all[1]
+
+// — Early Trend Signal: Base + HTF1 agree while HTF2 still catching up
+// Tier 1 — Early Cross:     Base alone has closed past HTF2
+// Tier 2 — Confirmed Cross: Both Base AND HTF1 have closed past HTF2
+base_htf1_agree_bull = base_bull_bar and htf1_bull_bar
+base_htf1_agree_bear = base_bear_bar and htf1_bear_bar
+
+base_crossed_htf2_bull = bC  > sha_top_2
+htf1_crossed_htf2_bull = h1C > sha_top_2
+base_crossed_htf2_bear = bC  < sha_bot_2
+htf1_crossed_htf2_bear = h1C < sha_bot_2
+
+early_trend_tier1_bull = base_htf1_agree_bull and base_crossed_htf2_bull
+early_trend_tier1_bear = base_htf1_agree_bear and base_crossed_htf2_bear
+
+early_trend_tier2_bull = base_htf1_agree_bull and base_crossed_htf2_bull and htf1_crossed_htf2_bull
+early_trend_tier2_bear = base_htf1_agree_bear and base_crossed_htf2_bear and htf1_crossed_htf2_bear
+
+early_trend_raw_bull = early_trend_tier == "Tier 1 — Early Cross" ? early_trend_tier1_bull : early_trend_tier2_bull
+early_trend_raw_bear = early_trend_tier == "Tier 1 — Early Cross" ? early_trend_tier1_bear : early_trend_tier2_bear
+
+// Fire only on the bar the condition first becomes true — not every bar it remains true
+early_trend_bull_raw = early_trend_raw_bull and not early_trend_raw_bull[1]
+early_trend_bear_raw = early_trend_raw_bear and not early_trend_raw_bear[1]
+
+// — Session gates (applied per condition)
+cascade_bull      = show_cascade      and cascade_bull_raw      and (cascade_sess_only      ? in_session[1] : true)
+cascade_bear      = show_cascade      and cascade_bear_raw      and (cascade_sess_only      ? in_session[1] : true)
+c2_bull           = show_c2           and c2_bull_raw           and (c2_sess_only           ? in_session[1] : true)
+c2_bear           = show_c2           and c2_bear_raw           and (c2_sess_only           ? in_session[1] : true)
+c3_bull           = show_c3           and c3_bull_raw           and (c3_sess_only           ? in_session[1] : true)
+c3_bear           = show_c3           and c3_bear_raw           and (c3_sess_only           ? in_session[1] : true)
+early_trend_bull  = show_early_trend  and early_trend_bull_raw  and (early_trend_sess_only   ? in_session[1] : true)
+early_trend_bear  = show_early_trend  and early_trend_bear_raw  and (early_trend_sess_only   ? in_session[1] : true)
+
+// — Trend Continuation: full spatial stacking (not just color), fires once at London open
+// Bull: Base body fully above HTF1 body, HTF1 body fully above HTF2 body
+// Bear: Base body fully below HTF1 body, HTF1 body fully below HTF2 body
+stack_bull_raw = sha_bot_b > sha_top_1 and sha_bot_1 > sha_top_2
+stack_bear_raw = sha_top_b < sha_bot_1 and sha_top_1 < sha_bot_2
+
+trend_cont_bull = show_trend_cont and lon_just_opened and stack_bull_raw
+trend_cont_bear = show_trend_cont and lon_just_opened and stack_bear_raw
+
+// — HTF2 Price Cross Alert
+// Fires once when price (high/low) first crosses either boundary of the HTF2 SHA body
+// Pure price position — no trend direction context
+price_below_htf2 = close <= sha_bot_2
+price_above_htf2 = close >= sha_top_2
+htf2_cross_down  = show_htf2_cross and price_below_htf2 and not price_below_htf2[1]
+htf2_cross_up    = show_htf2_cross and price_above_htf2 and not price_above_htf2[1]
+
+any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull or htf2_cross_up
+any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear or htf2_cross_down
+
+// ============================================================================
+// PENDING OPPOSING SIGNAL STATE MACHINE
+// When in a trade and an opposing signal fires:
+//   - Record it (pending direction + which signal type)
+//   - Do NOT close the trade
+//   - Do NOT open opposite trade yet
+//   - If SL is subsequently hit → close current + open pending opposite
+//   - If same-direction signal fires again → cancel pending
+//   - If no trade open → pending clears automatically
+// ============================================================================
+PENDING_GREY = color.new(#888888, 30)
+
+var string pending_dir  = "none"   // "bull", "bear", or "none"
+var string pending_type = "none"   // which signal type is pending
+
+is_long  = strategy.position_size > 0
+is_short = strategy.position_size < 0
+is_flat  = strategy.position_size == 0
+
+// What fired this bar — per signal, gated by its own respect_sl toggle
+new_bull = any_bull_signal
+new_bear = any_bear_signal
+
+// Which opposing bear signals have Respect Active SL enabled
+bear_respects_sl = (cascade_bear    and respect_sl_cascade) or
+                   (c2_bear         and respect_sl_c2)      or
+                   (c3_bear         and respect_sl_c3)      or
+                   (early_trend_bear and respect_sl_early)  or
+                   (trend_cont_bear  and respect_sl_cont)   or
+                   (htf2_cross_down  and respect_sl_htf2)
+
+// Which opposing bull signals have Respect Active SL enabled
+bull_respects_sl = (cascade_bull    and respect_sl_cascade) or
+                   (c2_bull         and respect_sl_c2)      or
+                   (c3_bull         and respect_sl_c3)      or
+                   (early_trend_bull and respect_sl_early)  or
+                   (trend_cont_bull  and respect_sl_cont)   or
+                   (htf2_cross_up    and respect_sl_htf2)
+
+// Cancel pending if flat or same direction fires
+if is_flat
+    pending_dir  := "none"
+    pending_type := "none"
+if is_long and new_bull
+    pending_dir  := "none"
+    pending_type := "none"
+if is_short and new_bear
+    pending_dir  := "none"
+    pending_type := "none"
+
+// Register opposing signal as pending ONLY if that signal has Respect Active SL ON
+// If Respect Active SL is OFF for the firing signal — it shows live, not as pending
+if is_long and new_bear and bear_respects_sl and pending_dir != "bear"
+    pending_dir  := "bear"
+    pending_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
+
+if is_short and new_bull and bull_respects_sl and pending_dir != "bull"
+    pending_dir  := "bull"
+    pending_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
+
+// Pending marker symbol — same shape as original signal, greyed out with → prefix
+f_pending_sym(_type) =>
+    _type == "cascade" ? "→▲" : _type == "c2" ? "→●" : _type == "c3" ? "→■" : _type == "early" ? "→◆" : _type == "cont" ? "→★" : "→⚡"
+
+show_pending_bull = pending_dir == "bull"
+show_pending_bear = pending_dir == "bear"
+
+// ============================================================================
+// MARKER SIZE HELPER
+// ============================================================================
+f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+atr14 = ta.atr(14)
+
+// ============================================================================
+// DRAW ENTRY MARKERS — all on current bar open (next bar after signal)
+// Cascade  : filled arrow  ▲▼  above/below bar
+// C1       : diamond shape  ◆   further out
+// Full Cluster Cross : circle dot     ●   furthest out
+// ============================================================================
+
+// Full Alignment — filled arrow
+if cascade_bull
+    label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=cascade_bull_col, textcolor=color.white, size=f_sz(cascade_size))
+if cascade_bear
+    label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_sz(cascade_size))
+
+// C1 — diamond (label_diamond style), slightly further from bar
+
+// Full Cluster Cross — circle dot, furthest from bar
+if c2_bull
+    label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=c2_bull_col, textcolor=color.white, size=f_sz(c2_size))
+if c2_bear
+    label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=c2_bear_col, textcolor=color.white, size=f_sz(c2_size))
+
+// Pullback Resume markers — square shape, furthest out
+if c3_bull
+    label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=c3_bull_col, textcolor=color.white, size=f_sz(c3_size))
+if c3_bear
+    label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=c3_bear_col, textcolor=color.white, size=f_sz(c3_size))
+
+// Early Trend markers — diamond shape, closest to bar (fires earliest, before others)
+if early_trend_bull
+    label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=early_trend_bull_col, textcolor=color.white, size=f_sz(early_trend_size))
+if early_trend_bear
+    label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=early_trend_bear_col, textcolor=color.white, size=f_sz(early_trend_size))
+
+// Trend Continuation markers — star shape, labeled "LON→NY" to flag the session bucket nature
+if trend_cont_bull
+    label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=trend_cont_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
+if trend_cont_bear
+    label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=trend_cont_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
+
+// HTF2 Price Cross Alert — ⚡ fires when real price crosses HTF2 body boundary
+if htf2_cross_down
+    label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
+if htf2_cross_up
+    label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
+
+// Pending Opposing Signal — greyed-out version of the signal shape with → prefix
+// Shown every bar while the pending signal is registered and we're still in a trade
+if show_pending_bull and is_short
+    label.new(bar_index, low  - atr14 * 0.8, f_pending_sym(pending_type), style=label.style_label_up,   color=PENDING_GREY, textcolor=color.white, size=size.small)
+if show_pending_bear and is_long
+    label.new(bar_index, high + atr14 * 0.8, f_pending_sym(pending_type), style=label.style_label_down, color=PENDING_GREY, textcolor=color.white, size=size.small)
+
+// ============================================================================
+// SL PREVIEW DOT — shows where the initial SL would be placed for any signal
+// Purely visual — no trade execution required
+// Appears on every signal bar where show_sl_dot is ON, regardless of trade_* toggle
+// ============================================================================
+f_sl_long_preview() =>
+    if sl_method == "Trade Candle Low/High"
+        low[1] - sl_buffer * pip_divisor
+    else
+        ta.lowest(low, sl_lookback)[1] - sl_buffer * pip_divisor
+
+f_sl_short_preview() =>
+    if sl_method == "Trade Candle Low/High"
+        high[1] + sl_buffer * pip_divisor
+    else
+        ta.highest(high, sl_lookback)[1] + sl_buffer * pip_divisor
+
+// Any bull signal firing → show SL preview dot on the actual SL candle
+
+// Find which bar index holds the SL candle (the lowest/highest bar in the lookback)
+f_sl_bar_offset_long() =>
+    int offset = 1
+    float lowest = low[1]
+    for i = 2 to sl_lookback
+        if low[i] < lowest
+            lowest := low[i]
+            offset := i
+    offset
+
+f_sl_bar_offset_short() =>
+    int offset = 1
+    float highest = high[1]
+    for i = 2 to sl_lookback
+        if high[i] > highest
+            highest := high[i]
+            offset := i
+    offset
+
+// Draw SL dot on the actual candle that sets the SL level
+// size.auto renders smaller than size.tiny — the smallest option available in Pine Script
+if show_sl_dot and any_bull_signal
+    sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_long()
+    label.new(bar_index - sl_offset + 0, low[sl_offset] - sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+if show_sl_dot and any_bear_signal
+    sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_short()
+    label.new(bar_index - sl_offset + 0, high[sl_offset] + sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+
+// ============================================================================
+htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
+htf2_wick_col = show_wicks   ? color.new(htf2_wick,   htf2_opacity) : na
+htf2_brdr_col = show_borders ? (h2C >= h2O ? color.new(htf2_border_bull, htf2_opacity) : color.new(htf2_border_bear, htf2_opacity)) : htf2_body_col
+htf2_pH       = show_wicks ? h2H : math.max(h2O, h2C)
+htf2_pL       = show_wicks ? h2L : math.min(h2O, h2C)
+
+plotcandle(htf2_ready and htf2_show ? h2O     : na, htf2_ready and htf2_show ? htf2_pH : na,
+           htf2_ready and htf2_show ? htf2_pL : na, htf2_ready and htf2_show ? h2C     : na,
+           title="HTF2 SHA", color=htf2_ready and htf2_show ? htf2_body_col : na,
+           wickcolor=htf2_ready and htf2_show ? htf2_wick_col : na,
+           bordercolor=htf2_ready and htf2_show ? htf2_brdr_col : na)
+
+htf1_body_col = h1C >= h1O ? color.new(htf1_bull, htf1_opacity) : color.new(htf1_bear, htf1_opacity)
+htf1_wick_col = show_wicks   ? color.new(htf1_wick,   htf1_opacity) : na
+htf1_brdr_col = show_borders ? (h1C >= h1O ? color.new(htf1_border_bull, htf1_opacity) : color.new(htf1_border_bear, htf1_opacity)) : htf1_body_col
+htf1_pH       = show_wicks ? h1H : math.max(h1O, h1C)
+htf1_pL       = show_wicks ? h1L : math.min(h1O, h1C)
+
+plotcandle(htf1_ready and htf1_show ? h1O     : na, htf1_ready and htf1_show ? htf1_pH : na,
+           htf1_ready and htf1_show ? htf1_pL : na, htf1_ready and htf1_show ? h1C     : na,
+           title="HTF1 SHA", color=htf1_ready and htf1_show ? htf1_body_col : na,
+           wickcolor=htf1_ready and htf1_show ? htf1_wick_col : na,
+           bordercolor=htf1_ready and htf1_show ? htf1_brdr_col : na)
+
+base_body_col = bC >= bO ? color.new(base_bull, base_opacity) : color.new(base_bear, base_opacity)
+base_wick_col = show_wicks   ? color.new(base_wick,   base_opacity) : na
+base_brdr_col = show_borders ? color.new(base_border, base_opacity) : base_body_col
+base_pH       = show_wicks ? bH : math.max(bO, bC)
+base_pL       = show_wicks ? bL : math.min(bO, bC)
+
+plotcandle(base_ready and base_show ? bO      : na, base_ready and base_show ? base_pH : na,
+           base_ready and base_show ? base_pL : na, base_ready and base_show ? bC      : na,
+           title="Base SHA", color=base_ready and base_show ? base_body_col : na,
+           wickcolor=base_ready and base_show ? base_wick_col : na,
+           bordercolor=base_ready and base_show ? base_brdr_col : na)
+
+// ============================================================================
+// STATE HUD
+// ============================================================================
+f_hud_pos(_s) => _s == "Top Left" ? position.top_left : _s == "Top Right" ? position.top_right : _s == "Bottom Left" ? position.bottom_left : position.bottom_right
+f_dir_str(_bull, _bear) => _bull ? "BULLISH" : _bear ? "BEARISH" : "FLAT"
+f_dir_col(_bull, _bear) => _bull ? color.new(#0077BB, 0) : _bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
+
+align_txt = all_bull ? "ALL BULL  ▲" : all_bear ? "ALL BEAR  ▼" : "MIXED  —"
+align_col = all_bull ? color.new(#0077BB, 0) : all_bear ? color.new(#EE7733, 0) : color.new(#888888, 0)
+sess_col  = in_tw ? color.new(#0077BB, 0) : in_session ? color.new(#33BBEE, 0) : color.new(#888888, 0)
+
+W  = color.white
+BK = color.new(#212121, 0)
+GR = color.new(#888888, 0)
+SZ = size.normal
+SS = size.small
+
+var table hud = table.new(f_hud_pos(hud_pos_inp), 2, 8, frame_color=color.new(#CCCCCC, 0), frame_width=1, border_color=color.new(#DDDDDD, 0), border_width=1)
+
+if show_hud and barstate.islast
+    table.cell(hud, 0, 0, "3SHA STATE",  bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 0, htf2_tf + " / " + htf1_tf + " / Base", bgcolor=W, text_color=GR, text_size=SS)
+
+    table.cell(hud, 0, 1, "HTF2 (" + htf2_tf + ")", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 1, f_dir_str(htf2_bull_bar, htf2_bear_bar), bgcolor=W, text_color=f_dir_col(htf2_bull_bar, htf2_bear_bar), text_size=SZ)
+
+    table.cell(hud, 0, 2, "HTF1 (" + htf1_tf + ")", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 2, f_dir_str(htf1_bull_bar, htf1_bear_bar), bgcolor=W, text_color=f_dir_col(htf1_bull_bar, htf1_bear_bar), text_size=SZ)
+
+    table.cell(hud, 0, 3, "Base (Chart)", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 3, f_dir_str(base_bull_bar, base_bear_bar), bgcolor=W, text_color=f_dir_col(base_bull_bar, base_bear_bar), text_size=SZ)
+
+    table.cell(hud, 0, 4, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+    table.cell(hud, 1, 4, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+
+    table.cell(hud, 0, 5, "Alignment", bgcolor=W, text_color=BK,       text_size=SZ)
+    table.cell(hud, 1, 5, align_txt,   bgcolor=W, text_color=align_col, text_size=SZ)
+
+    table.cell(hud, 0, 6, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+    table.cell(hud, 1, 6, "", bgcolor=color.new(#EEEEEE, 0), text_color=BK, text_size=SS)
+
+    table.cell(hud, 0, 7, "Session",  bgcolor=W, text_color=BK,      text_size=SZ)
+    table.cell(hud, 1, 7, sess_name,  bgcolor=W, text_color=sess_col, text_size=SZ)
