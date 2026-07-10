@@ -614,8 +614,6 @@ atr14 = ta.atr(14)
 // ============================================================================
 
 // Gate helpers — suppress same-direction if respect_sl is ON and already in that trade
-f_show_bull(_sig, _respect) => _sig and (not _respect or is_flat or is_short)
-f_show_bear(_sig, _respect) => _sig and (not _respect or is_flat or is_long)
 
 // Full Alignment — filled arrow
 if f_show_bull(cascade_bull, respect_sl_cascade)
