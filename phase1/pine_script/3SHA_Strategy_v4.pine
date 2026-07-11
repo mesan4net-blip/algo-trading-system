@@ -144,7 +144,7 @@ respect_sl_cascade  = input.bool(false, "Respect Active SL", tooltip="When ON: i
 trade_cascade       = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Full Alignment fires and passes all filters.", group=grp_entry_casc)
 cascade_sess_only = input.bool(true,  "Full Alignment — In Session Only",                 group=grp_entry_casc)
 cascade_bull_col  = input.color(color.new(#0077BB, 0), "Full Alignment Bull Color",       group=grp_entry_casc)
-cascade_bear_col  = input.color(color.new(#EE7733, 0), "Full Alignment Bear Color",       group=grp_entry_casc)
+cascade_bear_col  = input.color(color.new(#CC2211, 0), "Full Alignment Bear Color",       group=grp_entry_casc)
 cascade_size      = input.string("Small", "Full Alignment Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_casc)
 
 // Full Cluster Cross — Price Breaks Through All 3 SHA Bodies
@@ -152,8 +152,8 @@ show_c2           = input.bool(true,  "Full Cluster Cross", tooltip="Price has b
 respect_sl_c2       = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_entry_c2)
 trade_c2            = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Full Cluster Cross fires and passes all filters.", group=grp_entry_c2)
 c2_sess_only      = input.bool(false, "Full Cluster Cross — In Session Only",                             group=grp_entry_c2)
-c2_bull_col       = input.color(color.new(#0077BB, 0), "Full Cluster Cross Bull Color",                   group=grp_entry_c2)
-c2_bear_col       = input.color(color.new(#EE7733, 0), "Full Cluster Cross Bear Color",                   group=grp_entry_c2)
+c2_bull_col       = input.color(color.new(#33AADD, 0), "Full Cluster Cross Bull Color",                   group=grp_entry_c2)
+c2_bear_col       = input.color(color.new(#EE4422, 0), "Full Cluster Cross Bear Color",                   group=grp_entry_c2)
 c2_size           = input.string("Small", "Full Cluster Cross Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c2)
 
 // C3 — Pullback Resume
@@ -162,7 +162,7 @@ respect_sl_c3       = input.bool(false, "Respect Active SL", tooltip="When ON: i
 trade_c3            = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Pullback Resume fires and passes all filters.", group=grp_entry_c3)
 c3_sess_only      = input.bool(false, "Pullback Resume — In Session Only",                             group=grp_entry_c3)
 c3_bull_col       = input.color(color.new(#004488, 0), "Pullback Resume Bull Color",                   group=grp_entry_c3)
-c3_bear_col       = input.color(color.new(#AA3377, 0), "Pullback Resume Bear Color",                   group=grp_entry_c3)
+c3_bear_col       = input.color(color.new(#AA1111, 0), "Pullback Resume Bear Color",                   group=grp_entry_c3)
 c3_size           = input.string("Small", "Pullback Resume Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_c3)
 
 // Early Trend Signal — Base + HTF1 agree while HTF2 still catching up
@@ -171,8 +171,8 @@ respect_sl_early    = input.bool(false, "Respect Active SL", tooltip="When ON: i
 trade_early_trend   = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Early Trend Signal fires and passes all filters.", group=grp_entry_early)
 early_trend_tier      = input.string("Tier 1 — Early Cross", "Confirmation Level", options=["Tier 1 — Early Cross", "Tier 2 — Confirmed Cross"], tooltip="Tier 1: Base alone has closed past HTF2, HTF1 agrees in direction. Tier 2: Both Base AND HTF1 have closed past HTF2 — stronger confirmation.", group=grp_entry_early)
 early_trend_sess_only = input.bool(false, "Early Trend — In Session Only", group=grp_entry_early)
-early_trend_bull_col  = input.color(color.new(#0077BB, 0), "Early Trend Bull Color", group=grp_entry_early)
-early_trend_bear_col  = input.color(color.new(#EE7733, 0), "Early Trend Bear Color", group=grp_entry_early)
+early_trend_bull_col  = input.color(color.new(#0055AA, 0), "Early Trend Bull Color", group=grp_entry_early)
+early_trend_bear_col  = input.color(color.new(#DD2200, 0), "Early Trend Bear Color", group=grp_entry_early)
 early_trend_size      = input.string("Small", "Early Trend Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_early)
 
 // Trend Continuation — full spatial stacking of Base/HTF1/HTF2 bodies, fires once at London open
@@ -180,8 +180,8 @@ early_trend_size      = input.string("Small", "Early Trend Marker Size", options
 show_trend_cont     = input.bool(false, "Trend Continuation", tooltip="Fires once at London open when Base/HTF1/HTF2 bodies are fully stacked in order. Session-bound: opens at London open, closes at NY session end.", group=grp_entry_cont)
 respect_sl_cont     = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_entry_cont)
 trade_trend_cont    = input.bool(false, "Trade This Signal", tooltip="When ON: opens a LON→NY session-bound position. Closes automatically at NY session end — separate from trail/flip/R:R exit system.", group=grp_entry_cont)
-trend_cont_bull_col = input.color(color.new(#0077BB, 0), "Trend Continuation Bull Color", group=grp_entry_cont)
-trend_cont_bear_col = input.color(color.new(#EE7733, 0), "Trend Continuation Bear Color", group=grp_entry_cont)
+trend_cont_bull_col = input.color(color.new(#006699, 0), "Trend Continuation Bull Color", group=grp_entry_cont)
+trend_cont_bear_col = input.color(color.new(#BB1100, 0), "Trend Continuation Bear Color", group=grp_entry_cont)
 trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_cont)
 
 // ============================================================================
@@ -606,39 +606,39 @@ atr14 = ta.atr(14)
 
 // Full Alignment — filled arrow
 if f_show_bull(cascade_bull, respect_sl_cascade)
-    label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=color.new(#0077BB, 0), textcolor=color.white, size=f_sz(cascade_size))
+    label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=cascade_bull_col, textcolor=color.white, size=f_sz(cascade_size))
 if f_show_bear(cascade_bear, respect_sl_cascade)
-    label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=color.new(#EE3322, 0), textcolor=color.white, size=f_sz(cascade_size))
+    label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_sz(cascade_size))
 
 // Full Cluster Cross — circle dot
 if f_show_bull(c2_bull, respect_sl_c2)
-    label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=color.new(#0077BB, 0), textcolor=color.white, size=f_sz(c2_size))
+    label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=c2_bull_col, textcolor=color.white, size=f_sz(c2_size))
 if f_show_bear(c2_bear, respect_sl_c2)
-    label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=color.new(#EE3322, 0), textcolor=color.white, size=f_sz(c2_size))
+    label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=c2_bear_col, textcolor=color.white, size=f_sz(c2_size))
 
 // Pullback Resume — square shape
 if f_show_bull(c3_bull, respect_sl_c3)
-    label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=color.new(#0077BB, 0), textcolor=color.white, size=f_sz(c3_size))
+    label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=c3_bull_col, textcolor=color.white, size=f_sz(c3_size))
 if f_show_bear(c3_bear, respect_sl_c3)
-    label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=color.new(#EE3322, 0), textcolor=color.white, size=f_sz(c3_size))
+    label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=c3_bear_col, textcolor=color.white, size=f_sz(c3_size))
 
 // Early Trend — diamond shape
 if f_show_bull(early_trend_bull, respect_sl_early)
-    label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=color.new(#0077BB, 0), textcolor=color.white, size=f_sz(early_trend_size))
+    label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=early_trend_bull_col, textcolor=color.white, size=f_sz(early_trend_size))
 if f_show_bear(early_trend_bear, respect_sl_early)
-    label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=color.new(#EE3322, 0), textcolor=color.white, size=f_sz(early_trend_size))
+    label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=early_trend_bear_col, textcolor=color.white, size=f_sz(early_trend_size))
 
 // Trend Continuation — star shape
 if f_show_bull(trend_cont_bull, respect_sl_cont)
-    label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=color.new(#0077BB, 0), textcolor=color.white, size=f_sz(trend_cont_size))
+    label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=trend_cont_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
 if f_show_bear(trend_cont_bear, respect_sl_cont)
-    label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=color.new(#EE3322, 0), textcolor=color.white, size=f_sz(trend_cont_size))
+    label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=trend_cont_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
 
 // HTF2 Price Cross Alert — ⚡ (down = closed below HTF2, up = closed above HTF2)
 if f_show_bear(htf2_cross_down, respect_sl_htf2)
-    label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=color.new(#EE3322, 0), textcolor=color.white, size=f_sz(htf2_cross_size))
+    label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 if f_show_bull(htf2_cross_up, respect_sl_htf2)
-    label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=color.new(#0077BB, 0), textcolor=color.white, size=f_sz(htf2_cross_size))
+    label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
 // Pending marker — fires ONCE on the bar the opposing signal first registers
 if show_pending_bull
