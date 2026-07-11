@@ -665,11 +665,11 @@ f_sl_bar_offset_short() =>
     offset
 
 // Draw SL dot on the actual candle that sets the SL level
-// size.auto renders smaller than size.tiny — the smallest option available in Pine Script
-if show_sl_dot and any_bull_signal
+// SL dot uses same suppression gate as markers — respects active_dir state
+if show_sl_dot and f_show_bull(any_bull_signal, true)
     sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_long()
     label.new(bar_index - sl_offset + 0, low[sl_offset] - sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
-if show_sl_dot and any_bear_signal
+if show_sl_dot and f_show_bear(any_bear_signal, true)
     sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_short()
     label.new(bar_index - sl_offset + 0, high[sl_offset] + sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 
