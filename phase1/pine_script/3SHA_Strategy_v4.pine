@@ -562,11 +562,14 @@ if new_bear
         active_sl := f_sl_short_preview()
 
 // Suppress same-direction markers using PREVIOUS bar state
+// Also suppress opposing direction if current active_dir[1] already has the opposite locked
 is_bull_active = active_dir[1] == "bull"
 is_bear_active = active_dir[1] == "bear"
 
+// Bull marker shows if: no active bull lock, AND no pending bear already registered
 f_show_bull(_sig, _respect) => _sig and (not _respect or not is_bull_active)
-f_show_bear(_sig, _respect) => _sig and (not _respect or not is_bear_active)
+// Bear marker shows if: no active bear lock, AND active_dir[1] is not bull (would show as pending instead)
+f_show_bear(_sig, _respect) => _sig and (not _respect or not is_bear_active) and (not _respect or not is_bull_active)
 
 f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "c2" ? "→●" : _t == "c3" ? "→■" : _t == "early" ? "→◆" : _t == "cont" ? "→★" : "→⚡"
 
