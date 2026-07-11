@@ -605,40 +605,39 @@ atr14 = ta.atr(14)
 // Gate helpers — suppress same-direction if respect_sl is ON and already in that trade
 
 // Full Alignment — filled arrow
-if f_show_bull(cascade_bull, respect_sl_cascade) and not show_pending_bull
+if f_show_bull(cascade_bull, respect_sl_cascade)
     label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=cascade_bull_col, textcolor=color.white, size=f_sz(cascade_size))
-if f_show_bear(cascade_bear, respect_sl_cascade) and not show_pending_bear
+if f_show_bear(cascade_bear, respect_sl_cascade)
     label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=cascade_bear_col, textcolor=color.white, size=f_sz(cascade_size))
 
 // Full Cluster Cross — circle dot
-if f_show_bull(c2_bull, respect_sl_c2) and not show_pending_bull
+if f_show_bull(c2_bull, respect_sl_c2)
     label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=c2_bull_col, textcolor=color.white, size=f_sz(c2_size))
-if f_show_bear(c2_bear, respect_sl_c2) and not show_pending_bear
+if f_show_bear(c2_bear, respect_sl_c2)
     label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=c2_bear_col, textcolor=color.white, size=f_sz(c2_size))
 
 // Pullback Resume — square shape
-if f_show_bull(c3_bull, respect_sl_c3) and not show_pending_bull
+if f_show_bull(c3_bull, respect_sl_c3)
     label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=c3_bull_col, textcolor=color.white, size=f_sz(c3_size))
-if f_show_bear(c3_bear, respect_sl_c3) and not show_pending_bear
+if f_show_bear(c3_bear, respect_sl_c3)
     label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=c3_bear_col, textcolor=color.white, size=f_sz(c3_size))
 
 // Early Trend — diamond shape
-if f_show_bull(early_trend_bull, respect_sl_early) and not show_pending_bull
+if f_show_bull(early_trend_bull, respect_sl_early)
     label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=early_trend_bull_col, textcolor=color.white, size=f_sz(early_trend_size))
-if f_show_bear(early_trend_bear, respect_sl_early) and not show_pending_bear
+if f_show_bear(early_trend_bear, respect_sl_early)
     label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=early_trend_bear_col, textcolor=color.white, size=f_sz(early_trend_size))
 
 // Trend Continuation — star shape
-if f_show_bull(trend_cont_bull, respect_sl_cont) and not show_pending_bull
+if f_show_bull(trend_cont_bull, respect_sl_cont)
     label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=trend_cont_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
-if f_show_bear(trend_cont_bear, respect_sl_cont) and not show_pending_bear
+if f_show_bear(trend_cont_bear, respect_sl_cont)
     label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=trend_cont_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
 
 // HTF2 Price Cross Alert — ⚡ (down = closed below HTF2, up = closed above HTF2)
-// Suppress live marker if it's being shown as pending on this same bar
-if f_show_bear(htf2_cross_down, respect_sl_htf2) and not show_pending_bear
+if f_show_bear(htf2_cross_down, respect_sl_htf2)
     label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
-if f_show_bull(htf2_cross_up, respect_sl_htf2) and not show_pending_bull
+if f_show_bull(htf2_cross_up, respect_sl_htf2)
     label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=htf2_cross_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
 // Pending marker — fires ONCE on the bar the opposing signal first registers
