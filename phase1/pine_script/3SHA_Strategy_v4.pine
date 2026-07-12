@@ -192,7 +192,7 @@ htf2_cross_size     = input.string("Small", "HTF2 Cross Alert Size", options=["T
 // INPUTS — INITIAL STOP LOSS
 // ============================================================================
 grp_sl       = "⑧ ━━━ INITIAL STOP LOSS ━━━"
-sl_method    = input.string("Prev N Bars Low/High", "SL Placement Method", options=["Trade Candle Low/High","Prev N Bars Low/High"], tooltip="Determines WHERE the SL level is set. The dot on the chart marks this level.\n\nIMPORTANT: The trade will NOT close when price merely touches or wicks below/above this level. The trade closes ONLY when a candle CLOSES beyond the SL level. This filters out wicks and false breakouts.", group=grp_sl)
+sl_method    = input.string("Prev N Bars Low/High", "SL Placement Method", options=["Trade Candle Low/High","Trade Candle Open/Close","Prev N Bars Low/High"], tooltip="Determines WHERE the SL level is set. The dot on the chart marks this level.\n\nIMPORTANT: The trade will NOT close when price merely touches or wicks below/above this level. The trade closes ONLY when a candle CLOSES beyond the SL level. This filters out wicks and false breakouts.", group=grp_sl)
 sl_lookback  = input.int(30,   "Lookback N Bars  (Prev N Bars method only)", minval=1, maxval=100, tooltip="Number of bars to look back for the lowest low (bull) or highest high (bear). The SL is placed at that level minus/plus the buffer.", group=grp_sl)
 sl_buffer    = input.float(2.0, "Buffer Beyond SL Level (pips)", minval=0, step=0.5, tooltip="Extra distance added beyond the identified low/high, in pips. Provides room for normal price noise around the SL level.", group=grp_sl)
 show_sl_dot  = input.bool(true,  "Show Initial SL Dot", tooltip="Places a dot on the chart at the initial stop loss level. Only visible when Trade This Signal is ON in any Entry Condition above.", group=grp_sl)
@@ -487,12 +487,16 @@ any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or tren
 f_sl_long_preview() =>
     if sl_method == "Trade Candle Low/High"
         low[1] - sl_buffer * pip_divisor
+    else if sl_method == "Trade Candle Open/Close"
+        math.min(open[1], close[1]) - sl_buffer * pip_divisor
     else
         ta.lowest(low, sl_lookback)[1] - sl_buffer * pip_divisor
 
 f_sl_short_preview() =>
     if sl_method == "Trade Candle Low/High"
         high[1] + sl_buffer * pip_divisor
+    else if sl_method == "Trade Candle Open/Close"
+        math.max(open[1], close[1]) + sl_buffer * pip_divisor
     else
         ta.highest(high, sl_lookback)[1] + sl_buffer * pip_divisor
 
@@ -624,10 +628,10 @@ f_sl_bar_offset_short() =>
 // Draw SL dot on the actual candle that sets the SL level
 // SL dot uses same suppression gate as markers — respects active_dir state
 if in_date_range and show_sl_dot and any_bull_signal
-    sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_long()
+    sl_offset = (sl_method == "Trade Candle Low/High" or sl_method == "Trade Candle Open/Close") ? 1 : f_sl_bar_offset_long()
     label.new(bar_index - sl_offset + 0, low[sl_offset] - sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 if in_date_range and show_sl_dot and any_bear_signal
-    sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_short()
+    sl_offset = (sl_method == "Trade Candle Low/High" or sl_method == "Trade Candle Open/Close") ? 1 : f_sl_bar_offset_short()
     label.new(bar_index - sl_offset + 0, high[sl_offset] + sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 
 // ============================================================================
