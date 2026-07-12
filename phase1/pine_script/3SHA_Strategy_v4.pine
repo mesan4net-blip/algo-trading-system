@@ -635,13 +635,11 @@ if in_date_range and show_sl_dot and any_bull_signal[1] and isl_candle_ref == "T
 if in_date_range and show_sl_dot and any_bear_signal[1] and isl_candle_ref == "Trade Candle"
     label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 
-// For Prev N Bars: dot on the bar holding the extreme value
+// For Prev N Bars: dot placed at the SL level on the signal bar itself
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Prev N Bars"
-    offset = f_sl_bar_offset_long()
-    label.new(bar_index - offset, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev N Bars"
-    offset = f_sl_bar_offset_short()
-    label.new(bar_index - offset, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
 // Trails on every bar while active_dir is set, using tsl_candle_type and tsl_price_point
