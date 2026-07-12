@@ -520,18 +520,6 @@ new_bear = any_bear_signal
 this_bull_respects = (cascade_bull     and respect_sl_cascade) or (c2_bull      and respect_sl_c2) or (c3_bull           and respect_sl_c3) or (early_trend_bull and respect_sl_early) or (trend_cont_bull  and respect_sl_cont) or (htf2_cross_up    and respect_sl_htf2)
 this_bear_respects = (cascade_bear     and respect_sl_cascade) or (c2_bear      and respect_sl_c2) or (c3_bear           and respect_sl_c3) or (early_trend_bear and respect_sl_early) or (trend_cont_bear  and respect_sl_cont) or (htf2_cross_down  and respect_sl_htf2)
 
-// Update active_sl every bar while active_dir is set — trail in favorable direction
-// This ensures active_sl stays relevant to current price, not frozen at a historical value
-if active_dir == "bull"
-    new_sl = f_sl_long_preview()
-    if not na(new_sl) and (na(active_sl) or new_sl > active_sl)
-        active_sl := new_sl
-
-if active_dir == "bear"
-    new_sl = f_sl_short_preview()
-    if not na(new_sl) and (na(active_sl) or new_sl < active_sl)
-        active_sl := new_sl
-
 // SL breach clears active direction
 if active_dir == "bull" and not na(active_sl) and close < active_sl
     active_dir := pend_dir
