@@ -526,7 +526,7 @@ if active_dir == "bear" and not na(active_sl) and close > active_sl
 // Bull signal fires
 if new_bull
     if active_dir == "none" or (active_dir == "bear" and not this_bull_respects)
-        // No active signal, OR opposing but this signal doesn't respect SL — take over
+        // No active signal, OR opposing without respect SL — take over with fresh SL
         active_dir := "bull"
         active_sl  := f_sl_long_preview()
         pend_dir   := "none"
@@ -534,15 +534,14 @@ if new_bull
     else if active_dir == "bear" and this_bull_respects and pend_dir == "none"
         pend_dir  := "bull"
         pend_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
+    // Same direction — do NOT update active_sl, just cancel any pending
     else if active_dir == "bull"
-        pend_dir := "none"
+        pend_dir  := "none"
         pend_type := "none"
-        active_sl := f_sl_long_preview()
 
 // Bear signal fires
 if new_bear
     if active_dir == "none" or (active_dir == "bull" and not this_bear_respects)
-        // No active signal, OR opposing but this signal doesn't respect SL — take over
         active_dir := "bear"
         active_sl  := f_sl_short_preview()
         pend_dir   := "none"
@@ -550,19 +549,17 @@ if new_bear
     else if active_dir == "bull" and this_bear_respects and pend_dir == "none"
         pend_dir  := "bear"
         pend_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
+    // Same direction — do NOT update active_sl, just cancel any pending
     else if active_dir == "bear"
-        pend_dir := "none"
+        pend_dir  := "none"
         pend_type := "none"
-        active_sl := f_sl_short_preview()
 
-// Suppress same-direction markers using PREVIOUS bar state
-// Also suppress opposing direction if current active_dir[1] already has the opposite locked
+// Suppression gate — active_dir[1] ensures first signal always shows,
+// suppression kicks in from the bar AFTER active_dir was set
 is_bull_active = active_dir[1] == "bull"
 is_bear_active = active_dir[1] == "bear"
 
-// Bull marker shows if: no active bull lock, AND no pending bear already registered
 f_show_bull(_sig, _respect) => _sig and (not _respect or not is_bull_active)
-// Bear marker shows if: no active bear lock, AND active_dir[1] is not bull (would show as pending instead)
 f_show_bear(_sig, _respect) => _sig and (not _respect or not is_bear_active) and (not _respect or not is_bull_active)
 
 f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "c2" ? "→●" : _t == "c3" ? "→■" : _t == "early" ? "→◆" : _t == "cont" ? "→★" : "→⚡"
