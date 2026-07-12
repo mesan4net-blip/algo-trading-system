@@ -541,8 +541,17 @@ if new_bull
         active_sl  := f_sl_long_preview()
         pend_dir   := "none"
         pend_type  := "none"
-    else if (active_dir == "bear" and this_bull_respects and pend_dir == "none") or (active_dir == "bull" and pend_dir == "none")
-        // Opposing (with respect SL) OR same direction while active — show as grey pending
+    else if active_dir == "bull"
+        // Same direction — trail SL upward only (never move against the trade)
+        new_sl = f_sl_long_preview()
+        if not na(new_sl) and (na(active_sl) or new_sl > active_sl)
+            active_sl := new_sl
+        // Register as grey pending if slot is free
+        if pend_dir == "none"
+            pend_dir  := "bull"
+            pend_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
+    else if active_dir == "bear" and this_bull_respects and pend_dir == "none"
+        // Opposing with respect SL — register as grey pending
         pend_dir  := "bull"
         pend_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
 
@@ -554,8 +563,17 @@ if new_bear
         active_sl  := f_sl_short_preview()
         pend_dir   := "none"
         pend_type  := "none"
-    else if (active_dir == "bull" and this_bear_respects and pend_dir == "none") or (active_dir == "bear" and pend_dir == "none")
-        // Opposing (with respect SL) OR same direction while active — show as grey pending
+    else if active_dir == "bear"
+        // Same direction — trail SL downward only (never move against the trade)
+        new_sl = f_sl_short_preview()
+        if not na(new_sl) and (na(active_sl) or new_sl < active_sl)
+            active_sl := new_sl
+        // Register as grey pending if slot is free
+        if pend_dir == "none"
+            pend_dir  := "bear"
+            pend_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
+    else if active_dir == "bull" and this_bear_respects and pend_dir == "none"
+        // Opposing with respect SL — register as grey pending
         pend_dir  := "bear"
         pend_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
 
