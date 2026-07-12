@@ -499,102 +499,39 @@ f_sl_short_preview() =>
 
 
 // ============================================================================
-// ACTIVE SIGNAL TRACKING — Respect Active SL
-// When Respect Active SL is ON for a marker:
-//   1. First signal in a direction sets active_dir and active_sl
-//   2. Same-direction markers suppressed while active_dir holds
-//   3. Opposing markers shown as grey pending (→) on the ONE bar they first fire
-//   4. When close breaches active_sl → active_dir clears, opposing direction becomes active
+// ACTIVE SIGNAL STATE MACHINE — simplified
+// - First signal fires → colored marker, active_dir set
+// - Any subsequent signal while active_dir is set → grey marker
+// - active_dir never resets (exit logic handled separately when SL section built)
+// - Every marker (colored or grey) gets its own SL dot drawn at that bar's SL level
 // ============================================================================
 PENDING_GREY = color.new(#888888, 30)
 
 var string active_dir = "none"
-var float  active_sl  = na
-var string pend_dir   = "none"
-var string pend_type  = "none"
 
-new_bull = any_bull_signal
-new_bear = any_bear_signal
+// Set active_dir on first signal in either direction
+// If already active — stay in current direction (grey markers handle display)
+if any_bull_signal and active_dir == "none"
+    active_dir := "bull"
+if any_bear_signal and active_dir == "none"
+    active_dir := "bear"
 
-// Per-signal respect_sl check — which firing signal has it ON
-this_bull_respects = (cascade_bull     and respect_sl_cascade) or (c2_bull      and respect_sl_c2) or (c3_bull           and respect_sl_c3) or (early_trend_bull and respect_sl_early) or (trend_cont_bull  and respect_sl_cont) or (htf2_cross_up    and respect_sl_htf2)
-this_bear_respects = (cascade_bear     and respect_sl_cascade) or (c2_bear      and respect_sl_c2) or (c3_bear           and respect_sl_c3) or (early_trend_bear and respect_sl_early) or (trend_cont_bear  and respect_sl_cont) or (htf2_cross_down  and respect_sl_htf2)
-
-// SL breach clears active direction
-if active_dir == "bull" and not na(active_sl) and close < active_sl
-    active_dir := pend_dir
-    active_sl  := active_dir == "bear" ? f_sl_short_preview() : na
-    pend_dir   := "none"
-    pend_type  := "none"
-
-if active_dir == "bear" and not na(active_sl) and close > active_sl
-    active_dir := pend_dir
-    active_sl  := active_dir == "bull" ? f_sl_long_preview() : na
-    pend_dir   := "none"
-    pend_type  := "none"
-
-// Bull signal fires
-if new_bull
-    if active_dir == "none" or (active_dir == "bear" and not this_bull_respects)
-        // No active signal — take over, set fresh SL
-        active_dir := "bull"
-        active_sl  := f_sl_long_preview()
-        pend_dir   := "none"
-        pend_type  := "none"
-    else if active_dir == "bull"
-        // Same direction — trail SL upward only (never move against the trade)
-        new_sl = f_sl_long_preview()
-        if not na(new_sl) and (na(active_sl) or new_sl > active_sl)
-            active_sl := new_sl
-        // Register as grey pending if slot is free
-        if pend_dir == "none"
-            pend_dir  := "bull"
-            pend_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
-    else if active_dir == "bear" and this_bull_respects and pend_dir == "none"
-        // Opposing with respect SL — register as grey pending
-        pend_dir  := "bull"
-        pend_type := cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
-
-// Bear signal fires
-if new_bear
-    if active_dir == "none" or (active_dir == "bull" and not this_bear_respects)
-        // No active signal — take over, set fresh SL
-        active_dir := "bear"
-        active_sl  := f_sl_short_preview()
-        pend_dir   := "none"
-        pend_type  := "none"
-    else if active_dir == "bear"
-        // Same direction — trail SL downward only (never move against the trade)
-        new_sl = f_sl_short_preview()
-        if not na(new_sl) and (na(active_sl) or new_sl < active_sl)
-            active_sl := new_sl
-        // Register as grey pending if slot is free
-        if pend_dir == "none"
-            pend_dir  := "bear"
-            pend_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
-    else if active_dir == "bull" and this_bear_respects and pend_dir == "none"
-        // Opposing with respect SL — register as grey pending
-        pend_dir  := "bear"
-        pend_type := cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
-
-// Any signal while active_dir is set → suppress colored marker, show grey instead
-// active_dir[1] ensures the FIRST signal on the bar it sets active_dir still shows colored
+// Gate: colored marker only on the bar active_dir first becomes set
+// All subsequent signals show as grey regardless of direction
 is_any_active = active_dir[1] != "none"
-is_bull_active = active_dir[1] == "bull"
-is_bear_active = active_dir[1] == "bear"
 
-// Show colored marker only when no active direction yet
 f_show_bull(_sig, _respect) => _sig and (not _respect or not is_any_active)
 f_show_bear(_sig, _respect) => _sig and (not _respect or not is_any_active)
 
+// Grey marker fires once per signal — when signal fires while already active
+show_grey_bull = any_bull_signal and is_any_active
+show_grey_bear = any_bear_signal and is_any_active
+
+// Which signal type fired (for grey marker shape)
+grey_bull_type = cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
+grey_bear_type = cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
+
 f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "c2" ? "→●" : _t == "c3" ? "→■" : _t == "early" ? "→◆" : _t == "cont" ? "→★" : "→⚡"
-
-// Show pending marker ONCE — only on the bar pend_dir first becomes set
-show_pending_bull = pend_dir == "bull" and pend_dir[1] != "bull"
-show_pending_bear = pend_dir == "bear" and pend_dir[1] != "bear"
-
-is_long  = active_dir == "bull"
-is_short = active_dir == "bear"
 
 // ============================================================================
 // MARKER SIZE HELPER
@@ -621,47 +558,47 @@ atr14 = ta.atr(14)
 // Gate helpers — suppress same-direction if respect_sl is ON and already in that trade
 
 // Full Alignment — filled arrow
-if in_date_range and f_show_bull(cascade_bull, respect_sl_cascade) and not show_pending_bull
+if in_date_range and f_show_bull(cascade_bull, respect_sl_cascade) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(cascade_size))
-if in_date_range and f_show_bear(cascade_bear, respect_sl_cascade) and not show_pending_bear
+if in_date_range and f_show_bear(cascade_bear, respect_sl_cascade) and not show_grey_bear
     label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(cascade_size))
 
 // Full Cluster Cross — circle dot
-if in_date_range and f_show_bull(c2_bull, respect_sl_c2) and not show_pending_bull
+if in_date_range and f_show_bull(c2_bull, respect_sl_c2) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(c2_size))
-if in_date_range and f_show_bear(c2_bear, respect_sl_c2) and not show_pending_bear
+if in_date_range and f_show_bear(c2_bear, respect_sl_c2) and not show_grey_bear
     label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(c2_size))
 
 // Pullback Resume — square shape
-if in_date_range and f_show_bull(c3_bull, respect_sl_c3) and not show_pending_bull
+if in_date_range and f_show_bull(c3_bull, respect_sl_c3) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(c3_size))
-if in_date_range and f_show_bear(c3_bear, respect_sl_c3) and not show_pending_bear
+if in_date_range and f_show_bear(c3_bear, respect_sl_c3) and not show_grey_bear
     label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(c3_size))
 
 // Early Trend — diamond shape
-if in_date_range and f_show_bull(early_trend_bull, respect_sl_early) and not show_pending_bull
+if in_date_range and f_show_bull(early_trend_bull, respect_sl_early) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(early_trend_size))
-if in_date_range and f_show_bear(early_trend_bear, respect_sl_early) and not show_pending_bear
+if in_date_range and f_show_bear(early_trend_bear, respect_sl_early) and not show_grey_bear
     label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(early_trend_size))
 
 // Trend Continuation — star shape
-if in_date_range and f_show_bull(trend_cont_bull, respect_sl_cont) and not show_pending_bull
+if in_date_range and f_show_bull(trend_cont_bull, respect_sl_cont) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
-if in_date_range and f_show_bear(trend_cont_bear, respect_sl_cont) and not show_pending_bear
+if in_date_range and f_show_bear(trend_cont_bear, respect_sl_cont) and not show_grey_bear
     label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
 
 // HTF2 Price Cross Alert — ⚡ (down = closed below HTF2, up = closed above HTF2)
 // Suppress live marker if it's being shown as pending on this same bar
-if in_date_range and f_show_bear(htf2_cross_down, respect_sl_htf2) and not show_pending_bear
+if in_date_range and f_show_bear(htf2_cross_down, respect_sl_htf2) and not show_grey_bear
     label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(htf2_cross_size))
-if in_date_range and f_show_bull(htf2_cross_up, respect_sl_htf2) and not show_pending_bull
+if in_date_range and f_show_bull(htf2_cross_up, respect_sl_htf2) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
 // Pending marker — fires ONCE on the bar the opposing signal first registers
-if in_date_range and show_pending_bull
-    label.new(bar_index, low  - atr14 * 0.8, f_pending_sym(pend_type), style=label.style_label_up,   color=PENDING_GREY, textcolor=color.white, size=size.small)
-if in_date_range and show_pending_bear
-    label.new(bar_index, high + atr14 * 0.8, f_pending_sym(pend_type), style=label.style_label_down, color=PENDING_GREY, textcolor=color.white, size=size.small)
+if in_date_range and show_grey_bull
+    label.new(bar_index, low  - atr14 * 0.8, f_pending_sym(grey_bull_type), style=label.style_label_up,   color=PENDING_GREY, textcolor=color.white, size=size.small)
+if in_date_range and show_grey_bear
+    label.new(bar_index, high + atr14 * 0.8, f_pending_sym(grey_bear_type), style=label.style_label_down, color=PENDING_GREY, textcolor=color.white, size=size.small)
 
 // Any bull signal firing → show SL preview dot on the actual SL candle
 
@@ -686,10 +623,10 @@ f_sl_bar_offset_short() =>
 
 // Draw SL dot on the actual candle that sets the SL level
 // SL dot uses same suppression gate as markers — respects active_dir state
-if in_date_range and show_sl_dot and f_show_bull(any_bull_signal, true)
+if in_date_range and show_sl_dot and any_bull_signal
     sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_long()
     label.new(bar_index - sl_offset + 0, low[sl_offset] - sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
-if in_date_range and show_sl_dot and f_show_bear(any_bear_signal, true)
+if in_date_range and show_sl_dot and any_bear_signal
     sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_short()
     label.new(bar_index - sl_offset + 0, high[sl_offset] + sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 
@@ -777,5 +714,3 @@ if show_hud and barstate.islast
     table.cell(hud, 0, 8, "Active Dir", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 8, active_dir,   bgcolor=W, text_color=active_dir == "bull" ? color.new(#0077BB,0) : active_dir == "bear" ? color.new(#EE3322,0) : color.gray, text_size=SZ)
 
-    table.cell(hud, 0, 9, "Active SL",  bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 9, na(active_sl) ? "—" : str.tostring(active_sl, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
