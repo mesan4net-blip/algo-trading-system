@@ -199,9 +199,19 @@ show_sl_dot  = input.bool(true,  "Show Initial SL Dot", tooltip="Places a dot on
 sl_dot_col   = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_sl)
 
 // ============================================================================
+// INPUTS — DATE RANGE FILTER
+// ============================================================================
+grp_date     = "⑩ ━━━ DATE RANGE FILTER ━━━"
+use_date_filter = input.bool(false, "Enable Date Range Filter", tooltip="When ON, only show markers and SL dots within the specified date range. SHA candles always show regardless.", group=grp_date)
+date_start   = input.time(timestamp("2025-01-01 00:00"), "Start Date", group=grp_date)
+date_end     = input.time(timestamp("2026-12-31 23:59"), "End Date",   group=grp_date)
+
+in_date_range = not use_date_filter or (time >= date_start and time <= date_end)
+
+// ============================================================================
 // INPUTS — STATE HUD
 // ============================================================================
-grp_hud     = "⑨ ━━━ STATE HUD ━━━"
+grp_hud     = "⑪ ━━━ STATE HUD ━━━"
 show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
 hud_pos_inp = input.string("Bottom Left", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
 
@@ -593,46 +603,46 @@ atr14 = ta.atr(14)
 // Gate helpers — suppress same-direction if respect_sl is ON and already in that trade
 
 // Full Alignment — filled arrow
-if f_show_bull(cascade_bull, respect_sl_cascade) and not show_pending_bull
+if in_date_range and f_show_bull(cascade_bull, respect_sl_cascade) and not show_pending_bull
     label.new(bar_index, low  - atr14 * 0.8, "▲", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(cascade_size))
-if f_show_bear(cascade_bear, respect_sl_cascade) and not show_pending_bear
+if in_date_range and f_show_bear(cascade_bear, respect_sl_cascade) and not show_pending_bear
     label.new(bar_index, high + atr14 * 0.8, "▼", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(cascade_size))
 
 // Full Cluster Cross — circle dot
-if f_show_bull(c2_bull, respect_sl_c2) and not show_pending_bull
+if in_date_range and f_show_bull(c2_bull, respect_sl_c2) and not show_pending_bull
     label.new(bar_index, low  - atr14 * 2.8, "●", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(c2_size))
-if f_show_bear(c2_bear, respect_sl_c2) and not show_pending_bear
+if in_date_range and f_show_bear(c2_bear, respect_sl_c2) and not show_pending_bear
     label.new(bar_index, high + atr14 * 2.8, "●", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(c2_size))
 
 // Pullback Resume — square shape
-if f_show_bull(c3_bull, respect_sl_c3) and not show_pending_bull
+if in_date_range and f_show_bull(c3_bull, respect_sl_c3) and not show_pending_bull
     label.new(bar_index, low  - atr14 * 3.8, "■", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(c3_size))
-if f_show_bear(c3_bear, respect_sl_c3) and not show_pending_bear
+if in_date_range and f_show_bear(c3_bear, respect_sl_c3) and not show_pending_bear
     label.new(bar_index, high + atr14 * 3.8, "■", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(c3_size))
 
 // Early Trend — diamond shape
-if f_show_bull(early_trend_bull, respect_sl_early) and not show_pending_bull
+if in_date_range and f_show_bull(early_trend_bull, respect_sl_early) and not show_pending_bull
     label.new(bar_index, low  - atr14 * 1.8, "◆", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(early_trend_size))
-if f_show_bear(early_trend_bear, respect_sl_early) and not show_pending_bear
+if in_date_range and f_show_bear(early_trend_bear, respect_sl_early) and not show_pending_bear
     label.new(bar_index, high + atr14 * 1.8, "◆", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(early_trend_size))
 
 // Trend Continuation — star shape
-if f_show_bull(trend_cont_bull, respect_sl_cont) and not show_pending_bull
+if in_date_range and f_show_bull(trend_cont_bull, respect_sl_cont) and not show_pending_bull
     label.new(bar_index, low  - atr14 * 4.8, "★ LON→NY", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
-if f_show_bear(trend_cont_bear, respect_sl_cont) and not show_pending_bear
+if in_date_range and f_show_bear(trend_cont_bear, respect_sl_cont) and not show_pending_bear
     label.new(bar_index, high + atr14 * 4.8, "★ LON→NY", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
 
 // HTF2 Price Cross Alert — ⚡ (down = closed below HTF2, up = closed above HTF2)
 // Suppress live marker if it's being shown as pending on this same bar
-if f_show_bear(htf2_cross_down, respect_sl_htf2) and not show_pending_bear
+if in_date_range and f_show_bear(htf2_cross_down, respect_sl_htf2) and not show_pending_bear
     label.new(bar_index, high + atr14 * 0.3, "⚡", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(htf2_cross_size))
-if f_show_bull(htf2_cross_up, respect_sl_htf2) and not show_pending_bull
+if in_date_range and f_show_bull(htf2_cross_up, respect_sl_htf2) and not show_pending_bull
     label.new(bar_index, low  - atr14 * 0.3, "⚡", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
 // Pending marker — fires ONCE on the bar the opposing signal first registers
-if show_pending_bull
+if in_date_range and show_pending_bull
     label.new(bar_index, low  - atr14 * 0.8, f_pending_sym(pend_type), style=label.style_label_up,   color=PENDING_GREY, textcolor=color.white, size=size.small)
-if show_pending_bear
+if in_date_range and show_pending_bear
     label.new(bar_index, high + atr14 * 0.8, f_pending_sym(pend_type), style=label.style_label_down, color=PENDING_GREY, textcolor=color.white, size=size.small)
 
 // Any bull signal firing → show SL preview dot on the actual SL candle
@@ -658,10 +668,10 @@ f_sl_bar_offset_short() =>
 
 // Draw SL dot on the actual candle that sets the SL level
 // SL dot uses same suppression gate as markers — respects active_dir state
-if show_sl_dot and f_show_bull(any_bull_signal, true)
+if in_date_range and show_sl_dot and f_show_bull(any_bull_signal, true)
     sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_long()
     label.new(bar_index - sl_offset + 0, low[sl_offset] - sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
-if show_sl_dot and f_show_bear(any_bear_signal, true)
+if in_date_range and show_sl_dot and f_show_bear(any_bear_signal, true)
     sl_offset = sl_method == "Trade Candle Low/High" ? 1 : f_sl_bar_offset_short()
     label.new(bar_index - sl_offset + 0, high[sl_offset] + sl_buffer * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=size.auto)
 
