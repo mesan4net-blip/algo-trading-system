@@ -34,9 +34,21 @@ f_sha(_len1, _len2, _o, _h, _l, _c) =>
     [o2, h2, l2, c2]
 
 // ============================================================================
+// INPUTS — INSTRUMENT TYPE
+// ============================================================================
+grp_inst        = "① ━━━ INSTRUMENT ━━━"
+instrument_type = input.string("Forex", "Instrument Type", options=["Forex","Equity","Crypto"], tooltip="Forex: buffer/offset in pips, pip-based position sizing, London/NY sessions.\nEquity: buffer/offset in points (dollars/cents), share-based sizing, exchange hours.\nCrypto: buffer/offset in points, coin-based sizing, 24/7 market.", group=grp_inst)
+
+// Derived helpers — buffer unit label and pip_divisor usage
+is_forex  = instrument_type == "Forex"
+is_equity = instrument_type == "Equity"
+is_crypto = instrument_type == "Crypto"
+unit_label = is_forex ? "pips" : "points"
+
+// ============================================================================
 // INPUTS — BROKER TIME REFERENCE
 // ============================================================================
-grp_time        = "① ━━━ BROKER TIME REFERENCE ━━━"
+grp_time        = "② ━━━ BROKER TIME REFERENCE ━━━"
 your_local_hour = input.int(18,  "Your Current Local Hour (24h)",                 minval=0,   maxval=23, group=grp_time)
 your_local_day  = input.int(28,  "Your Current Local Day",                         minval=1,   maxval=31, group=grp_time)
 broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                      minval=0,   maxval=23, group=grp_time)
@@ -64,7 +76,7 @@ ny_tw_c    = f_norm(16 + broker_offset)
 // ============================================================================
 // INPUTS — TRADE SESSIONS
 // ============================================================================
-grp_sess          = "② ━━━ TRADE SESSIONS ━━━"
+grp_sess          = "③ ━━━ TRADE SESSIONS ━━━"
 pip_divisor       = input.float(0.0001,   "Pip Size", minval=0.00001, step=0.00001, tooltip="Standard forex pairs: 0.0001 | JPY pairs and Gold: 0.01", group=grp_sess)
 sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
 sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
@@ -82,7 +94,7 @@ ny_label_col      = input.color(color.new(#33BBEE, 0),  "New York — Label Colo
 // ============================================================================
 // INPUTS — GLOBAL DISPLAY
 // ============================================================================
-grp_global   = "③ ━━━ GLOBAL DISPLAY ━━━"
+grp_global   = "④ ━━━ GLOBAL DISPLAY ━━━"
 show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
 show_borders = input.bool(true,  "Show Borders (all layers)", group=grp_global)
 marker_atr_mult = input.float(1.0, "Marker ATR Offset Multiplier", minval=0.1, maxval=5.0, step=0.1, tooltip="Scales how far all markers sit from the bar. 1.0 = default. Lower = closer to bar. Higher = further away.", group=grp_global)
@@ -90,7 +102,7 @@ marker_atr_mult = input.float(1.0, "Marker ATR Offset Multiplier", minval=0.1, m
 // ============================================================================
 // INPUTS — BASE SHA
 // ============================================================================
-grp_base     = "④ ━━━ BASE SHA  [Chart TF — auto] ━━━"
+grp_base     = "⑤ ━━━ BASE SHA  [Chart TF — auto] ━━━"
 base_len1    = input.int(4,  "Stage-1 EMA Length", minval=1, group=grp_base)
 base_len2    = input.int(8,  "Stage-2 EMA Length", minval=1, group=grp_base)
 base_show    = input.bool(true, "Show Base SHA Candles",      group=grp_base)
@@ -103,7 +115,7 @@ base_opacity = input.int(0,  "Opacity (0=solid 100=invisible)", minval=0, maxval
 // ============================================================================
 // INPUTS — HTF1 SHA
 // ============================================================================
-grp_htf1     = "⑤ ━━━ HTF1 SHA  [Mid Timeframe] ━━━"
+grp_htf1     = "⑥ ━━━ HTF1 SHA  [Mid Timeframe] ━━━"
 htf1_tf      = input.timeframe("60",  "HTF1 Timeframe",       group=grp_htf1)
 htf1_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf1)
 htf1_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf1)
@@ -118,7 +130,7 @@ htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval
 // ============================================================================
 // INPUTS — HTF2 SHA
 // ============================================================================
-grp_htf2     = "⑥ ━━━ HTF2 SHA  [High Timeframe] ━━━"
+grp_htf2     = "⑦ ━━━ HTF2 SHA  [High Timeframe] ━━━"
 htf2_tf      = input.timeframe("240", "HTF2 Timeframe",       group=grp_htf2)
 htf2_len1    = input.int(4,  "Stage-1 EMA Length", minval=1,  group=grp_htf2)
 htf2_len2    = input.int(8,  "Stage-2 EMA Length", minval=1,  group=grp_htf2)
@@ -133,15 +145,15 @@ htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval
 // ============================================================================
 // INPUTS — ENTRY CONDITIONS
 // ============================================================================
-grp_entry_colors = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Marker Colors"
+grp_entry_colors = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Marker Colors"
 marker_bull_col  = input.color(color.new(#0077BB, 0), "Bull Marker Color  (all UP signals)", tooltip="Applied to ALL bull/up markers regardless of signal type. Shape identifies the condition type.", group=grp_entry_colors)
 marker_bear_col  = input.color(color.new(#EE3322, 0), "Bear Marker Color  (all DOWN signals)", tooltip="Applied to ALL bear/down markers regardless of signal type. Shape identifies the condition type.", group=grp_entry_colors)
 
-grp_entry_casc  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Alignment"
-grp_entry_c2    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Cluster Cross"
-grp_entry_c3    = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Pullback Resume"
-grp_entry_early = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Early Trend Signal"
-grp_entry_cont  = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ Trend Continuation"
+grp_entry_casc  = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Alignment"
+grp_entry_c2    = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Cluster Cross"
+grp_entry_c3    = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Pullback Resume"
+grp_entry_early = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Early Trend Signal"
+grp_entry_cont  = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Trend Continuation"
 
 // Cascade
 show_cascade      = input.bool(true,  "Full Alignment", tooltip="All three SHA layers (Base, HTF1, HTF2) are pointing the same direction. Highest confidence — slowest to fire.", group=grp_entry_casc)
@@ -182,7 +194,7 @@ trend_cont_size     = input.string("Normal", "Trend Continuation Marker Size", o
 // ============================================================================
 // HTF2 Price Cross Alert — fires when real price crosses into/through HTF2 body
 // ============================================================================
-grp_htf2_cross      = "⑦ ━━━ ENTRY CONDITIONS ━━━  ▸ HTF2 Price Cross Alert"
+grp_htf2_cross      = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ HTF2 Price Cross Alert"
 show_htf2_cross     = input.bool(true,  "HTF2 Price Cross Alert", tooltip="Fires once when price CLOSES beyond the HTF2 SHA body boundary — either direction, regardless of trend. A warning that price has closed outside the HTF2 zone.", group=grp_htf2_cross)
 respect_sl_htf2     = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker — no trade opens until the existing SL is hit on a candle close. Works independently of Trade This Signal — you can use this to analyze pending behavior without opening any trades.", group=grp_htf2_cross)
 trade_htf2_cross    = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time the HTF2 Price Cross Alert fires and passes all filters.", group=grp_htf2_cross)
@@ -192,22 +204,22 @@ htf2_cross_size     = input.string("Small", "HTF2 Cross Alert Size", options=["T
 // ============================================================================
 // INPUTS — INITIAL STOP LOSS
 // ============================================================================
-grp_sl       = "⑧ ━━━ MENTAL STOP LOSS ━━━"
+grp_sl       = "⑨ ━━━ MENTAL STOP LOSS ━━━"
 
 // ── Initial Mental SL ─────────────────────────────────────────────────────
-grp_isl      = "⑧ ━━━ MENTAL STOP LOSS ━━━  ▸ Initial SL"
+grp_isl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Initial SL"
 isl_candle_ref  = input.string("Trigger Candle", "SL Candle Reference", options=["Trigger Candle","Trade Candle","Prev N Bars"], tooltip="Trigger Candle: the candle whose close caused the marker to fire.\nTrade Candle: the candle after the trigger, where the trade is assumed to have opened.\nPrev N Bars: the lowest/highest candle within the lookback window.", group=grp_isl)
 isl_candle_type = input.string("Regular",        "SL Candle Type",      options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle's OHLC to use for the SL level. All are confirmed closed bars — no live candle values.", group=grp_isl)
 isl_price_point = input.string("Low/High",       "SL Price Point",      options=["Low/High","Open/Close"], tooltip="Low/High: uses the wick extremes. Open/Close: uses the body (min/max of open and close). Bull SL uses the lower value, Bear SL uses the upper value.", group=grp_isl)
 sl_lookback     = input.int(30, "Lookback N Bars  (Prev N Bars only)", minval=1, maxval=100, group=grp_isl)
-sl_buffer       = input.float(2.0, "Buffer Beyond SL Level (pips)", minval=0, step=0.5, tooltip="Extra distance in pips added beyond the SL level. Provides room for normal noise.\n\nIMPORTANT — Mental SL only: the exit triggers ONLY when a candle CLOSES beyond this level. Price touching or wicking through intrabar does not count.", group=grp_isl)
+sl_buffer       = input.float(2.0, "Buffer Beyond SL Level (pips / points)", minval=0, step=0.5, tooltip="Extra distance in pips added beyond the SL level. Provides room for normal noise.\n\nIMPORTANT — Mental SL only: the exit triggers ONLY when a candle CLOSES beyond this level. Price touching or wicking through intrabar does not count.", group=grp_isl)
 show_sl_dot     = input.bool(true, "Show Initial Mental SL Dot", group=grp_isl)
 sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl)
 sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl)
 sl_dot_offset   = input.float(0.5, "SL Dot Visual Offset (ATR)", minval=0.0, maxval=5.0, step=0.1, tooltip="Nudges the dot away from the candle for visibility. 0 = dot sits exactly at the SL price level. Higher = further from the candle.", group=grp_isl)
 
 // ── Trailing Mental SL ────────────────────────────────────────────────────
-grp_tsl      = "⑧ ━━━ MENTAL STOP LOSS ━━━  ▸ Trailing SL"
+grp_tsl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Trailing SL"
 enable_tsl      = input.bool(false, "Enable Trailing SL", tooltip="When ON: trailing SL is active as part of trade management. Does not affect visual display — use Show Trailing Mental SL Dot for that.", group=grp_tsl)
 tsl_candle_type = input.string("Regular",  "Trail Candle Type",  options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle type to trail on. Uses the same lookback window as Initial SL.", group=grp_tsl)
 tsl_price_point = input.string("Low/High", "Trail Price Point",  options=["Low/High","Open/Close"], tooltip="Low/High: trail on wick extremes. Open/Close: trail on body. Bull trail uses lowest value, Bear trail uses highest value.", group=grp_tsl)
@@ -217,7 +229,7 @@ tsl_dot_col     = input.color(color.new(#444444, 0), "Trail SL Dot Color", group
 // ============================================================================
 // INPUTS — DATE RANGE FILTER
 // ============================================================================
-grp_date     = "⑩ ━━━ DATE RANGE FILTER ━━━"
+grp_date     = "⑪ ━━━ DATE RANGE FILTER ━━━"
 use_date_filter = input.bool(false, "Enable Date Range Filter", tooltip="When ON, only show markers and SL dots within the specified date range. SHA candles always show regardless.", group=grp_date)
 date_start   = input.time(timestamp("2025-01-01 00:00"), "Start Date", group=grp_date)
 date_end     = input.time(timestamp("2026-12-31 23:59"), "End Date",   group=grp_date)
@@ -227,7 +239,7 @@ in_date_range = not use_date_filter or (time >= date_start and time <= date_end)
 // ============================================================================
 // INPUTS — STATE HUD
 // ============================================================================
-grp_hud     = "⑪ ━━━ STATE HUD ━━━"
+grp_hud     = "⑩ ━━━ STATE HUD ━━━"
 show_hud    = input.bool(true, "Show State HUD", group=grp_hud)
 hud_pos_inp = input.string("Bottom Left", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_hud)
 
