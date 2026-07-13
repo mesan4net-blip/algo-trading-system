@@ -203,6 +203,7 @@ sl_lookback     = input.int(30, "Lookback N Bars  (Prev N Bars only)", minval=1,
 sl_buffer       = input.float(2.0, "Buffer Beyond SL Level (pips)", minval=0, step=0.5, tooltip="Extra distance in pips added beyond the SL level. Provides room for normal noise.\n\nIMPORTANT — Mental SL only: the exit triggers ONLY when a candle CLOSES beyond this level. Price touching or wicking through intrabar does not count.", group=grp_isl)
 show_sl_dot     = input.bool(true, "Show Initial Mental SL Dot", group=grp_isl)
 sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl)
+sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl)
 
 // ── Trailing Mental SL ────────────────────────────────────────────────────
 grp_tsl      = "⑧ ━━━ MENTAL STOP LOSS ━━━  ▸ Trailing SL"
@@ -556,6 +557,7 @@ f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "c2" ? "→●" : _t == 
 // MARKER SIZE HELPER
 // ============================================================================
 f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.auto
 atr14 = ta.atr(14)
 
 // ============================================================================
@@ -627,21 +629,21 @@ if in_date_range and show_grey_bear
 
 // For Trigger Candle: draw on the signal bar itself
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Trigger Candle"
-    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Trigger Candle"
-    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // For Trade Candle: draw on the bar AFTER the signal (using [1] to reference previous signal)
 if in_date_range and show_sl_dot and any_bull_signal[1] and isl_candle_ref == "Trade Candle"
-    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal[1] and isl_candle_ref == "Trade Candle"
-    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // For Prev N Bars: dot placed at the SL level on the signal bar itself
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Prev N Bars"
-    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+    label.new(bar_index, f_sl_long_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev N Bars"
-    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=size.auto)
+    label.new(bar_index, f_sl_short_preview(), "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
 // Trails on every bar while active_dir is set, using tsl_candle_type and tsl_price_point
