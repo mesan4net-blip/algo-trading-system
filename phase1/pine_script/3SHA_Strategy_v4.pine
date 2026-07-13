@@ -520,21 +520,32 @@ f_tsl_short() => ta.highest(tsl_high, sl_lookback) + sl_buffer * pip_divisor
 
 // ============================================================================
 // ACTIVE SIGNAL STATE MACHINE — simplified
-// - First signal fires → colored marker, active_dir set
+// - First signal fires → colored marker, active_dir set, active_sl locked
 // - Any subsequent signal while active_dir is set → grey marker
-// - active_dir never resets (exit logic handled separately when SL section built)
+// - Candle closes beyond active_sl → active_dir and active_sl reset
+// - Next signal after reset → colored marker again
 // - Every marker (colored or grey) gets its own SL dot drawn at that bar's SL level
 // ============================================================================
 PENDING_GREY = color.new(#888888, 30)
 
 var string active_dir = "none"
+var float  active_sl  = na
 
-// Set active_dir on first signal in either direction
-// If already active — stay in current direction (grey markers handle display)
+// Set active_dir and lock active_sl on first signal in either direction
 if any_bull_signal and active_dir == "none"
     active_dir := "bull"
+    active_sl  := f_sl_long_preview()
 if any_bear_signal and active_dir == "none"
     active_dir := "bear"
+    active_sl  := f_sl_short_preview()
+
+// SL breach — candle closes beyond initial SL → reset active direction
+if active_dir == "bull" and not na(active_sl) and close < active_sl
+    active_dir := "none"
+    active_sl  := na
+if active_dir == "bear" and not na(active_sl) and close > active_sl
+    active_dir := "none"
+    active_sl  := na
 
 // Gate: colored marker only on the bar active_dir first becomes set
 // All subsequent signals show as grey regardless of direction
@@ -739,4 +750,6 @@ if show_hud and barstate.islast
 
     table.cell(hud, 0, 8, "Active Dir", bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 8, active_dir,   bgcolor=W, text_color=active_dir == "bull" ? color.new(#0077BB,0) : active_dir == "bear" ? color.new(#EE3322,0) : color.gray, text_size=SZ)
+    table.cell(hud, 0, 9, "Active SL",  bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 9, na(active_sl) ? "—" : str.tostring(active_sl, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
 
