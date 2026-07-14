@@ -48,7 +48,7 @@ unit_label    = is_forex ? "pips" : "points"
 // ============================================================================
 // INPUTS — BROKER TIME REFERENCE
 // ============================================================================
-grp_time        = "② ━━━ BROKER TIME REFERENCE ━━━"
+grp_time        = "② ━━━ BROKER TIME REFERENCE  [FOREX ONLY] ━━━"
 your_local_hour = input.int(18,  "Your Current Local Hour (24h)",                 minval=0,   maxval=23, group=grp_time)
 your_local_day  = input.int(28,  "Your Current Local Day",                         minval=1,   maxval=31, group=grp_time)
 broker_hour_now = input.int(4,   "Broker Current Hour (24h)",                      minval=0,   maxval=23, group=grp_time)
@@ -76,9 +76,8 @@ ny_tw_c    = f_norm(16 + broker_offset)
 // ============================================================================
 // INPUTS — TRADE SESSIONS
 // ============================================================================
-grp_sess          = "③ ━━━ TRADE SESSIONS ━━━"
+grp_sess          = "③ ━━━ TRADE SESSIONS  [FOREX ONLY] ━━━"
 pip_divisor       = input.float(0.0001,   "Pip Size", minval=0.00001, step=0.00001, tooltip="Standard forex pairs: 0.0001 | JPY pairs and Gold: 0.01", group=grp_sess)
-buf_mult          = is_forex ? pip_divisor : 1.0   // Forex: multiply by pip_divisor; Equity/Crypto: use value directly as price points
 sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
 sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
 show_london       = input.bool(true,                    "Show London Session",           group=grp_sess)
@@ -223,24 +222,65 @@ exit_dot_col        = input.color(color.new(#000000, 0), "Exit Marker Color", gr
 grp_sl       = "⑨ ━━━ MENTAL STOP LOSS ━━━"
 
 // ── Initial Mental SL ─────────────────────────────────────────────────────
-grp_isl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Initial SL"
-isl_candle_ref  = input.string("Trigger Candle", "SL Candle Reference", options=["Trigger Candle","Trade Candle","Prev N Bars"], tooltip="Trigger Candle: the candle whose close caused the marker to fire.\nTrade Candle: the candle after the trigger, where the trade is assumed to have opened.\nPrev N Bars: the lowest/highest candle within the lookback window.", group=grp_isl)
-isl_candle_type = input.string("Regular",        "SL Candle Type",      options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle's OHLC to use for the SL level. All are confirmed closed bars — no live candle values.", group=grp_isl)
-isl_price_point = input.string("Low/High",       "SL Price Point",      options=["Low/High","Open/Close"], tooltip="Low/High: uses the wick extremes. Open/Close: uses the body (min/max of open and close). Bull SL uses the lower value, Bear SL uses the upper value.", group=grp_isl)
-sl_lookback     = input.int(30, "Lookback N Bars  (Prev N Bars only)", minval=1, maxval=100, group=grp_isl)
-sl_buffer       = input.float(2.0, "Buffer Beyond SL Level (pips / points)", minval=0, step=0.5, tooltip="Extra distance in pips added beyond the SL level. Provides room for normal noise.\n\nIMPORTANT — Mental SL only: the exit triggers ONLY when a candle CLOSES beyond this level. Price touching or wicking through intrabar does not count.", group=grp_isl)
-show_sl_dot     = input.bool(true, "Show Initial Mental SL Dot", group=grp_isl)
-sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl)
-sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl)
-sl_dot_offset   = input.float(5.0, "SL Dot Visual Offset (pips/points)", minval=0.0, step=0.5, tooltip="Nudges the dot away from the candle for visibility, in pips (Forex) or points (Equity/Crypto). 0 = dot sits exactly at the SL price level.", group=grp_isl)
+grp_isl_fx   = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ ══ FOREX ONLY ══ Initial SL"
+grp_isl_eq   = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ ══ EQUITY / CRYPTO ONLY ══ Initial SL"
+
+// ── FOREX Initial SL ─────────────────────────────────────────────────────
+// All values in pips. Buffer × pip_divisor = actual price distance.
+fx_isl_candle_ref  = input.string("Trigger Candle", "SL Candle Reference", options=["Trigger Candle","Trade Candle","Prev N Bars"], tooltip="Trigger Candle: candle whose close triggered the marker.\nTrade Candle: next candle after trigger.\nPrev N Bars: lowest low / highest high within lookback.", group=grp_isl_fx)
+fx_isl_candle_type = input.string("Regular", "SL Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle type to use for the SL reference level.", group=grp_isl_fx)
+fx_isl_price_point = input.string("Low/High", "SL Price Point", options=["Low/High","Open/Close"], tooltip="Low/High: wick extremes. Open/Close: body. Bull SL uses lower value, Bear SL uses upper value.", group=grp_isl_fx)
+fx_sl_lookback     = input.int(30, "Lookback N Bars  (Prev N Bars only)", minval=1, maxval=100, group=grp_isl_fx)
+fx_sl_buffer_pips  = input.float(2.0, "Buffer (pips)", minval=0, step=0.5, tooltip="Extra pips beyond the SL level. SL triggers ONLY when a candle CLOSES beyond this level — not on touch or wick.", group=grp_isl_fx)
+fx_show_sl_dot     = input.bool(true, "Show Initial Mental SL Dot", group=grp_isl_fx)
+fx_sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl_fx)
+fx_sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl_fx)
+fx_sl_dot_offset   = input.float(5.0, "SL Dot Visual Offset (pips)", minval=0.0, step=0.5, tooltip="Nudges the dot away from the candle for visibility. In pips.", group=grp_isl_fx)
+
+// ── EQUITY / CRYPTO Initial SL ────────────────────────────────────────────
+// All values in dollars / points. No pip conversion. Direct price offset.
+eq_isl_candle_ref  = input.string("Trigger Candle", "SL Candle Reference", options=["Trigger Candle","Trade Candle","Prev N Bars"], tooltip="Trigger Candle: candle whose close triggered the marker.\nTrade Candle: next candle after trigger.\nPrev N Bars: lowest low / highest high within lookback.", group=grp_isl_eq)
+eq_isl_candle_type = input.string("Regular", "SL Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle type to use for the SL reference level.", group=grp_isl_eq)
+eq_isl_price_point = input.string("Low/High", "SL Price Point", options=["Low/High","Open/Close"], tooltip="Low/High: wick extremes. Open/Close: body. Bull SL uses lower value, Bear SL uses upper value.", group=grp_isl_eq)
+eq_sl_lookback     = input.int(30, "Lookback N Bars  (Prev N Bars only)", minval=1, maxval=100, group=grp_isl_eq)
+eq_sl_buffer_pts   = input.float(0.50, "Buffer ($)", minval=0, step=0.05, tooltip="Extra dollars beyond the SL level. SL triggers ONLY when a candle CLOSES beyond this level — not on touch or wick.", group=grp_isl_eq)
+eq_show_sl_dot     = input.bool(true, "Show Initial Mental SL Dot", group=grp_isl_eq)
+eq_sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl_eq)
+eq_sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl_eq)
+eq_sl_dot_offset   = input.float(0.25, "SL Dot Visual Offset ($)", minval=0.0, step=0.05, tooltip="Nudges the dot away from the candle for visibility. In dollars.", group=grp_isl_eq)
+
+// Active inputs — resolved by instrument type
+isl_candle_ref  = is_forex ? fx_isl_candle_ref  : eq_isl_candle_ref
+isl_candle_type = is_forex ? fx_isl_candle_type : eq_isl_candle_type
+isl_price_point = is_forex ? fx_isl_price_point : eq_isl_price_point
+sl_lookback     = is_forex ? fx_sl_lookback     : eq_sl_lookback
+sl_buffer_raw   = is_forex ? fx_sl_buffer_pips * pip_divisor : eq_sl_buffer_pts
+sl_dot_offset_raw = is_forex ? fx_sl_dot_offset * pip_divisor : eq_sl_dot_offset
+show_sl_dot     = is_forex ? fx_show_sl_dot     : eq_show_sl_dot
+sl_dot_col      = is_forex ? fx_sl_dot_col      : eq_sl_dot_col
+sl_dot_size     = is_forex ? fx_sl_dot_size     : eq_sl_dot_size
 
 // ── Trailing Mental SL ────────────────────────────────────────────────────
-grp_tsl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Trailing SL"
-enable_tsl      = input.bool(false, "Enable Trailing SL", tooltip="When ON: trailing SL is active as part of trade management. Does not affect visual display — use Show Trailing Mental SL Dot for that.", group=grp_tsl)
-tsl_candle_type = input.string("Regular",  "Trail Candle Type",  options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle type to trail on. Uses the same lookback window as Initial SL.", group=grp_tsl)
-tsl_price_point = input.string("Low/High", "Trail Price Point",  options=["Low/High","Open/Close"], tooltip="Low/High: trail on wick extremes. Open/Close: trail on body. Bull trail uses lowest value, Bear trail uses highest value.", group=grp_tsl)
-show_tsl_dot    = input.bool(false, "Show Trailing Mental SL Dot", tooltip="Displays where the trailing SL would sit on each bar. Enable Trailing SL must also be ON for this to be meaningful in trade management.", group=grp_tsl)
-tsl_dot_col     = input.color(color.new(#444444, 0), "Trail SL Dot Color", group=grp_tsl)
+grp_tsl_fx   = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ ══ FOREX ONLY ══ Trailing SL"
+grp_tsl_eq   = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ ══ EQUITY / CRYPTO ONLY ══ Trailing SL"
+
+fx_enable_tsl      = input.bool(false, "Enable Trailing SL", group=grp_tsl_fx)
+fx_tsl_candle_type = input.string("Regular", "Trail Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_tsl_fx)
+fx_tsl_price_point = input.string("Low/High", "Trail Price Point", options=["Low/High","Open/Close"], group=grp_tsl_fx)
+fx_show_tsl_dot    = input.bool(false, "Show Trailing Mental SL Dot", group=grp_tsl_fx)
+fx_tsl_dot_col     = input.color(color.new(#444444, 0), "Trail SL Dot Color", group=grp_tsl_fx)
+
+eq_enable_tsl      = input.bool(false, "Enable Trailing SL", group=grp_tsl_eq)
+eq_tsl_candle_type = input.string("Regular", "Trail Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_tsl_eq)
+eq_tsl_price_point = input.string("Low/High", "Trail Price Point", options=["Low/High","Open/Close"], group=grp_tsl_eq)
+eq_show_tsl_dot    = input.bool(false, "Show Trailing Mental SL Dot", group=grp_tsl_eq)
+eq_tsl_dot_col     = input.color(color.new(#444444, 0), "Trail SL Dot Color", group=grp_tsl_eq)
+
+enable_tsl      = is_forex ? fx_enable_tsl      : eq_enable_tsl
+tsl_candle_type = is_forex ? fx_tsl_candle_type : eq_tsl_candle_type
+tsl_price_point = is_forex ? fx_tsl_price_point : eq_tsl_price_point
+show_tsl_dot    = is_forex ? fx_show_tsl_dot    : eq_show_tsl_dot
+tsl_dot_col     = is_forex ? fx_tsl_dot_col     : eq_tsl_dot_col
 
 // ============================================================================
 // INPUTS — DATE RANGE FILTER
@@ -547,14 +587,14 @@ isl_high_0 = isl_price_point == "Open/Close" ? (isl_candle_type == "Base SHA" ? 
 isl_high_1 = isl_price_point == "Open/Close" ? (isl_candle_type == "Base SHA" ? math.max(bO[1], bC[1]) : isl_candle_type == "HTF1 SHA" ? math.max(h1O[1], h1C[1]) : isl_candle_type == "HTF2 SHA" ? math.max(h2O[1], h2C[1]) : math.max(open[1], close[1])) : (isl_candle_type == "Regular" ? high[1] : isl_candle_type == "Base SHA" ? bH[1]  : isl_candle_type == "HTF1 SHA" ? h1H[1] : h2H[1])
 
 
-sl_long_preview  = isl_candle_ref == "Trigger Candle" ? isl_low_0  - sl_buffer * buf_mult : isl_candle_ref == "Trade Candle" ? isl_low_1  - sl_buffer * buf_mult : ta.lowest(isl_low_0,   sl_lookback) - sl_buffer * buf_mult
-sl_short_preview = isl_candle_ref == "Trigger Candle" ? isl_high_0 + sl_buffer * buf_mult : isl_candle_ref == "Trade Candle" ? isl_high_1 + sl_buffer * buf_mult : ta.highest(isl_high_0, sl_lookback) + sl_buffer * buf_mult
+sl_long_preview  = isl_candle_ref == "Trigger Candle" ? isl_low_0  - sl_buffer_raw : isl_candle_ref == "Trade Candle" ? isl_low_1  - sl_buffer_raw : ta.lowest(isl_low_0,   sl_lookback) - sl_buffer_raw
+sl_short_preview = isl_candle_ref == "Trigger Candle" ? isl_high_0 + sl_buffer_raw : isl_candle_ref == "Trade Candle" ? isl_high_1 + sl_buffer_raw : ta.highest(isl_high_0, sl_lookback) + sl_buffer_raw
 
 tsl_low  = tsl_price_point == "Open/Close" ? (tsl_candle_type == "Base SHA" ? math.min(bO, bC) : tsl_candle_type == "HTF1 SHA" ? math.min(h1O, h1C) : tsl_candle_type == "HTF2 SHA" ? math.min(h2O, h2C) : math.min(open, close)) : (tsl_candle_type == "Regular" ? low  : tsl_candle_type == "Base SHA" ? math.min(bO, bC) : tsl_candle_type == "HTF1 SHA" ? math.min(h1O, h1C) : math.min(h2O, h2C))
 tsl_high = tsl_price_point == "Open/Close" ? (tsl_candle_type == "Base SHA" ? math.max(bO, bC) : tsl_candle_type == "HTF1 SHA" ? math.max(h1O, h1C) : tsl_candle_type == "HTF2 SHA" ? math.max(h2O, h2C) : math.max(open, close)) : (tsl_candle_type == "Regular" ? high : tsl_candle_type == "Base SHA" ? math.max(bO, bC) : tsl_candle_type == "HTF1 SHA" ? math.max(h1O, h1C) : math.max(h2O, h2C))
 
-tsl_long_val  = ta.lowest(tsl_low,   sl_lookback) - sl_buffer * buf_mult
-tsl_short_val = ta.highest(tsl_high, sl_lookback) + sl_buffer * buf_mult
+tsl_long_val  = ta.lowest(tsl_low,   sl_lookback) - sl_buffer_raw
+tsl_short_val = ta.highest(tsl_high, sl_lookback) + sl_buffer_raw
 
 
 
@@ -691,9 +731,9 @@ exit_bull = active_dir[1] == "bull" and not na(active_sl[1]) and close < active_
 exit_bear = active_dir[1] == "bear" and not na(active_sl[1]) and close > active_sl[1]
 
 if in_date_range and show_exit_markers and exit_bull
-    label.new(bar_index, active_sl[1] + exit_dot_offset * buf_mult, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+    label.new(bar_index, active_sl[1] + sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 if in_date_range and show_exit_markers and exit_bear
-    label.new(bar_index, active_sl[1] - exit_dot_offset * buf_mult, "", style=label.style_triangleup,   color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+    label.new(bar_index, active_sl[1] - sl_dot_offset_raw, "", style=label.style_triangleup,   color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 
 // Find which bar back holds the lowest/highest for Prev N Bars
 f_prev_n_offset_long() =>
@@ -723,21 +763,21 @@ f_prev_n_offset_short() =>
 // sl_dot_offset nudges the dot visually away from the candle for clarity
 
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Trigger Candle"
-    label.new(bar_index, sl_long_preview - sl_dot_offset * buf_mult, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Trigger Candle"
-    label.new(bar_index, sl_short_preview + sl_dot_offset * buf_mult, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 if in_date_range and show_sl_dot and any_bull_signal[1] and isl_candle_ref == "Trade Candle"
-    label.new(bar_index, sl_long_preview - sl_dot_offset * buf_mult, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal[1] and isl_candle_ref == "Trade Candle"
-    label.new(bar_index, sl_short_preview + sl_dot_offset * buf_mult, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Prev N Bars"
     n_offset = f_prev_n_offset_long()
-    label.new(bar_index - n_offset, sl_long_preview - sl_dot_offset * buf_mult, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index - n_offset, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev N Bars"
     n_offset = f_prev_n_offset_short()
-    label.new(bar_index - n_offset, sl_short_preview + sl_dot_offset * buf_mult, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index - n_offset, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
 // Trails on every bar while active_dir is set, using tsl_candle_type and tsl_price_point
