@@ -468,24 +468,6 @@ plot(align_dw,    title="Alignment (1=All Bull -1=All Bear 0=Mixed)", display=di
 cascade_bull_raw = all_bull[1] and not all_bull[2]
 cascade_bear_raw = all_bear[1] and not all_bear[2]
 
-// Partial Alignment — any 2 of 3 agree + price confirmed above/below both
-part_bull_b1 = base_bull_bar and htf1_bull_bar and close > sha_top_b and close > sha_top_1
-part_bull_12 = htf1_bull_bar and htf2_bull_bar and close > sha_top_1 and close > sha_top_2
-part_bull_b2 = base_bull_bar and htf2_bull_bar and close > sha_top_b and close > sha_top_2
-part_bear_b1 = base_bear_bar and htf1_bear_bar and close < sha_bot_b and close < sha_bot_1
-part_bear_12 = htf1_bear_bar and htf2_bear_bar and close < sha_bot_1 and close < sha_bot_2
-part_bear_b2 = base_bear_bar and htf2_bear_bar and close < sha_bot_b and close < sha_bot_2
-
-partial_bull_cond = part_bull_b1 or part_bull_12 or part_bull_b2
-partial_bear_cond = part_bear_b1 or part_bear_12 or part_bear_b2
-
-// Fire once — only on the bar condition first becomes true
-partial_bull_raw = partial_bull_cond and not partial_bull_cond[1]
-partial_bear_raw = partial_bear_cond and not partial_bear_cond[1]
-
-partial_bull = show_partial and partial_bull_raw
-partial_bear = show_partial and partial_bear_raw
-
 // — C1: first adjacent SHA pair agreement
 
 
@@ -496,6 +478,23 @@ sha_top_2 = math.max(h2O, h2C)
 sha_bot_b = math.min(bO,  bC)
 sha_bot_1 = math.min(h1O, h1C)
 sha_bot_2 = math.min(h2O, h2C)
+
+// Partial Alignment — any 2 of 3 SHA agree + price confirmed above/below both
+part_bull_b1 = base_bull_bar and htf1_bull_bar and close > sha_top_b and close > sha_top_1
+part_bull_12 = htf1_bull_bar and htf2_bull_bar and close > sha_top_1 and close > sha_top_2
+part_bull_b2 = base_bull_bar and htf2_bull_bar and close > sha_top_b and close > sha_top_2
+part_bear_b1 = base_bear_bar and htf1_bear_bar and close < sha_bot_b and close < sha_bot_1
+part_bear_12 = htf1_bear_bar and htf2_bear_bar and close < sha_bot_1 and close < sha_bot_2
+part_bear_b2 = base_bear_bar and htf2_bear_bar and close < sha_bot_b and close < sha_bot_2
+partial_bull_cond = part_bull_b1 or part_bull_12 or part_bull_b2
+partial_bear_cond = part_bear_b1 or part_bear_12 or part_bear_b2
+partial_bull_raw = partial_bull_cond and not partial_bull_cond[1]
+partial_bear_raw = partial_bear_cond and not partial_bear_cond[1]
+partial_bull = show_partial and partial_bull_raw
+partial_bear = show_partial and partial_bear_raw
+
+
+
 
 // Full Cluster Cross — true full cluster cross in one candle
 // Bull: previous bar closed BELOW all three SHA bodies, this bar closes ABOVE all three
