@@ -44,7 +44,6 @@ is_forex  = instrument_type == "Forex"
 is_equity = instrument_type == "Equity"
 is_crypto = instrument_type == "Crypto"
 unit_label    = is_forex ? "pips" : "points"
-buf_mult      = is_forex ? pip_divisor : 1.0   // Forex: multiply by pip_divisor; Equity/Crypto: use value directly as price points
 
 // ============================================================================
 // INPUTS — BROKER TIME REFERENCE
@@ -79,6 +78,7 @@ ny_tw_c    = f_norm(16 + broker_offset)
 // ============================================================================
 grp_sess          = "③ ━━━ TRADE SESSIONS ━━━"
 pip_divisor       = input.float(0.0001,   "Pip Size", minval=0.00001, step=0.00001, tooltip="Standard forex pairs: 0.0001 | JPY pairs and Gold: 0.01", group=grp_sess)
+buf_mult          = is_forex ? pip_divisor : 1.0   // Forex: multiply by pip_divisor; Equity/Crypto: use value directly as price points
 sess_border_width = input.int(1,          "Session Box Border Width",                minval=1, maxval=4,           group=grp_sess)
 sess_label_size   = input.string("Small", "Session Label Size",                      options=["Tiny","Small","Normal","Large"], group=grp_sess)
 show_london       = input.bool(true,                    "Show London Session",           group=grp_sess)
