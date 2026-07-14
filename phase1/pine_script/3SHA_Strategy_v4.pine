@@ -213,6 +213,8 @@ htf1_cross_size     = input.string("Small", "HTF1 Cross Alert Size", options=["T
 grp_exit            = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Exit Markers"
 show_exit_markers   = input.bool(true, "Show Exit Markers", tooltip="Draws a filled black triangle at the bar where the active SL is breached on a candle close. ▼ above bar for bull exit, ▲ below bar for bear exit. Position indicates direction.", group=grp_exit)
 exit_marker_size    = input.string("Small", "Exit Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_exit)
+exit_dot_offset     = input.float(5.0, "Exit Marker Visual Offset (pips/points)", minval=0.0, step=0.5, tooltip="Distance from the exit price level in pips/points. 0 = marker sits exactly at the SL breach level.", group=grp_exit)
+exit_dot_col        = input.color(color.new(#000000, 0), "Exit Marker Color", group=grp_exit)
 
 // ============================================================================
 // INPUTS — INITIAL STOP LOSS
@@ -229,7 +231,7 @@ sl_buffer       = input.float(2.0, "Buffer Beyond SL Level (pips / points)", min
 show_sl_dot     = input.bool(true, "Show Initial Mental SL Dot", group=grp_isl)
 sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl)
 sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl)
-sl_dot_offset   = input.float(0.5, "SL Dot Visual Offset (ATR)", minval=0.0, maxval=5.0, step=0.1, tooltip="Nudges the dot away from the candle for visibility. 0 = dot sits exactly at the SL price level. Higher = further from the candle.", group=grp_isl)
+sl_dot_offset   = input.float(5.0, "SL Dot Visual Offset (pips/points)", minval=0.0, step=0.5, tooltip="Nudges the dot away from the candle for visibility, in pips (Forex) or points (Equity/Crypto). 0 = dot sits exactly at the SL price level.", group=grp_isl)
 
 // ── Trailing Mental SL ────────────────────────────────────────────────────
 grp_tsl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Trailing SL"
@@ -686,9 +688,9 @@ exit_bull = active_dir[1] == "bull" and not na(active_sl[1]) and close < active_
 exit_bear = active_dir[1] == "bear" and not na(active_sl[1]) and close > active_sl[1]
 
 if in_date_range and show_exit_markers and exit_bull
-    label.new(bar_index, high + atr14 * 1.0 * marker_atr_mult, "▼", style=label.style_label_down, color=color.new(#000000, 0), textcolor=color.white, size=f_sz(exit_marker_size))
+    label.new(bar_index, active_sl[1] + exit_dot_offset * pip_divisor, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 if in_date_range and show_exit_markers and exit_bear
-    label.new(bar_index, low  - atr14 * 1.0 * marker_atr_mult, "▲", style=label.style_label_up,   color=color.new(#000000, 0), textcolor=color.white, size=f_sz(exit_marker_size))
+    label.new(bar_index, active_sl[1] - exit_dot_offset * pip_divisor, "", style=label.style_triangleup,   color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 
 // Find which bar back holds the lowest/highest for Prev N Bars
 f_prev_n_offset_long() =>
@@ -718,21 +720,21 @@ f_prev_n_offset_short() =>
 // sl_dot_offset nudges the dot visually away from the candle for clarity
 
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Trigger Candle"
-    label.new(bar_index, f_sl_long_preview() - atr14 * sl_dot_offset, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index, f_sl_long_preview() - sl_dot_offset * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Trigger Candle"
-    label.new(bar_index, f_sl_short_preview() + atr14 * sl_dot_offset, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index, f_sl_short_preview() + sl_dot_offset * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 if in_date_range and show_sl_dot and any_bull_signal[1] and isl_candle_ref == "Trade Candle"
-    label.new(bar_index, f_sl_long_preview() - atr14 * sl_dot_offset, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index, f_sl_long_preview() - sl_dot_offset * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal[1] and isl_candle_ref == "Trade Candle"
-    label.new(bar_index, f_sl_short_preview() + atr14 * sl_dot_offset, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index, f_sl_short_preview() + sl_dot_offset * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Prev N Bars"
     n_offset = f_prev_n_offset_long()
-    label.new(bar_index - n_offset, f_sl_long_preview() - atr14 * sl_dot_offset, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index - n_offset, f_sl_long_preview() - sl_dot_offset * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev N Bars"
     n_offset = f_prev_n_offset_short()
-    label.new(bar_index - n_offset, f_sl_short_preview() + atr14 * sl_dot_offset, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    label.new(bar_index - n_offset, f_sl_short_preview() + sl_dot_offset * pip_divisor, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
 // Trails on every bar while active_dir is set, using tsl_candle_type and tsl_price_point
