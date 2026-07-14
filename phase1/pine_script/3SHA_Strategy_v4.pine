@@ -595,10 +595,12 @@ if date_range_just_started
 // Set active_dir and lock active_sl on first signal in either direction
 if any_bull_signal and active_dir == "none"
     active_dir := "bull"
-    active_sl  := sl_long_preview
+    if not na(sl_long_preview) and sl_long_preview > 0
+        active_sl  := sl_long_preview
 if any_bear_signal and active_dir == "none"
     active_dir := "bear"
-    active_sl  := sl_short_preview
+    if not na(sl_short_preview) and sl_short_preview > 0
+        active_sl  := sl_short_preview
 
 // SL breach — candle closes beyond initial SL → reset active direction
 if active_dir == "bull" and not na(active_sl) and close < active_sl
@@ -851,7 +853,7 @@ if show_hud and barstate.islast
     table.cell(hud, 0, 9, "Active SL",  bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 9, na(active_sl) ? "—" : str.tostring(active_sl, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
     table.cell(hud, 0, 10, "SL Preview", bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 10, str.tostring(sl_long_preview, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
-    table.cell(hud, 0, 11, "ISL Low0",  bgcolor=W, text_color=BK, text_size=SZ)
-    table.cell(hud, 1, 11, str.tostring(isl_low_0, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
+    table.cell(hud, 1, 10, str.tostring(active_dir == "bear" ? sl_short_preview : sl_long_preview, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
+    table.cell(hud, 0, 11, active_dir == "bear" ? "ISL High0" : "ISL Low0",  bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 11, str.tostring(active_dir == "bear" ? isl_high_0 : isl_low_0, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
 
