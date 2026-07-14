@@ -249,6 +249,10 @@ date_end     = input.time(timestamp("2026-12-31 23:59"), "End Date",   group=grp
 
 in_date_range = not use_date_filter or (time >= date_start and time <= date_end)
 
+// Reset state machine at the boundary of the date range
+// so the first signal within the range shows as a colored marker, not grey
+date_range_just_started = use_date_filter and time >= date_start and time[1] < date_start
+
 // ============================================================================
 // INPUTS — STATE HUD
 // ============================================================================
@@ -562,6 +566,11 @@ PENDING_GREY = color.new(#888888, 30)
 
 var string active_dir = "none"
 var float  active_sl  = na
+
+// Reset state at date range boundary so first signal in range shows as colored
+if date_range_just_started
+    active_dir := "none"
+    active_sl  := na
 
 // Set active_dir and lock active_sl on first signal in either direction
 if any_bull_signal and active_dir == "none"
