@@ -150,6 +150,7 @@ marker_bull_col  = input.color(color.new(#0077BB, 0), "Bull Marker Color  (all U
 marker_bear_col  = input.color(color.new(#EE3322, 0), "Bear Marker Color  (all DOWN signals)", tooltip="Applied to ALL bear/down markers regardless of signal type. Shape identifies the condition type.", group=grp_entry_colors)
 
 grp_entry_casc  = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Alignment"
+grp_entry_part  = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Partial Alignment"
 grp_entry_c2    = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Full Cluster Cross"
 grp_entry_c3    = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Pullback Resume"
 grp_entry_early = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Early Trend Signal"
@@ -161,6 +162,12 @@ respect_sl_cascade  = input.bool(false, "Respect Active SL", tooltip="When ON: i
 trade_cascade       = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Full Alignment fires and passes all filters.", group=grp_entry_casc)
 cascade_sess_only = input.bool(true,  "Full Alignment — In Session Only",                 group=grp_entry_casc)
 cascade_size      = input.string("Small", "Full Alignment Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_casc)
+
+// Partial Alignment — any 2 of 3 SHA layers agree, price confirmed above/below both
+show_partial      = input.bool(false, "Partial Alignment", tooltip="Fires when any 2 of 3 SHA layers agree in direction AND price closes above both aligned bodies (bull) or below both (bear). Fires once on the bar the condition first becomes true.", group=grp_entry_part)
+respect_sl_partial = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow instead of the live marker.", group=grp_entry_part)
+trade_partial     = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time Partial Alignment fires and passes all filters.", group=grp_entry_part)
+partial_size      = input.string("Small", "Partial Alignment Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_entry_part)
 
 // Full Cluster Cross — Price Breaks Through All 3 SHA Bodies
 show_c2           = input.bool(true,  "Full Cluster Cross", tooltip="Price has broken completely through all 3 SHA layers in a single move — from fully below to fully above, or vice versa.", group=grp_entry_c2)
@@ -461,6 +468,24 @@ plot(align_dw,    title="Alignment (1=All Bull -1=All Bear 0=Mixed)", display=di
 cascade_bull_raw = all_bull[1] and not all_bull[2]
 cascade_bear_raw = all_bear[1] and not all_bear[2]
 
+// Partial Alignment — any 2 of 3 agree + price confirmed above/below both
+part_bull_b1 = base_bull_bar and htf1_bull_bar and close > sha_top_b and close > sha_top_1
+part_bull_12 = htf1_bull_bar and htf2_bull_bar and close > sha_top_1 and close > sha_top_2
+part_bull_b2 = base_bull_bar and htf2_bull_bar and close > sha_top_b and close > sha_top_2
+part_bear_b1 = base_bear_bar and htf1_bear_bar and close < sha_bot_b and close < sha_bot_1
+part_bear_12 = htf1_bear_bar and htf2_bear_bar and close < sha_bot_1 and close < sha_bot_2
+part_bear_b2 = base_bear_bar and htf2_bear_bar and close < sha_bot_b and close < sha_bot_2
+
+partial_bull_cond = part_bull_b1 or part_bull_12 or part_bull_b2
+partial_bear_cond = part_bear_b1 or part_bear_12 or part_bear_b2
+
+// Fire once — only on the bar condition first becomes true
+partial_bull_raw = partial_bull_cond and not partial_bull_cond[1]
+partial_bear_raw = partial_bear_cond and not partial_bear_cond[1]
+
+partial_bull = show_partial and partial_bull_raw
+partial_bear = show_partial and partial_bear_raw
+
 // — C1: first adjacent SHA pair agreement
 
 
@@ -546,8 +571,8 @@ price_above_htf1 = close >= sha_top_1
 htf1_cross_down  = show_htf1_cross and price_below_htf1 and not price_below_htf1[1]
 htf1_cross_up    = show_htf1_cross and price_above_htf1 and not price_above_htf1[1]
 
-any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull or htf2_cross_up or htf1_cross_up
-any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear or htf2_cross_down or htf1_cross_down
+any_bull_signal = cascade_bull or partial_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull or htf2_cross_up or htf1_cross_up
+any_bear_signal = cascade_bear or partial_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear or htf2_cross_down or htf1_cross_down
 // ============================================================================
 // SL PREVIEW DOT — shows where the initial SL would be placed for any signal
 // Purely visual — no trade execution required
@@ -622,10 +647,10 @@ show_grey_bull = any_bull_signal and is_any_active
 show_grey_bear = any_bear_signal and is_any_active
 
 // Which signal type fired (for grey marker shape)
-grey_bull_type = cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : htf1_cross_up ? "htf1" : "htf2"
-grey_bear_type = cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : htf1_cross_down ? "htf1" : "htf2"
+grey_bull_type = cascade_bull ? "cascade" : partial_bull ? "partial" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : htf1_cross_up ? "htf1" : "htf2"
+grey_bear_type = cascade_bear ? "cascade" : partial_bear ? "partial" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : htf1_cross_down ? "htf1" : "htf2"
 
-f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "c2" ? "→●" : _t == "c3" ? "→■" : _t == "early" ? "→◆" : _t == "cont" ? "→★" : _t == "htf1" ? "→✦" : "→⚡"
+f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "partial" ? "→◇" : _t == "c2" ? "→●" : _t == "c3" ? "→■" : _t == "early" ? "→◆" : _t == "cont" ? "→★" : _t == "htf1" ? "→✦" : "→⚡"
 
 // ============================================================================
 // MARKER SIZE HELPER
@@ -657,6 +682,12 @@ if in_date_range and f_show_bull(cascade_bull, respect_sl_cascade) and not show_
     label.new(bar_index, low  - atr14 * 0.8 * marker_atr_mult, "▲", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(cascade_size))
 if in_date_range and f_show_bear(cascade_bear, respect_sl_cascade) and not show_grey_bear
     label.new(bar_index, high + atr14 * 0.8 * marker_atr_mult, "▼", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(cascade_size))
+
+// Partial Alignment — diamond shape ◇
+if in_date_range and f_show_bull(partial_bull, respect_sl_partial) and not show_grey_bull
+    label.new(bar_index, low  - atr14 * 1.3 * marker_atr_mult, "◇", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(partial_size))
+if in_date_range and f_show_bear(partial_bear, respect_sl_partial) and not show_grey_bear
+    label.new(bar_index, high + atr14 * 1.3 * marker_atr_mult, "◇", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(partial_size))
 
 // Full Cluster Cross — circle dot
 if in_date_range and f_show_bull(c2_bull, respect_sl_c2) and not show_grey_bull
