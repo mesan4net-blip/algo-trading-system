@@ -201,6 +201,19 @@ trade_htf2_cross    = input.bool(false, "Trade This Signal", tooltip="When ON: a
 htf2_cross_col      = input.color(color.new(#FF0000, 0), "HTF2 Cross Alert Color", group=grp_htf2_cross)
 htf2_cross_size     = input.string("Small", "HTF2 Cross Alert Size", options=["Tiny","Small","Normal","Large"], group=grp_htf2_cross)
 
+// HTF1 Price Cross Alert
+grp_htf1_cross      = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ HTF1 Price Cross Alert"
+show_htf1_cross     = input.bool(false, "HTF1 Price Cross Alert", tooltip="Fires once when price CLOSES beyond the HTF1 SHA body boundary — either direction. Price closed outside the HTF1 zone and was not outside it on the previous bar.", group=grp_htf1_cross)
+respect_sl_htf1     = input.bool(false, "Respect Active SL", tooltip="When ON: if an opposing trade is open and its SL has not been hit, this marker shows as a grey pending arrow (→) instead of the live marker.", group=grp_htf1_cross)
+trade_htf1_cross    = input.bool(false, "Trade This Signal", tooltip="When ON: a trade opens every time the HTF1 Price Cross Alert fires and passes all filters.", group=grp_htf1_cross)
+htf1_cross_col      = input.color(color.new(#EE7733, 0), "HTF1 Cross Alert Color", group=grp_htf1_cross)
+htf1_cross_size     = input.string("Small", "HTF1 Cross Alert Size", options=["Tiny","Small","Normal","Large"], group=grp_htf1_cross)
+
+// Exit Markers
+grp_exit            = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Exit Markers"
+show_exit_markers   = input.bool(true, "Show Exit Markers", tooltip="Draws a filled black triangle at the bar where the active SL is breached on a candle close. ▼ above bar for bull exit, ▲ below bar for bear exit. Position indicates direction.", group=grp_exit)
+exit_marker_size    = input.string("Small", "Exit Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_exit)
+
 // ============================================================================
 // INPUTS — INITIAL STOP LOSS
 // ============================================================================
@@ -505,8 +518,14 @@ price_above_htf2 = close >= sha_top_2
 htf2_cross_down  = show_htf2_cross and price_below_htf2 and not price_below_htf2[1]
 htf2_cross_up    = show_htf2_cross and price_above_htf2 and not price_above_htf2[1]
 
-any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull or htf2_cross_up
-any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear or htf2_cross_down
+// HTF1 Price Cross Alert
+price_below_htf1 = close <= sha_bot_1
+price_above_htf1 = close >= sha_top_1
+htf1_cross_down  = show_htf1_cross and price_below_htf1 and not price_below_htf1[1]
+htf1_cross_up    = show_htf1_cross and price_above_htf1 and not price_above_htf1[1]
+
+any_bull_signal = cascade_bull or c2_bull or c3_bull or early_trend_bull or trend_cont_bull or htf2_cross_up or htf1_cross_up
+any_bear_signal = cascade_bear or c2_bear or c3_bear or early_trend_bear or trend_cont_bear or htf2_cross_down or htf1_cross_down
 // ============================================================================
 // SL PREVIEW DOT — shows where the initial SL would be placed for any signal
 // Purely visual — no trade execution required
@@ -572,10 +591,10 @@ show_grey_bull = any_bull_signal and is_any_active
 show_grey_bear = any_bear_signal and is_any_active
 
 // Which signal type fired (for grey marker shape)
-grey_bull_type = cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : "htf2"
-grey_bear_type = cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : "htf2"
+grey_bull_type = cascade_bull ? "cascade" : c2_bull ? "c2" : c3_bull ? "c3" : early_trend_bull ? "early" : trend_cont_bull ? "cont" : htf1_cross_up ? "htf1" : "htf2"
+grey_bear_type = cascade_bear ? "cascade" : c2_bear ? "c2" : c3_bear ? "c3" : early_trend_bear ? "early" : trend_cont_bear ? "cont" : htf1_cross_down ? "htf1" : "htf2"
 
-f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "c2" ? "→●" : _t == "c3" ? "→■" : _t == "early" ? "→◆" : _t == "cont" ? "→★" : "→⚡"
+f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "c2" ? "→●" : _t == "c3" ? "→■" : _t == "early" ? "→◆" : _t == "cont" ? "→★" : _t == "htf1" ? "→✦" : "→⚡"
 
 // ============================================================================
 // MARKER SIZE HELPER
@@ -639,11 +658,28 @@ if in_date_range and f_show_bear(htf2_cross_down, respect_sl_htf2) and not show_
 if in_date_range and f_show_bull(htf2_cross_up, respect_sl_htf2) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 0.3 * marker_atr_mult, "⚡", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
+// HTF1 Price Cross Alert — ✦ (down = closed below HTF1, up = closed above HTF1)
+if in_date_range and f_show_bear(htf1_cross_down, respect_sl_htf1) and not show_grey_bear
+    label.new(bar_index, high + atr14 * 0.5 * marker_atr_mult, "✦", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(htf1_cross_size))
+if in_date_range and f_show_bull(htf1_cross_up, respect_sl_htf1) and not show_grey_bull
+    label.new(bar_index, low  - atr14 * 0.5 * marker_atr_mult, "✦", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(htf1_cross_size))
+
 // Pending marker — fires ONCE on the bar the opposing signal first registers
 if in_date_range and show_grey_bull
     label.new(bar_index, low  - atr14 * 0.8 * marker_atr_mult, f_pending_sym(grey_bull_type), style=label.style_label_up,   color=PENDING_GREY, textcolor=color.white, size=size.small)
 if in_date_range and show_grey_bear
     label.new(bar_index, high + atr14 * 0.8 * marker_atr_mult, f_pending_sym(grey_bear_type), style=label.style_label_down, color=PENDING_GREY, textcolor=color.white, size=size.small)
+
+// Exit Markers — filled black triangle, position indicates direction
+// Bull exit (SL breached below): ▼ above bar pointing down
+// Bear exit (SL breached above): ▲ below bar pointing up
+exit_bull = active_dir[1] == "bull" and not na(active_sl[1]) and close < active_sl[1]
+exit_bear = active_dir[1] == "bear" and not na(active_sl[1]) and close > active_sl[1]
+
+if in_date_range and show_exit_markers and exit_bull
+    label.new(bar_index, high + atr14 * 1.0 * marker_atr_mult, "▼", style=label.style_label_down, color=color.new(#000000, 0), textcolor=color.white, size=f_sz(exit_marker_size))
+if in_date_range and show_exit_markers and exit_bear
+    label.new(bar_index, low  - atr14 * 1.0 * marker_atr_mult, "▲", style=label.style_label_up,   color=color.new(#000000, 0), textcolor=color.white, size=f_sz(exit_marker_size))
 
 // Find which bar back holds the lowest/highest for Prev N Bars
 f_prev_n_offset_long() =>
