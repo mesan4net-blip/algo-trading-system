@@ -804,7 +804,7 @@ GR = color.new(#888888, 0)
 SZ = size.normal
 SS = size.small
 
-var table hud = table.new(f_hud_pos(hud_pos_inp), 2, 10, frame_color=color.new(#CCCCCC, 0), frame_width=1, border_color=color.new(#DDDDDD, 0), border_width=1)
+var table hud = table.new(f_hud_pos(hud_pos_inp), 2, 12, frame_color=color.new(#CCCCCC, 0), frame_width=1, border_color=color.new(#DDDDDD, 0), border_width=1)
 
 if show_hud and barstate.islast
     table.cell(hud, 0, 0, "3SHA STATE",  bgcolor=W, text_color=BK, text_size=SZ)
@@ -835,4 +835,8 @@ if show_hud and barstate.islast
     table.cell(hud, 1, 8, active_dir,   bgcolor=W, text_color=active_dir == "bull" ? color.new(#0077BB,0) : active_dir == "bear" ? color.new(#EE3322,0) : color.gray, text_size=SZ)
     table.cell(hud, 0, 9, "Active SL",  bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 9, na(active_sl) ? "—" : str.tostring(active_sl, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
+    table.cell(hud, 0, 10, "SL Preview", bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 10, str.tostring(sl_long_preview, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
+    table.cell(hud, 0, 11, "ISL Low0",  bgcolor=W, text_color=BK, text_size=SZ)
+    table.cell(hud, 1, 11, str.tostring(isl_low_0, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
 
