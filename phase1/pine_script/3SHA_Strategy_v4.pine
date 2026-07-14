@@ -222,65 +222,40 @@ exit_dot_col        = input.color(color.new(#000000, 0), "Exit Marker Color", gr
 grp_sl       = "⑨ ━━━ MENTAL STOP LOSS ━━━"
 
 // ── Initial Mental SL ─────────────────────────────────────────────────────
-grp_isl_fx   = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ ══ FOREX ONLY ══ Initial SL"
-grp_isl_eq   = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ ══ EQUITY / CRYPTO ONLY ══ Initial SL"
+grp_isl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Initial SL"
 
-// ── FOREX Initial SL ─────────────────────────────────────────────────────
-// All values in pips. Buffer × pip_divisor = actual price distance.
-fx_isl_candle_ref  = input.string("Trigger Candle", "SL Candle Reference", options=["Trigger Candle","Trade Candle","Prev N Bars"], tooltip="Trigger Candle: candle whose close triggered the marker.\nTrade Candle: next candle after trigger.\nPrev N Bars: lowest low / highest high within lookback.", group=grp_isl_fx)
-fx_isl_candle_type = input.string("Regular", "SL Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle type to use for the SL reference level.", group=grp_isl_fx)
-fx_isl_price_point = input.string("Low/High", "SL Price Point", options=["Low/High","Open/Close"], tooltip="Low/High: wick extremes. Open/Close: body. Bull SL uses lower value, Bear SL uses upper value.", group=grp_isl_fx)
-fx_sl_lookback     = input.int(30, "Lookback N Bars  (Prev N Bars only)", minval=1, maxval=100, group=grp_isl_fx)
-fx_sl_buffer_pips  = input.float(2.0, "Buffer (pips)", minval=0, step=0.5, tooltip="Extra pips beyond the SL level. SL triggers ONLY when a candle CLOSES beyond this level — not on touch or wick.", group=grp_isl_fx)
-fx_show_sl_dot     = input.bool(true, "Show Initial Mental SL Dot", group=grp_isl_fx)
-fx_sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl_fx)
-fx_sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl_fx)
-fx_sl_dot_offset   = input.float(5.0, "SL Dot Visual Offset (pips)", minval=0.0, step=0.5, tooltip="Nudges the dot away from the candle for visibility. In pips.", group=grp_isl_fx)
+// Common inputs
+isl_candle_ref  = input.string("Trigger Candle", "SL Candle Reference", options=["Trigger Candle","Trade Candle","Prev N Bars"], tooltip="Trigger Candle: candle whose close triggered the marker.\nTrade Candle: next candle after trigger.\nPrev N Bars: lowest low / highest high within lookback.", group=grp_isl)
+isl_candle_type = input.string("Regular", "SL Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle type to use for the SL reference level.", group=grp_isl)
+isl_price_point = input.string("Low/High", "SL Price Point", options=["Low/High","Open/Close"], tooltip="Low/High: wick extremes. Open/Close: body. Bull SL uses lower value, Bear SL uses upper value.", group=grp_isl)
+sl_lookback     = input.int(30, "Lookback N Bars  (Prev N Bars only)", minval=1, maxval=100, group=grp_isl)
 
-// ── EQUITY / CRYPTO Initial SL ────────────────────────────────────────────
-// All values in dollars / points. No pip conversion. Direct price offset.
-eq_isl_candle_ref  = input.string("Trigger Candle", "SL Candle Reference", options=["Trigger Candle","Trade Candle","Prev N Bars"], tooltip="Trigger Candle: candle whose close triggered the marker.\nTrade Candle: next candle after trigger.\nPrev N Bars: lowest low / highest high within lookback.", group=grp_isl_eq)
-eq_isl_candle_type = input.string("Regular", "SL Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], tooltip="Which candle type to use for the SL reference level.", group=grp_isl_eq)
-eq_isl_price_point = input.string("Low/High", "SL Price Point", options=["Low/High","Open/Close"], tooltip="Low/High: wick extremes. Open/Close: body. Bull SL uses lower value, Bear SL uses upper value.", group=grp_isl_eq)
-eq_sl_lookback     = input.int(30, "Lookback N Bars  (Prev N Bars only)", minval=1, maxval=100, group=grp_isl_eq)
-eq_sl_buffer_pts   = input.float(0.50, "Buffer ($)", minval=0, step=0.05, tooltip="Extra dollars beyond the SL level. SL triggers ONLY when a candle CLOSES beyond this level — not on touch or wick.", group=grp_isl_eq)
-eq_show_sl_dot     = input.bool(true, "Show Initial Mental SL Dot", group=grp_isl_eq)
-eq_sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl_eq)
-eq_sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl_eq)
-eq_sl_dot_offset   = input.float(0.25, "SL Dot Visual Offset ($)", minval=0.0, step=0.05, tooltip="Nudges the dot away from the candle for visibility. In dollars.", group=grp_isl_eq)
+// Unit-specific — Forex only
+fx_sl_buffer_pips = input.float(2.0,  "Buffer (pips)  [FOREX ONLY]",      minval=0, step=0.5,  tooltip="Extra pips beyond the SL level. SL triggers ONLY when a candle CLOSES beyond this level.", group=grp_isl)
+fx_sl_dot_offset  = input.float(5.0,  "Dot Offset (pips)  [FOREX ONLY]",  minval=0, step=0.5,  tooltip="Nudges the SL dot away from the candle for visibility. In pips.", group=grp_isl)
 
-// Active inputs — resolved by instrument type
-isl_candle_ref  = is_forex ? fx_isl_candle_ref  : eq_isl_candle_ref
-isl_candle_type = is_forex ? fx_isl_candle_type : eq_isl_candle_type
-isl_price_point = is_forex ? fx_isl_price_point : eq_isl_price_point
-sl_lookback     = is_forex ? fx_sl_lookback     : eq_sl_lookback
-sl_buffer_raw   = is_forex ? fx_sl_buffer_pips * pip_divisor : eq_sl_buffer_pts
-sl_dot_offset_raw = is_forex ? fx_sl_dot_offset * pip_divisor : eq_sl_dot_offset
-show_sl_dot     = is_forex ? fx_show_sl_dot     : eq_show_sl_dot
-sl_dot_col      = is_forex ? fx_sl_dot_col      : eq_sl_dot_col
-sl_dot_size     = is_forex ? fx_sl_dot_size     : eq_sl_dot_size
+// Unit-specific — Equity / Crypto only
+eq_sl_buffer_pts  = input.float(0.50, "Buffer ($)  [EQUITY / CRYPTO ONLY]",     minval=0, step=0.05, tooltip="Extra dollars beyond the SL level. SL triggers ONLY when a candle CLOSES beyond this level.", group=grp_isl)
+eq_sl_dot_offset  = input.float(0.25, "Dot Offset ($)  [EQUITY / CRYPTO ONLY]", minval=0, step=0.05, tooltip="Nudges the SL dot away from the candle for visibility. In dollars.", group=grp_isl)
+
+// Common display inputs
+show_sl_dot     = input.bool(true,  "Show Initial Mental SL Dot", group=grp_isl)
+sl_dot_col      = input.color(color.new(#000000, 0), "SL Dot Color", group=grp_isl)
+sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Small","Normal"], group=grp_isl)
+
+// Resolved values based on instrument type
+sl_buffer_raw     = is_forex ? fx_sl_buffer_pips * pip_divisor : eq_sl_buffer_pts
+sl_dot_offset_raw = is_forex ? fx_sl_dot_offset  * pip_divisor : eq_sl_dot_offset
 
 // ── Trailing Mental SL ────────────────────────────────────────────────────
-grp_tsl_fx   = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ ══ FOREX ONLY ══ Trailing SL"
-grp_tsl_eq   = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ ══ EQUITY / CRYPTO ONLY ══ Trailing SL"
+grp_tsl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Trailing SL"
 
-fx_enable_tsl      = input.bool(false, "Enable Trailing SL", group=grp_tsl_fx)
-fx_tsl_candle_type = input.string("Regular", "Trail Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_tsl_fx)
-fx_tsl_price_point = input.string("Low/High", "Trail Price Point", options=["Low/High","Open/Close"], group=grp_tsl_fx)
-fx_show_tsl_dot    = input.bool(false, "Show Trailing Mental SL Dot", group=grp_tsl_fx)
-fx_tsl_dot_col     = input.color(color.new(#444444, 0), "Trail SL Dot Color", group=grp_tsl_fx)
-
-eq_enable_tsl      = input.bool(false, "Enable Trailing SL", group=grp_tsl_eq)
-eq_tsl_candle_type = input.string("Regular", "Trail Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_tsl_eq)
-eq_tsl_price_point = input.string("Low/High", "Trail Price Point", options=["Low/High","Open/Close"], group=grp_tsl_eq)
-eq_show_tsl_dot    = input.bool(false, "Show Trailing Mental SL Dot", group=grp_tsl_eq)
-eq_tsl_dot_col     = input.color(color.new(#444444, 0), "Trail SL Dot Color", group=grp_tsl_eq)
-
-enable_tsl      = is_forex ? fx_enable_tsl      : eq_enable_tsl
-tsl_candle_type = is_forex ? fx_tsl_candle_type : eq_tsl_candle_type
-tsl_price_point = is_forex ? fx_tsl_price_point : eq_tsl_price_point
-show_tsl_dot    = is_forex ? fx_show_tsl_dot    : eq_show_tsl_dot
-tsl_dot_col     = is_forex ? fx_tsl_dot_col     : eq_tsl_dot_col
+// Common inputs
+enable_tsl      = input.bool(false, "Enable Trailing SL", tooltip="When ON: trailing SL is active as part of trade management.", group=grp_tsl)
+tsl_candle_type = input.string("Regular", "Trail Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_tsl)
+tsl_price_point = input.string("Low/High", "Trail Price Point", options=["Low/High","Open/Close"], group=grp_tsl)
+show_tsl_dot    = input.bool(false, "Show Trailing Mental SL Dot", group=grp_tsl)
+tsl_dot_col     = input.color(color.new(#444444, 0), "Trail SL Dot Color", group=grp_tsl)
 
 // ============================================================================
 // INPUTS — DATE RANGE FILTER
