@@ -599,19 +599,6 @@ tsl_long_raw  = ta.lowest(tsl_low,  tsl_lookback) - sl_buffer_raw
 tsl_short_raw = ta.highest(tsl_high, tsl_lookback) + sl_buffer_raw
 
 // Ratchet — bull trail only moves up, bear trail only moves down
-var float tsl_long_val  = na
-var float tsl_short_val = na
-
-if active_dir == "bull"
-    if na(tsl_long_val) or tsl_long_raw > tsl_long_val
-        tsl_long_val := tsl_long_raw
-else
-    tsl_long_val := na
-
-if active_dir == "bear"
-    if na(tsl_short_val) or tsl_short_raw < tsl_short_val
-        tsl_short_val := tsl_short_raw
-else
     tsl_short_val := na
 
 
@@ -634,6 +621,20 @@ var float  active_sl  = na
 if date_range_just_started
     active_dir := "none"
     active_sl  := na
+
+var float tsl_long_val  = na
+var float tsl_short_val = na
+
+if active_dir == "bull"
+    if na(tsl_long_val) or tsl_long_raw > tsl_long_val
+        tsl_long_val := tsl_long_raw
+else
+    tsl_long_val := na
+
+if active_dir == "bear"
+    if na(tsl_short_val) or tsl_short_raw < tsl_short_val
+        tsl_short_val := tsl_short_raw
+else
 
 // Set active_dir and lock active_sl on first signal in either direction
 if any_bull_signal and active_dir == "none"
