@@ -618,8 +618,10 @@ var float  active_sl  = na
 
 // Reset state at date range boundary so first signal in range shows as colored
 if date_range_just_started
-    active_dir := "none"
-    active_sl  := na
+    active_dir    := "none"
+    active_sl     := na
+    tsl_long_val  := na
+    tsl_short_val := na
 
 var float tsl_long_val  = na
 var float tsl_short_val = na
