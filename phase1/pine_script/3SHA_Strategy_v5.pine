@@ -620,30 +620,27 @@ var float  active_sl  = na
 // Date range gates DISPLAY only — state machine runs continuously from bar 1
 // active_dir, active_sl, tsl values are never reset by date filter
 
-// Trail SL — ratcheted var variables, only move in favorable direction
-// Bull: only moves UP. Bear: only moves DOWN. Resets when active_dir changes.
+// Trail SL — follows most recent marker direction
+// Resets and restarts whenever a new signal fires (colored or grey)
+// Bull trail only moves up from reset point, bear trail only moves down
 var float tsl_long_val  = na
 var float tsl_short_val = na
-var string tsl_last_dir = "none"
 
-// Reset when direction changes
-if active_dir != tsl_last_dir
-    tsl_long_val  := na
+// New bull signal — restart bull trail, clear bear trail
+if any_bull_signal
+    tsl_long_val  := tsl_long_raw
     tsl_short_val := na
-    tsl_last_dir  := active_dir
 
-// Bull trail — initialize or move up only
-if active_dir == "bull"
-    if na(tsl_long_val)
-        tsl_long_val := tsl_long_raw
-    else if tsl_long_raw > tsl_long_val
-        tsl_long_val := tsl_long_raw
+// New bear signal — restart bear trail, clear bull trail
+if any_bear_signal
+    tsl_short_val := tsl_short_raw
+    tsl_long_val  := na
 
-// Bear trail — initialize or move down only
-if active_dir == "bear"
-    if na(tsl_short_val)
-        tsl_short_val := tsl_short_raw
-    else if tsl_short_raw < tsl_short_val
+// Between signals — ratchet in favorable direction only
+if not any_bull_signal and not any_bear_signal
+    if not na(tsl_long_val) and tsl_long_raw > tsl_long_val
+        tsl_long_val := tsl_long_raw
+    if not na(tsl_short_val) and tsl_short_raw < tsl_short_val
         tsl_short_val := tsl_short_raw
 
 // Set active_dir and lock active_sl on first signal in either direction
