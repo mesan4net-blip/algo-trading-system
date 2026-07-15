@@ -617,29 +617,26 @@ var string active_dir = "none"
 var float  active_sl  = na
 
 // Reset state at date range boundary so first signal in range shows as colored
-if date_range_just_started
-    active_dir    := "none"
-    active_sl     := na
-    tsl_long_val  := na
-    tsl_short_val := na
+// Date range gates DISPLAY only — state machine runs continuously from bar 1
+// active_dir, active_sl, tsl values are never reset by date filter
 
 var float tsl_long_val  = na
 var float tsl_short_val = na
 
-// Reset when direction clears
+// Reset trail when no signal active
 if active_dir == "none"
     tsl_long_val  := na
     tsl_short_val := na
 
-// Bull trail — only moves up
-if active_dir == "bull"
+// Bull trail — starts on any bull marker (colored or grey), only moves up
+if any_bull_signal or active_dir == "bull"
     if na(tsl_long_val)
         tsl_long_val := tsl_long_raw
     else if tsl_long_raw > tsl_long_val
         tsl_long_val := tsl_long_raw
 
-// Bear trail — only moves down
-if active_dir == "bear"
+// Bear trail — starts on any bear marker (colored or grey), only moves down
+if any_bear_signal or active_dir == "bear"
     if na(tsl_short_val)
         tsl_short_val := tsl_short_raw
     else if tsl_short_raw < tsl_short_val
@@ -816,10 +813,10 @@ if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev
     label.new(bar_index - n_offset, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
-// Trailing Mental SL Dot — ratcheted, bull only moves up, bear only moves down
-if in_date_range and enable_tsl and show_tsl_dot and active_dir == "bull" and not na(tsl_long_val)
+// Trailing Mental SL Dot — follows any marker (colored or grey), ratcheted
+if in_date_range and enable_tsl and show_tsl_dot and not na(tsl_long_val) and (active_dir == "bull" or any_bull_signal)
     label.new(bar_index, tsl_long_val, "", style=label.style_circle, color=tsl_bull_col, size=size.auto)
-if in_date_range and enable_tsl and show_tsl_dot and active_dir == "bear" and not na(tsl_short_val)
+if in_date_range and enable_tsl and show_tsl_dot and not na(tsl_short_val) and (active_dir == "bear" or any_bear_signal)
     label.new(bar_index, tsl_short_val, "", style=label.style_circle, color=tsl_bear_col, size=size.auto)
 
 // ============================================================================
