@@ -635,6 +635,7 @@ if active_dir == "bear"
     if na(tsl_short_val) or tsl_short_raw < tsl_short_val
         tsl_short_val := tsl_short_raw
 else
+    tsl_short_val := na
 
 // Set active_dir and lock active_sl on first signal in either direction
 if any_bull_signal and active_dir == "none"
