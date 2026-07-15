@@ -620,9 +620,31 @@ var float  active_sl  = na
 // Date range gates DISPLAY only — state machine runs continuously from bar 1
 // active_dir, active_sl, tsl values are never reset by date filter
 
-// Trail SL values — lowest low / highest high of last N bars, updates every bar
-tsl_long_val  = active_dir == "bull" or any_bull_signal ? tsl_long_raw  : na
-tsl_short_val = active_dir == "bear" or any_bear_signal ? tsl_short_raw : na
+// Trail SL — ratcheted var variables, only move in favorable direction
+// Bull: only moves UP. Bear: only moves DOWN. Resets when active_dir changes.
+var float tsl_long_val  = na
+var float tsl_short_val = na
+var string tsl_last_dir = "none"
+
+// Reset when direction changes
+if active_dir != tsl_last_dir
+    tsl_long_val  := na
+    tsl_short_val := na
+    tsl_last_dir  := active_dir
+
+// Bull trail — initialize or move up only
+if active_dir == "bull"
+    if na(tsl_long_val)
+        tsl_long_val := tsl_long_raw
+    else if tsl_long_raw > tsl_long_val
+        tsl_long_val := tsl_long_raw
+
+// Bear trail — initialize or move down only
+if active_dir == "bear"
+    if na(tsl_short_val)
+        tsl_short_val := tsl_short_raw
+    else if tsl_short_raw < tsl_short_val
+        tsl_short_val := tsl_short_raw
 
 // Set active_dir and lock active_sl on first signal in either direction
 if any_bull_signal and active_dir == "none"
