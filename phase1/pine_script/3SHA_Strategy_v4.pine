@@ -261,8 +261,10 @@ grp_tsl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Trailing SL"
 enable_tsl      = input.bool(false, "Enable Trailing SL", tooltip="When ON: trailing SL is active as part of trade management.", group=grp_tsl)
 tsl_candle_type = input.string("Regular", "Trail Candle Type", options=["Regular","Base SHA","HTF1 SHA","HTF2 SHA"], group=grp_tsl)
 tsl_price_point = input.string("Low/High", "Trail Price Point", options=["Low/High","Open/Close"], group=grp_tsl)
-show_tsl_dot    = input.bool(false, "Show Trailing Mental SL Dot", group=grp_tsl)
-tsl_dot_col     = input.color(color.new(#444444, 0), "Trail SL Dot Color", group=grp_tsl)
+tsl_lookback    = input.int(10, "Trail Lookback N Bars", minval=1, maxval=100, tooltip="Independent from Initial SL lookback. Number of bars to look back for the trailing reference level.", group=grp_tsl)
+show_tsl_dot    = input.bool(false, "Show Trailing Mental SL Dot", tooltip="Trail ratchets in favorable direction only — bull trail only moves up, bear trail only moves down.", group=grp_tsl)
+tsl_bull_col    = input.color(color.new(#0077BB, 0), "Trail SL Bull Color", group=grp_tsl)
+tsl_bear_col    = input.color(color.new(#EE3322, 0), "Trail SL Bear Color", group=grp_tsl)
 
 // ============================================================================
 // INPUTS — DATE RANGE FILTER
@@ -592,8 +594,25 @@ sl_short_preview = isl_candle_ref == "Trigger Candle" ? isl_high_0 + sl_buffer_r
 tsl_low  = tsl_price_point == "Open/Close" ? (tsl_candle_type == "Base SHA" ? math.min(bO, bC) : tsl_candle_type == "HTF1 SHA" ? math.min(h1O, h1C) : tsl_candle_type == "HTF2 SHA" ? math.min(h2O, h2C) : math.min(open, close)) : (tsl_candle_type == "Regular" ? low  : tsl_candle_type == "Base SHA" ? math.min(bO, bC) : tsl_candle_type == "HTF1 SHA" ? math.min(h1O, h1C) : math.min(h2O, h2C))
 tsl_high = tsl_price_point == "Open/Close" ? (tsl_candle_type == "Base SHA" ? math.max(bO, bC) : tsl_candle_type == "HTF1 SHA" ? math.max(h1O, h1C) : tsl_candle_type == "HTF2 SHA" ? math.max(h2O, h2C) : math.max(open, close)) : (tsl_candle_type == "Regular" ? high : tsl_candle_type == "Base SHA" ? math.max(bO, bC) : tsl_candle_type == "HTF1 SHA" ? math.max(h1O, h1C) : math.max(h2O, h2C))
 
-tsl_long_val  = ta.lowest(tsl_low,   sl_lookback) - sl_buffer_raw
-tsl_short_val = ta.highest(tsl_high, sl_lookback) + sl_buffer_raw
+// Raw trail levels using tsl_lookback (independent from sl_lookback)
+tsl_long_raw  = ta.lowest(tsl_low,  tsl_lookback) - sl_buffer_raw
+tsl_short_raw = ta.highest(tsl_high, tsl_lookback) + sl_buffer_raw
+
+// Ratchet — bull trail only moves up, bear trail only moves down
+var float tsl_long_val  = na
+var float tsl_short_val = na
+
+if active_dir == "bull"
+    if na(tsl_long_val) or tsl_long_raw > tsl_long_val
+        tsl_long_val := tsl_long_raw
+else
+    tsl_long_val := na
+
+if active_dir == "bear"
+    if na(tsl_short_val) or tsl_short_raw < tsl_short_val
+        tsl_short_val := tsl_short_raw
+else
+    tsl_short_val := na
 
 
 
@@ -787,15 +806,11 @@ if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev
     label.new(bar_index - n_offset, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
-// Trails on every bar while active_dir is set, using tsl_candle_type and tsl_price_point
-if in_date_range and enable_tsl and show_tsl_dot and active_dir == "bull"
-    plot_tsl = tsl_long_val
-    if not na(plot_tsl)
-        label.new(bar_index, plot_tsl, "", style=label.style_circle, color=tsl_dot_col, size=size.auto)
-if in_date_range and enable_tsl and show_tsl_dot and active_dir == "bear"
-    plot_tsl = tsl_short_val
-    if not na(plot_tsl)
-        label.new(bar_index, plot_tsl, "", style=label.style_circle, color=tsl_dot_col, size=size.auto)
+// Trailing Mental SL Dot — ratcheted, bull only moves up, bear only moves down
+if in_date_range and enable_tsl and show_tsl_dot and active_dir == "bull" and not na(tsl_long_val)
+    label.new(bar_index, tsl_long_val, "", style=label.style_circle, color=tsl_bull_col, size=size.auto)
+if in_date_range and enable_tsl and show_tsl_dot and active_dir == "bear" and not na(tsl_short_val)
+    label.new(bar_index, tsl_short_val, "", style=label.style_circle, color=tsl_bear_col, size=size.auto)
 
 // ============================================================================
 htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
