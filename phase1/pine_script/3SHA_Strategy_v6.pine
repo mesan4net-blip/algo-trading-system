@@ -637,23 +637,24 @@ var string active_dir     = "none"
 var float  active_sl      = na
 var float  last_active_sl = na
 
-// Trail direction — updates on every signal, independent of active_dir
+// Trail direction — updates on signals, gated by pyramiding check
+// When pyramiding OFF and trade already open — trail stays with current direction
 var string trail_dir = "none"
-if any_bull_signal
+if any_bull_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
     trail_dir := "bull"
-if any_bear_signal
+if any_bear_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
     trail_dir := "bear"
 
 var float tsl_long_val  = na
 var float tsl_short_val = na
 
-// New bull signal — restart bull trail, clear bear trail
-if any_bull_signal
+// New bull signal — restart bull trail, clear bear trail (only if trade allowed)
+if any_bull_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
     tsl_long_val  := tsl_long_raw
     tsl_short_val := na
 
-// New bear signal — restart bear trail, clear bull trail
-if any_bear_signal
+// New bear signal — restart bear trail, clear bull trail (only if trade allowed)
+if any_bear_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
     tsl_short_val := tsl_short_raw
     tsl_long_val  := na
 
