@@ -639,9 +639,10 @@ var float  last_active_sl = na
 
 // Trail direction — updates on signals, gated by pyramiding check
 // When pyramiding OFF and trade already open — trail stays with current direction
-var float[]  trade_sl_levels  = array.new_float(0)
-var string[] trade_sl_dirs    = array.new_string(0)
+var float[]  trade_sl_levels    = array.new_float(0)
+var string[] trade_sl_dirs      = array.new_string(0)
 var float[]  trade_entry_prices = array.new_float(0)
+var int[]    trade_entry_times  = array.new_int(0)
 
 var string trail_dir = "none"
 if any_bull_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
@@ -683,9 +684,10 @@ if flip_trade and in_date_range and any_bull_signal and array.size(trade_sl_leve
     while fi < array.size(trade_sl_levels)
         if array.get(trade_sl_dirs, fi) == "bear"
             _entry_f  = array.get(trade_entry_prices, fi)
+            _etime_f  = array.get(trade_entry_times,  fi)
             _pnl_f    = _entry_f - close
             _pnl_str_f = (_pnl_f >= 0 ? "+" : "") + str.tostring(math.round(_pnl_f, 2))
-            _lbl_f    = "Entry: " + str.tostring(_entry_f, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _pnl_str_f + "\n[Flipped]"
+            _lbl_f    = "Entry: " + str.tostring(_entry_f, format.mintick) + "\n" + str.format_time(_etime_f, "yyyy-MM-dd", syminfo.timezone) + " " + str.format_time(_etime_f, "HH:mm", syminfo.timezone) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _pnl_str_f + "\n[Flipped]"
             _col_f    = _pnl_f >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
             if show_exit_markers
                 label.new(bar_index, close + sl_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
@@ -694,6 +696,7 @@ if flip_trade and in_date_range and any_bull_signal and array.size(trade_sl_leve
             array.remove(trade_sl_levels,    fi)
             array.remove(trade_sl_dirs,      fi)
             array.remove(trade_entry_prices, fi)
+            array.remove(trade_entry_times,  fi)
         else
             fi := fi + 1
 
@@ -702,9 +705,10 @@ if flip_trade and in_date_range and any_bear_signal and array.size(trade_sl_leve
     while fi < array.size(trade_sl_levels)
         if array.get(trade_sl_dirs, fi) == "bull"
             _entry_f  = array.get(trade_entry_prices, fi)
+            _etime_f  = array.get(trade_entry_times,  fi)
             _pnl_f    = close - _entry_f
             _pnl_str_f = (_pnl_f >= 0 ? "+" : "") + str.tostring(math.round(_pnl_f, 2))
-            _lbl_f    = "Entry: " + str.tostring(_entry_f, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _pnl_str_f + "\n[Flipped]"
+            _lbl_f    = "Entry: " + str.tostring(_entry_f, format.mintick) + "\n" + str.format_time(_etime_f, "yyyy-MM-dd", syminfo.timezone) + " " + str.format_time(_etime_f, "HH:mm", syminfo.timezone) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _pnl_str_f + "\n[Flipped]"
             _col_f    = _pnl_f >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
             if show_exit_markers
                 label.new(bar_index, close - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
@@ -713,6 +717,7 @@ if flip_trade and in_date_range and any_bear_signal and array.size(trade_sl_leve
             array.remove(trade_sl_levels,    fi)
             array.remove(trade_sl_dirs,      fi)
             array.remove(trade_entry_prices, fi)
+            array.remove(trade_entry_times,  fi)
         else
             fi := fi + 1
 
@@ -725,6 +730,7 @@ if in_date_range and any_bull_signal and (pyramiding_allowed or array.size(trade
         array.push(trade_sl_levels,    sl_long_preview)
         array.push(trade_sl_dirs,      "bull")
         array.push(trade_entry_prices, close)
+        array.push(trade_entry_times,  time)
 
 if in_date_range and any_bear_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
     active_dir := "bear"
@@ -733,6 +739,7 @@ if in_date_range and any_bear_signal and (pyramiding_allowed or array.size(trade
         array.push(trade_sl_levels,    sl_short_preview)
         array.push(trade_sl_dirs,      "bear")
         array.push(trade_entry_prices, close)
+        array.push(trade_entry_times,  time)
 
 // Check all open trades for SL breach every bar
 // Fire exit marker and remove breached trade from array
@@ -746,6 +753,7 @@ if array.size(trade_sl_levels) > 0
         _sl    = array.get(trade_sl_levels,    i)
         _dir   = array.get(trade_sl_dirs,      i)
         _entry = array.get(trade_entry_prices, i)
+        _etime = array.get(trade_entry_times,  i)
         // Exit on initial SL breach OR trailing SL breach (whichever fires first)
         _tsl_bull = enable_tsl and _dir == "bull" and not na(tsl_long_val)  and close < tsl_long_val
         _tsl_bear = enable_tsl and _dir == "bear" and not na(tsl_short_val) and close > tsl_short_val
@@ -755,7 +763,7 @@ if array.size(trade_sl_levels) > 0
             _exit_price     = close
             _pnl_dollar     = _exit_price - _entry
             _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
-            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str
+            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "  " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + " " + str.format_time(_etime, "HH:mm", syminfo.timezone) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str
             _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
             if active_dir == "bull" and active_sl == _sl
                 active_dir := "none"
@@ -763,6 +771,7 @@ if array.size(trade_sl_levels) > 0
             array.remove(trade_sl_levels,    i)
             array.remove(trade_sl_dirs,      i)
             array.remove(trade_entry_prices, i)
+            array.remove(trade_entry_times,  i)
             if in_date_range and show_exit_markers
                 label.new(bar_index, last_active_sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
             if in_date_range and show_exit_labels
@@ -773,7 +782,7 @@ if array.size(trade_sl_levels) > 0
             _exit_price     = close
             _pnl_dollar     = _entry - _exit_price
             _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
-            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str
+            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "  " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + " " + str.format_time(_etime, "HH:mm", syminfo.timezone) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str
             _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
             if active_dir == "bear" and active_sl == _sl
                 active_dir := "none"
@@ -781,6 +790,7 @@ if array.size(trade_sl_levels) > 0
             array.remove(trade_sl_levels,    i)
             array.remove(trade_sl_dirs,      i)
             array.remove(trade_entry_prices, i)
+            array.remove(trade_entry_times,  i)
             if in_date_range and show_exit_markers
                 label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
             if in_date_range and show_exit_labels
