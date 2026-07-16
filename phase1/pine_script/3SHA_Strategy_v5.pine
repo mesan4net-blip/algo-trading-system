@@ -613,8 +613,9 @@ tsl_short_raw = ta.highest(tsl_high, tsl_lookback) + sl_buffer_raw
 // ============================================================================
 PENDING_GREY = color.new(#888888, 30)
 
-var string active_dir = "none"
-var float  active_sl  = na
+var string active_dir    = "none"
+var float  active_sl     = na
+var float  last_active_sl = na  // preserves last valid SL so exit marker can draw after breach
 
 // Reset state at date range boundary so first signal in range shows as colored
 // Date range gates DISPLAY only — state machine runs continuously from bar 1
@@ -660,10 +661,15 @@ if any_bear_signal and active_dir == "none"
         active_sl  := sl_short_preview
 
 // SL breach — candle closes beyond initial SL → reset active direction
-if active_dir == "bull" and not na(active_sl) and close < active_sl
+exit_bull = active_dir == "bull" and not na(active_sl) and close < active_sl
+exit_bear = active_dir == "bear" and not na(active_sl) and close > active_sl
+
+if exit_bull
+    last_active_sl := active_sl
     active_dir := "none"
     active_sl  := na
-if active_dir == "bear" and not na(active_sl) and close > active_sl
+if exit_bear
+    last_active_sl := active_sl
     active_dir := "none"
     active_sl  := na
 
@@ -767,13 +773,12 @@ if in_date_range and show_grey_bear
 // Exit Markers — filled black triangle, position indicates direction
 // Bull exit (SL breached below): ▼ above bar pointing down
 // Bear exit (SL breached above): ▲ below bar pointing up
-exit_bull = active_dir[1] == "bull" and not na(active_sl[1]) and close < active_sl[1]
-exit_bear = active_dir[1] == "bear" and not na(active_sl[1]) and close > active_sl[1]
 
+// Exit Markers — fired on the breach bar itself using last_active_sl
 if in_date_range and show_exit_markers and exit_bull
-    label.new(bar_index, active_sl[1] + sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+    label.new(bar_index, last_active_sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 if in_date_range and show_exit_markers and exit_bear
-    label.new(bar_index, active_sl[1] - sl_dot_offset_raw, "", style=label.style_triangleup,   color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+    label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup,   color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 
 // Find which bar back holds the lowest/highest for Prev N Bars
 f_prev_n_offset_long() =>
