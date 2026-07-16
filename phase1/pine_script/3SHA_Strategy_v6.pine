@@ -628,61 +628,55 @@ var string active_dir     = "none"
 var float  active_sl      = na
 var float  last_active_sl = na
 
-// Reset state at date range boundary so first signal in range shows as colored
-// Date range gates DISPLAY only — state machine runs continuously from bar 1
-// active_dir, active_sl, tsl values are never reset by date filter
+// Open trades array — holds SL level + direction for each active trade
+// Requires date range filter enabled to prevent unbounded growth
+// Trades stay until SL breached on candle close, then removed
+var float[]  trade_sl_levels = array.new_float(0)
+var string[] trade_sl_dirs   = array.new_string(0)
 
-// Trail SL — follows most recent marker direction via trail_dir
-// trail_dir updates on EVERY signal (colored or grey), independent of active_dir
-var string trail_dir = "none"
-
-if any_bull_signal
-    trail_dir := "bull"
-if any_bear_signal
-    trail_dir := "bear"
-
-var float tsl_long_val  = na
-var float tsl_short_val = na
-
-// New bull signal — restart bull trail, clear bear trail
-if any_bull_signal
-    tsl_long_val  := tsl_long_raw
-    tsl_short_val := na
-
-// New bear signal — restart bear trail, clear bull trail
-if any_bear_signal
-    tsl_short_val := tsl_short_raw
-    tsl_long_val  := na
-
-// Between signals — ratchet in favorable direction only
-if not any_bull_signal and not any_bear_signal
-    if trail_dir == "bull" and not na(tsl_long_val) and tsl_long_raw > tsl_long_val
-        tsl_long_val := tsl_long_raw
-    if trail_dir == "bear" and not na(tsl_short_val) and tsl_short_raw < tsl_short_val
-        tsl_short_val := tsl_short_raw
-
-// In v6 every signal is a real trade — update active_dir and active_sl on every signal
-if any_bull_signal
+// Push new trade to array when signal fires within date range
+if in_date_range and any_bull_signal
     active_dir := "bull"
     if not na(sl_long_preview) and sl_long_preview > 0
         active_sl := sl_long_preview
-if any_bear_signal
+        array.push(trade_sl_levels, sl_long_preview)
+        array.push(trade_sl_dirs,   "bull")
+
+if in_date_range and any_bear_signal
     active_dir := "bear"
     if not na(sl_short_preview) and sl_short_preview > 0
         active_sl := sl_short_preview
+        array.push(trade_sl_levels, sl_short_preview)
+        array.push(trade_sl_dirs,   "bear")
 
-// SL breach — candle closes beyond initial SL → reset active direction
-exit_bull = active_dir == "bull" and not na(active_sl) and close < active_sl
-exit_bear = active_dir == "bear" and not na(active_sl) and close > active_sl
+// Check all open trades for SL breach every bar
+// Fire exit marker and remove breached trade from array
+exit_bull = false
+exit_bear = false
 
-if exit_bull
-    last_active_sl := active_sl
-    active_dir     := "none"
-    active_sl      := na
-if exit_bear
-    last_active_sl := active_sl
-    active_dir     := "none"
-    active_sl      := na
+if array.size(trade_sl_levels) > 0
+    int i = 0
+    while i < array.size(trade_sl_levels)
+        _sl  = array.get(trade_sl_levels, i)
+        _dir = array.get(trade_sl_dirs, i)
+        if _dir == "bull" and close < _sl
+            exit_bull := true
+            last_active_sl := _sl
+            if active_dir == "bull" and active_sl == _sl
+                active_dir := "none"
+                active_sl  := na
+            array.remove(trade_sl_levels, i)
+            array.remove(trade_sl_dirs, i)
+        else if _dir == "bear" and close > _sl
+            exit_bear := true
+            last_active_sl := _sl
+            if active_dir == "bear" and active_sl == _sl
+                active_dir := "none"
+                active_sl  := na
+            array.remove(trade_sl_levels, i)
+            array.remove(trade_sl_dirs, i)
+        else
+            i := i + 1
 
 // Gate: colored marker only on the bar active_dir first becomes set
 // All subsequent signals show as grey regardless of direction
