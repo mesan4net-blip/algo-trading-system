@@ -228,6 +228,10 @@ htf1_cross_col      = input.color(color.new(#EE7733, 0), "HTF1 Cross Alert Color
 htf1_cross_size     = input.string("Small", "HTF1 Cross Alert Size", options=["Tiny","Small","Normal","Large"], group=grp_htf1_cross)
 
 // Exit Markers
+// Trade Management
+grp_trade_mgmt  = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Trade Management"
+flip_trade      = input.bool(false, "Flip Trade on Opposing Signal", tooltip="When ON: if a trade is open and an opposing signal fires, the current trade closes immediately at that bar's close and a new trade opens in the opposite direction. When OFF: opposing signal is treated as an independent new trade.", group=grp_trade_mgmt)
+
 grp_exit            = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Exit Markers"
 show_entry_markers  = input.bool(true,  "Show Entry Markers (shapes)", tooltip="Master toggle for all entry signal shape markers (▲▼◇●■◆★✦⚡). Individual condition toggles still apply.", group=grp_exit)
 show_entry_labels   = input.bool(true,  "Show Entry Price Labels", tooltip="Shows entry price alongside each signal marker.", group=grp_exit)
@@ -665,6 +669,45 @@ if not any_bull_signal and not any_bear_signal
 var float[]  trade_sl_levels  = array.new_float(0)
 var string[] trade_sl_dirs    = array.new_string(0)
 var float[]  trade_entry_prices = array.new_float(0)
+
+// Flip Trade — when ON, close all opposing trades before opening new one
+if flip_trade and in_date_range and any_bull_signal and array.size(trade_sl_levels) > 0
+    int fi = 0
+    while fi < array.size(trade_sl_levels)
+        if array.get(trade_sl_dirs, fi) == "bear"
+            _entry_f  = array.get(trade_entry_prices, fi)
+            _pnl_f    = _entry_f - close
+            _pnl_str_f = (_pnl_f >= 0 ? "+" : "") + str.tostring(math.round(_pnl_f, 2))
+            _lbl_f    = "Entry: " + str.tostring(_entry_f, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _pnl_str_f + "\n[Flipped]"
+            _col_f    = _pnl_f >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
+            if show_exit_markers
+                label.new(bar_index, close + sl_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+            if show_exit_labels
+                label.new(bar_index, close + sl_dot_offset_raw + atr14 * 0.5, _lbl_f, style=label.style_label_down, color=_col_f, textcolor=color.white, size=f_sz(label_size))
+            array.remove(trade_sl_levels,    fi)
+            array.remove(trade_sl_dirs,      fi)
+            array.remove(trade_entry_prices, fi)
+        else
+            fi := fi + 1
+
+if flip_trade and in_date_range and any_bear_signal and array.size(trade_sl_levels) > 0
+    int fi = 0
+    while fi < array.size(trade_sl_levels)
+        if array.get(trade_sl_dirs, fi) == "bull"
+            _entry_f  = array.get(trade_entry_prices, fi)
+            _pnl_f    = close - _entry_f
+            _pnl_str_f = (_pnl_f >= 0 ? "+" : "") + str.tostring(math.round(_pnl_f, 2))
+            _lbl_f    = "Entry: " + str.tostring(_entry_f, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _pnl_str_f + "\n[Flipped]"
+            _col_f    = _pnl_f >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
+            if show_exit_markers
+                label.new(bar_index, close - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+            if show_exit_labels
+                label.new(bar_index, close - sl_dot_offset_raw - atr14 * 0.5, _lbl_f, style=label.style_label_up, color=_col_f, textcolor=color.white, size=f_sz(label_size))
+            array.remove(trade_sl_levels,    fi)
+            array.remove(trade_sl_dirs,      fi)
+            array.remove(trade_entry_prices, fi)
+        else
+            fi := fi + 1
 
 // Push new trade to array when signal fires within date range
 if in_date_range and any_bull_signal
