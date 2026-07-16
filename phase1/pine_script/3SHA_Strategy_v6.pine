@@ -686,17 +686,20 @@ if array.size(trade_sl_levels) > 0
     while i < array.size(trade_sl_levels)
         _sl  = array.get(trade_sl_levels, i)
         _dir = array.get(trade_sl_dirs, i)
-        if _dir == "bull" and close < _sl
+        // Exit on initial SL breach OR trailing SL breach (whichever fires first)
+        _tsl_bull = enable_tsl and _dir == "bull" and not na(tsl_long_val)  and close < tsl_long_val
+        _tsl_bear = enable_tsl and _dir == "bear" and not na(tsl_short_val) and close > tsl_short_val
+        if _dir == "bull" and (close < _sl or _tsl_bull)
             exit_bull := true
-            last_active_sl := _sl
+            last_active_sl := _tsl_bull and not (close < _sl) ? tsl_long_val : _sl
             if active_dir == "bull" and active_sl == _sl
                 active_dir := "none"
                 active_sl  := na
             array.remove(trade_sl_levels, i)
             array.remove(trade_sl_dirs, i)
-        else if _dir == "bear" and close > _sl
+        else if _dir == "bear" and (close > _sl or _tsl_bear)
             exit_bear := true
-            last_active_sl := _sl
+            last_active_sl := _tsl_bear and not (close > _sl) ? tsl_short_val : _sl
             if active_dir == "bear" and active_sl == _sl
                 active_dir := "none"
                 active_sl  := na
