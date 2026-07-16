@@ -232,7 +232,8 @@ grp_exit            = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Exit Marker
 show_entry_markers  = input.bool(true,  "Show Entry Markers (shapes)", tooltip="Master toggle for all entry signal shape markers (▲▼◇●■◆★✦⚡). Individual condition toggles still apply.", group=grp_exit)
 show_entry_labels   = input.bool(true,  "Show Entry Price Labels", tooltip="Shows entry price alongside each signal marker.", group=grp_exit)
 show_exit_markers   = input.bool(true,  "Show Exit Markers (shapes)", tooltip="Draws ▼▲ triangle at the SL breach bar.", group=grp_exit)
-show_exit_labels    = input.bool(true,  "Show Exit Price Labels", tooltip="Shows exit price and P&L % alongside the exit marker.", group=grp_exit)
+show_exit_labels    = input.bool(true,  "Show Exit Price Labels", tooltip="Shows entry price, exit price and P&L alongside the exit marker.", group=grp_exit)
+label_size          = input.string("Small", "Label Size (entry & exit)", options=["Tiny","Small","Normal","Large"], tooltip="Controls size of both entry and exit price labels.", group=grp_exit)
 exit_marker_size    = input.string("Small", "Exit Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_exit)
 exit_dot_offset     = input.float(5.0, "Exit Marker Visual Offset (pips/points)", minval=0.0, step=0.5, tooltip="Distance from the exit price level in pips/points.", group=grp_exit)
 exit_dot_col        = input.color(color.new(#000000, 0), "Exit Marker Color", group=grp_exit)
@@ -706,7 +707,7 @@ if array.size(trade_sl_levels) > 0
             _exit_price     = close
             _pnl_dollar     = _exit_price - _entry
             _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
-            _exit_lbl       = "Exit: " + str.tostring(_exit_price, format.mintick) + "\nP&L: $" + _pnl_str
+            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str
             _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
             if active_dir == "bull" and active_sl == _sl
                 active_dir := "none"
@@ -717,14 +718,14 @@ if array.size(trade_sl_levels) > 0
             if in_date_range and show_exit_markers
                 label.new(bar_index, last_active_sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
             if in_date_range and show_exit_labels
-                label.new(bar_index, last_active_sl - sl_dot_offset_raw - atr14 * 0.5, _exit_lbl, style=label.style_label_up, color=_exit_lbl_col, textcolor=color.white, size=size.small)
+                label.new(bar_index, last_active_sl - sl_dot_offset_raw - atr14 * 0.5, _exit_lbl, style=label.style_label_up, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
         else if _dir == "bear" and (close > _sl or _tsl_bear)
             exit_bear      := true
             last_active_sl := _tsl_bear and not (close > _sl) ? tsl_short_val : _sl
             _exit_price     = close
             _pnl_dollar     = _entry - _exit_price
             _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
-            _exit_lbl       = "Exit: " + str.tostring(_exit_price, format.mintick) + "\nP&L: $" + _pnl_str
+            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str
             _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
             if active_dir == "bear" and active_sl == _sl
                 active_dir := "none"
@@ -735,7 +736,7 @@ if array.size(trade_sl_levels) > 0
             if in_date_range and show_exit_markers
                 label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
             if in_date_range and show_exit_labels
-                label.new(bar_index, last_active_sl + sl_dot_offset_raw + atr14 * 0.5, _exit_lbl, style=label.style_label_down, color=_exit_lbl_col, textcolor=color.white, size=size.small)
+                label.new(bar_index, last_active_sl + sl_dot_offset_raw + atr14 * 0.5, _exit_lbl, style=label.style_label_down, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
         else
             i := i + 1
 
@@ -885,9 +886,9 @@ if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
 // Entry price label — controlled by show_entry_labels toggle
 if in_date_range and show_entry_labels and any_bull_signal
-    label.new(bar_index, low - atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_up, color=color.new(marker_bull_col, 30), textcolor=color.white, size=size.small)
+    label.new(bar_index, low - atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_up, color=color.new(marker_bull_col, 30), textcolor=color.white, size=f_sz(label_size))
 if in_date_range and show_entry_labels and any_bear_signal
-    label.new(bar_index, high + atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_down, color=color.new(marker_bear_col, 30), textcolor=color.white, size=size.small)
+    label.new(bar_index, high + atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_down, color=color.new(marker_bear_col, 30), textcolor=color.white, size=f_sz(label_size))
 
 // Trailing Mental SL Dot — driven by trail_dir (most recent signal), ratcheted
 if in_date_range and enable_tsl and show_tsl_dot and trail_dir == "bull" and not na(tsl_long_val)
