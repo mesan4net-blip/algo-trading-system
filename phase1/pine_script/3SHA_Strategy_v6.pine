@@ -639,6 +639,10 @@ var float  last_active_sl = na
 
 // Trail direction — updates on signals, gated by pyramiding check
 // When pyramiding OFF and trade already open — trail stays with current direction
+var float[]  trade_sl_levels  = array.new_float(0)
+var string[] trade_sl_dirs    = array.new_string(0)
+var float[]  trade_entry_prices = array.new_float(0)
+
 var string trail_dir = "none"
 if any_bull_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
     trail_dir := "bull"
@@ -668,9 +672,6 @@ if not any_bull_signal and not any_bear_signal
 // Open trades array — holds SL level + direction for each active trade
 // Requires date range filter enabled to prevent unbounded growth
 // Trades stay until SL breached on candle close, then removed
-var float[]  trade_sl_levels  = array.new_float(0)
-var string[] trade_sl_dirs    = array.new_string(0)
-var float[]  trade_entry_prices = array.new_float(0)
 
 // Flip Trade — when ON, close all opposing trades before opening new one
 f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
