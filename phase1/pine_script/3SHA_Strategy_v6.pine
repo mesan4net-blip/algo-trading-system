@@ -661,15 +661,20 @@ if not any_bull_signal and not any_bear_signal
     if trail_dir == "bear" and not na(tsl_short_val) and tsl_short_raw < tsl_short_val
         tsl_short_val := tsl_short_raw
 
-// Set active_dir and lock active_sl on first signal in either direction
+// Set active_dir on first signal in either direction
 if any_bull_signal and active_dir == "none"
     active_dir := "bull"
-    if not na(sl_long_preview) and sl_long_preview > 0
-        active_sl  := sl_long_preview
 if any_bear_signal and active_dir == "none"
     active_dir := "bear"
+
+// Update active_sl every bar while active_dir is set
+// This ensures na values from early bars get filled on subsequent bars
+if active_dir == "bull" and (na(active_sl) or active_sl <= 0)
+    if not na(sl_long_preview) and sl_long_preview > 0
+        active_sl := sl_long_preview
+if active_dir == "bear" and (na(active_sl) or active_sl <= 0)
     if not na(sl_short_preview) and sl_short_preview > 0
-        active_sl  := sl_short_preview
+        active_sl := sl_short_preview
 
 // SL breach — candle closes beyond initial SL → reset active direction
 exit_bull = active_dir == "bull" and not na(active_sl) and close < active_sl
