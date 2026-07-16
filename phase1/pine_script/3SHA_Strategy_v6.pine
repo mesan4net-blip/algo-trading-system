@@ -790,8 +790,11 @@ if array.size(trade_sl_levels) > 0
 // All subsequent signals show as grey regardless of direction
 is_any_active = false  // v6: no grey markers — every signal is a real trade, always show colored
 
-f_show_bull(_sig, _respect) => _sig and (not _respect or not is_any_active)
-f_show_bear(_sig, _respect) => _sig and (not _respect or not is_any_active)
+// When pyramiding is OFF and a trade is already open — suppress all markers and SL dots
+no_new_trade = not pyramiding_allowed and array.size(trade_sl_levels) > 0
+
+f_show_bull(_sig, _respect) => _sig and (not _respect or not is_any_active) and not no_new_trade
+f_show_bear(_sig, _respect) => _sig and (not _respect or not is_any_active) and not no_new_trade
 
 // Grey marker fires once per signal — when signal fires while already active
 show_grey_bull = any_bull_signal and is_any_active
@@ -912,28 +915,28 @@ f_prev_n_offset_short() =>
 // Prev N Bars    → dot on the actual candle that IS the lowest/highest
 // sl_dot_offset nudges the dot visually away from the candle for clarity
 
-if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Trigger Candle"
+if in_date_range and show_sl_dot and any_bull_signal and not no_new_trade and isl_candle_ref == "Trigger Candle"
     label.new(bar_index, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
-if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Trigger Candle"
+if in_date_range and show_sl_dot and any_bear_signal and not no_new_trade and isl_candle_ref == "Trigger Candle"
     label.new(bar_index, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
-if in_date_range and show_sl_dot and any_bull_signal[1] and isl_candle_ref == "Trade Candle"
+if in_date_range and show_sl_dot and any_bull_signal[1] and not no_new_trade[1] and isl_candle_ref == "Trade Candle"
     label.new(bar_index, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
-if in_date_range and show_sl_dot and any_bear_signal[1] and isl_candle_ref == "Trade Candle"
+if in_date_range and show_sl_dot and any_bear_signal[1] and not no_new_trade[1] and isl_candle_ref == "Trade Candle"
     label.new(bar_index, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
-if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Prev N Bars"
+if in_date_range and show_sl_dot and any_bull_signal and not no_new_trade and isl_candle_ref == "Prev N Bars"
     n_offset = f_prev_n_offset_long()
     label.new(bar_index - n_offset, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
-if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev N Bars"
+if in_date_range and show_sl_dot and any_bear_signal and not no_new_trade and isl_candle_ref == "Prev N Bars"
     n_offset = f_prev_n_offset_short()
     label.new(bar_index - n_offset, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
 // Entry price label — controlled by show_entry_labels toggle
-if in_date_range and show_entry_labels and any_bull_signal
+if in_date_range and show_entry_labels and any_bull_signal and not no_new_trade
     label.new(bar_index, low - atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_up, color=color.new(marker_bull_col, 30), textcolor=color.white, size=f_sz(label_size))
-if in_date_range and show_entry_labels and any_bear_signal
+if in_date_range and show_entry_labels and any_bear_signal and not no_new_trade
     label.new(bar_index, high + atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_down, color=color.new(marker_bear_col, 30), textcolor=color.white, size=f_sz(label_size))
 
 // Trailing Mental SL Dot — driven by trail_dir (most recent signal), ratcheted
