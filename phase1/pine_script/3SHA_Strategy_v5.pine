@@ -1,12 +1,24 @@
 //@version=6
 // ============================================================================
-// 3SHA VISUAL v4 — Entry Condition Markers
-// Builds on v3 visuals + adds three independent entry marker systems:
-//   Cascade    — all 3 SHA flip into agreement
-//   C1         — first adjacent SHA pair agreement (Base+HTF1 or HTF1+HTF2)
-//   C2         — price closes beyond all 3 SHA bodies
-// All markers appear on the OPEN of the NEXT bar after condition confirmed
-// Color blind safe: Blue (bull) vs Orange (bear)
+// 3SHA STRATEGY v5
+// ============================================================================
+// PURPOSE:
+//   Visual analysis of potential trade setups using 3 SHA layers.
+//   NOT every signal is a trade — signals are colored (first) or grey (subsequent).
+//
+// KEY BEHAVIORS:
+//   - First signal in a direction → colored marker (blue bull / red bear) + SL dot
+//   - Subsequent signals while active → grey → markers (potential setups, not trades)
+//   - Exit only tracks the FIRST colored marker's SL breach
+//   - Trailing SL follows most recent signal direction
+//   - Grey markers represent potential opportunities — no exit criteria applied
+//
+// USE WHEN:
+//   - Analyzing potential setups without committing every signal as a trade
+//   - Exploring which conditions fire and where SL levels would be
+//   - Exit criteria not yet fully established
+//
+// SEE ALSO: 3SHA_Strategy_v6 — every signal is a real trade with its own SL and exit
 // ============================================================================
 strategy("3SHA Strategy v5", shorttitle="3SHA-v5", overlay=true,
          initial_capital=100000, currency=currency.USD,
