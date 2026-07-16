@@ -675,11 +675,11 @@ if exit_bear
     active_dir := "none"
     active_sl  := na
 
-// Push SL level to array for every signal (colored or grey)
-if any_bull_signal and not na(sl_long_preview) and sl_long_preview > 0
+// Push SL level to array only within date range — keeps array small (handful of trades)
+if in_date_range and any_bull_signal and not na(sl_long_preview) and sl_long_preview > 0
     array.push(sl_levels, sl_long_preview)
     array.push(sl_dirs,   "bull")
-if any_bear_signal and not na(sl_short_preview) and sl_short_preview > 0
+if in_date_range and any_bear_signal and not na(sl_short_preview) and sl_short_preview > 0
     array.push(sl_levels, sl_short_preview)
     array.push(sl_dirs,   "bear")
 
