@@ -671,6 +671,10 @@ var string[] trade_sl_dirs    = array.new_string(0)
 var float[]  trade_entry_prices = array.new_float(0)
 
 // Flip Trade — when ON, close all opposing trades before opening new one
+f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.auto
+atr14 = ta.atr(14)
+
 if flip_trade and in_date_range and any_bull_signal and array.size(trade_sl_levels) > 0
     int fi = 0
     while fi < array.size(trade_sl_levels)
@@ -731,9 +735,6 @@ if in_date_range and any_bear_signal
 exit_bull = false
 exit_bear = false
 
-f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
-f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.auto
-atr14 = ta.atr(14)
 
 if array.size(trade_sl_levels) > 0
     int i = 0
