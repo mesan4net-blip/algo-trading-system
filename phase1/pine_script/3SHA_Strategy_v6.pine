@@ -704,9 +704,9 @@ if array.size(trade_sl_levels) > 0
             exit_bull      := true
             last_active_sl := _tsl_bull and not (close < _sl) ? tsl_long_val : _sl
             _exit_price     = close
-            _pnl_pct        = (_exit_price - _entry) / _entry * 100
-            _pnl_str        = (_pnl_pct >= 0 ? "+" : "") + str.tostring(math.round(_pnl_pct, 2)) + "%"
-            _exit_lbl       = "Exit: " + str.tostring(_exit_price, format.mintick) + "  " + _pnl_str + "\nEntry: " + str.tostring(_entry, format.mintick)
+            _pnl_dollar     = _exit_price - _entry
+            _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
+            _exit_lbl       = "Exit: " + str.tostring(_exit_price, format.mintick) + "  P&L: $" + _pnl_str
             if active_dir == "bull" and active_sl == _sl
                 active_dir := "none"
                 active_sl  := na
@@ -721,9 +721,9 @@ if array.size(trade_sl_levels) > 0
             exit_bear      := true
             last_active_sl := _tsl_bear and not (close > _sl) ? tsl_short_val : _sl
             _exit_price     = close
-            _pnl_pct        = (_entry - _exit_price) / _entry * 100
-            _pnl_str        = (_pnl_pct >= 0 ? "+" : "") + str.tostring(math.round(_pnl_pct, 2)) + "%"
-            _exit_lbl       = "Exit: " + str.tostring(_exit_price, format.mintick) + "  " + _pnl_str + "\nEntry: " + str.tostring(_entry, format.mintick)
+            _pnl_dollar     = _entry - _exit_price
+            _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
+            _exit_lbl       = "Exit: " + str.tostring(_exit_price, format.mintick) + "  P&L: $" + _pnl_str
             if active_dir == "bear" and active_sl == _sl
                 active_dir := "none"
                 active_sl  := na
