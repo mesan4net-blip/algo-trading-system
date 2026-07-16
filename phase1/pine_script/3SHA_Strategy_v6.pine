@@ -661,18 +661,13 @@ if not any_bull_signal and not any_bear_signal
     if trail_dir == "bear" and not na(tsl_short_val) and tsl_short_raw < tsl_short_val
         tsl_short_val := tsl_short_raw
 
-// Set active_dir on first signal in either direction
-if any_bull_signal and active_dir == "none"
+// In v6 every signal is a real trade — update active_dir and active_sl on every signal
+if any_bull_signal
     active_dir := "bull"
-if any_bear_signal and active_dir == "none"
-    active_dir := "bear"
-
-// Update active_sl every bar while active_dir is set
-// This ensures na values from early bars get filled on subsequent bars
-if active_dir == "bull" and (na(active_sl) or active_sl <= 0)
     if not na(sl_long_preview) and sl_long_preview > 0
         active_sl := sl_long_preview
-if active_dir == "bear" and (na(active_sl) or active_sl <= 0)
+if any_bear_signal
+    active_dir := "bear"
     if not na(sl_short_preview) and sl_short_preview > 0
         active_sl := sl_short_preview
 
