@@ -229,9 +229,10 @@ htf1_cross_size     = input.string("Small", "HTF1 Cross Alert Size", options=["T
 
 // Exit Markers
 grp_exit            = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Exit Markers"
+show_entry_markers  = input.bool(true,  "Show Entry Markers (shapes)", tooltip="Master toggle for all entry signal shape markers (▲▼◇●■◆★✦⚡). Individual condition toggles still apply.", group=grp_exit)
+show_entry_labels   = input.bool(true,  "Show Entry Price Labels", tooltip="Shows entry price alongside each signal marker.", group=grp_exit)
 show_exit_markers   = input.bool(true,  "Show Exit Markers (shapes)", tooltip="Draws ▼▲ triangle at the SL breach bar.", group=grp_exit)
 show_exit_labels    = input.bool(true,  "Show Exit Price Labels", tooltip="Shows exit price and P&L % alongside the exit marker.", group=grp_exit)
-show_entry_labels   = input.bool(true,  "Show Entry Price Labels", tooltip="Shows entry price alongside each signal marker.", group=grp_exit)
 exit_marker_size    = input.string("Small", "Exit Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_exit)
 exit_dot_offset     = input.float(5.0, "Exit Marker Visual Offset (pips/points)", minval=0.0, step=0.5, tooltip="Distance from the exit price level in pips/points.", group=grp_exit)
 exit_dot_col        = input.color(color.new(#000000, 0), "Exit Marker Color", group=grp_exit)
@@ -776,52 +777,52 @@ f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "partial" ? "→◇" : _
 // Gate helpers — suppress same-direction if respect_sl is ON and already in that trade
 
 // Full Alignment — filled arrow
-if in_date_range and f_show_bull(cascade_bull, respect_sl_cascade) and not show_grey_bull
+if in_date_range and show_entry_markers and f_show_bull(cascade_bull, respect_sl_cascade) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 0.8 * marker_atr_mult, "▲", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(cascade_size))
-if in_date_range and f_show_bear(cascade_bear, respect_sl_cascade) and not show_grey_bear
+if in_date_range and show_entry_markers and f_show_bear(cascade_bear, respect_sl_cascade) and not show_grey_bear
     label.new(bar_index, high + atr14 * 0.8 * marker_atr_mult, "▼", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(cascade_size))
 
 // Partial Alignment — diamond shape ◇
-if in_date_range and f_show_bull(partial_bull, respect_sl_partial) and not show_grey_bull
+if in_date_range and show_entry_markers and f_show_bull(partial_bull, respect_sl_partial) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 1.3 * marker_atr_mult, "◇", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(partial_size))
-if in_date_range and f_show_bear(partial_bear, respect_sl_partial) and not show_grey_bear
+if in_date_range and show_entry_markers and f_show_bear(partial_bear, respect_sl_partial) and not show_grey_bear
     label.new(bar_index, high + atr14 * 1.3 * marker_atr_mult, "◇", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(partial_size))
 
 // Full Cluster Cross — circle dot
-if in_date_range and f_show_bull(c2_bull, respect_sl_c2) and not show_grey_bull
+if in_date_range and show_entry_markers and f_show_bull(c2_bull, respect_sl_c2) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 2.8 * marker_atr_mult, "●", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(c2_size))
-if in_date_range and f_show_bear(c2_bear, respect_sl_c2) and not show_grey_bear
+if in_date_range and show_entry_markers and f_show_bear(c2_bear, respect_sl_c2) and not show_grey_bear
     label.new(bar_index, high + atr14 * 2.8 * marker_atr_mult, "●", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(c2_size))
 
 // Pullback Resume — square shape
-if in_date_range and f_show_bull(c3_bull, respect_sl_c3) and not show_grey_bull
+if in_date_range and show_entry_markers and f_show_bull(c3_bull, respect_sl_c3) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 3.8 * marker_atr_mult, "■", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(c3_size))
-if in_date_range and f_show_bear(c3_bear, respect_sl_c3) and not show_grey_bear
+if in_date_range and show_entry_markers and f_show_bear(c3_bear, respect_sl_c3) and not show_grey_bear
     label.new(bar_index, high + atr14 * 3.8 * marker_atr_mult, "■", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(c3_size))
 
 // Early Trend — diamond shape
-if in_date_range and f_show_bull(early_trend_bull, respect_sl_early) and not show_grey_bull
+if in_date_range and show_entry_markers and f_show_bull(early_trend_bull, respect_sl_early) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 1.8 * marker_atr_mult, "◆", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(early_trend_size))
-if in_date_range and f_show_bear(early_trend_bear, respect_sl_early) and not show_grey_bear
+if in_date_range and show_entry_markers and f_show_bear(early_trend_bear, respect_sl_early) and not show_grey_bear
     label.new(bar_index, high + atr14 * 1.8 * marker_atr_mult, "◆", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(early_trend_size))
 
 // Trend Continuation — star shape
-if in_date_range and f_show_bull(trend_cont_bull, respect_sl_cont) and not show_grey_bull
+if in_date_range and show_entry_markers and f_show_bull(trend_cont_bull, respect_sl_cont) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 4.8 * marker_atr_mult, "★ LON→NY", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(trend_cont_size))
-if in_date_range and f_show_bear(trend_cont_bear, respect_sl_cont) and not show_grey_bear
+if in_date_range and show_entry_markers and f_show_bear(trend_cont_bear, respect_sl_cont) and not show_grey_bear
     label.new(bar_index, high + atr14 * 4.8 * marker_atr_mult, "★ LON→NY", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(trend_cont_size))
 
 // HTF2 Price Cross Alert — ⚡ (down = closed below HTF2, up = closed above HTF2)
 // Suppress live marker if it's being shown as pending on this same bar
-if in_date_range and f_show_bear(htf2_cross_down, respect_sl_htf2) and not show_grey_bear
+if in_date_range and show_entry_markers and f_show_bear(htf2_cross_down, respect_sl_htf2) and not show_grey_bear
     label.new(bar_index, high + atr14 * 0.3 * marker_atr_mult, "⚡", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(htf2_cross_size))
-if in_date_range and f_show_bull(htf2_cross_up, respect_sl_htf2) and not show_grey_bull
+if in_date_range and show_entry_markers and f_show_bull(htf2_cross_up, respect_sl_htf2) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 0.3 * marker_atr_mult, "⚡", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(htf2_cross_size))
 
 // HTF1 Price Cross Alert — ✦ (down = closed below HTF1, up = closed above HTF1)
-if in_date_range and f_show_bear(htf1_cross_down, respect_sl_htf1) and not show_grey_bear
+if in_date_range and show_entry_markers and f_show_bear(htf1_cross_down, respect_sl_htf1) and not show_grey_bear
     label.new(bar_index, high + atr14 * 0.5 * marker_atr_mult, "✦", style=label.style_label_down, color=marker_bear_col, textcolor=color.white, size=f_sz(htf1_cross_size))
-if in_date_range and f_show_bull(htf1_cross_up, respect_sl_htf1) and not show_grey_bull
+if in_date_range and show_entry_markers and f_show_bull(htf1_cross_up, respect_sl_htf1) and not show_grey_bull
     label.new(bar_index, low  - atr14 * 0.5 * marker_atr_mult, "✦", style=label.style_label_up,   color=marker_bull_col, textcolor=color.white, size=f_sz(htf1_cross_size))
 
 // Pending marker — fires ONCE on the bar the opposing signal first registers
