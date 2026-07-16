@@ -229,9 +229,11 @@ htf1_cross_size     = input.string("Small", "HTF1 Cross Alert Size", options=["T
 
 // Exit Markers
 grp_exit            = "⑧ ━━━ ENTRY CONDITIONS ━━━  ▸ Exit Markers"
-show_exit_markers   = input.bool(true, "Show Exit Markers", tooltip="Draws a filled black triangle at the bar where the active SL is breached on a candle close. ▼ above bar for bull exit, ▲ below bar for bear exit. Position indicates direction.", group=grp_exit)
+show_exit_markers   = input.bool(true,  "Show Exit Markers (shapes)", tooltip="Draws ▼▲ triangle at the SL breach bar.", group=grp_exit)
+show_exit_labels    = input.bool(true,  "Show Exit Price Labels", tooltip="Shows exit price and P&L % alongside the exit marker.", group=grp_exit)
+show_entry_labels   = input.bool(true,  "Show Entry Price Labels", tooltip="Shows entry price alongside each signal marker.", group=grp_exit)
 exit_marker_size    = input.string("Small", "Exit Marker Size", options=["Tiny","Small","Normal","Large"], group=grp_exit)
-exit_dot_offset     = input.float(5.0, "Exit Marker Visual Offset (pips/points)", minval=0.0, step=0.5, tooltip="Distance from the exit price level in pips/points. 0 = marker sits exactly at the SL breach level.", group=grp_exit)
+exit_dot_offset     = input.float(5.0, "Exit Marker Visual Offset (pips/points)", minval=0.0, step=0.5, tooltip="Distance from the exit price level in pips/points.", group=grp_exit)
 exit_dot_col        = input.color(color.new(#000000, 0), "Exit Marker Color", group=grp_exit)
 
 // ============================================================================
@@ -711,7 +713,9 @@ if array.size(trade_sl_levels) > 0
             array.remove(trade_sl_dirs,      i)
             array.remove(trade_entry_prices, i)
             if in_date_range and show_exit_markers
-                label.new(bar_index, last_active_sl - sl_dot_offset_raw, _exit_lbl, style=label.style_triangledown, color=exit_dot_col, textcolor=color.white, size=f_dot_sz(exit_marker_size))
+                label.new(bar_index, last_active_sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+            if in_date_range and show_exit_labels
+                label.new(bar_index, last_active_sl - sl_dot_offset_raw - atr14 * 0.5, _exit_lbl, style=label.style_label_up, color=color.new(marker_bear_col, 20), textcolor=color.white, size=size.small)
         else if _dir == "bear" and (close > _sl or _tsl_bear)
             exit_bear      := true
             last_active_sl := _tsl_bear and not (close > _sl) ? tsl_short_val : _sl
@@ -726,7 +730,9 @@ if array.size(trade_sl_levels) > 0
             array.remove(trade_sl_dirs,      i)
             array.remove(trade_entry_prices, i)
             if in_date_range and show_exit_markers
-                label.new(bar_index, last_active_sl + sl_dot_offset_raw, _exit_lbl, style=label.style_triangleup, color=exit_dot_col, textcolor=color.white, size=f_dot_sz(exit_marker_size))
+                label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+            if in_date_range and show_exit_labels
+                label.new(bar_index, last_active_sl + sl_dot_offset_raw + atr14 * 0.5, _exit_lbl, style=label.style_label_down, color=color.new(marker_bull_col, 20), textcolor=color.white, size=size.small)
         else
             i := i + 1
 
@@ -874,10 +880,10 @@ if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev
     label.new(bar_index - n_offset, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
-// Entry price label — shows on every signal marker (colored)
-if in_date_range and any_bull_signal
+// Entry price label — controlled by show_entry_labels toggle
+if in_date_range and show_entry_labels and any_bull_signal
     label.new(bar_index, low - atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_up, color=color.new(marker_bull_col, 30), textcolor=color.white, size=size.small)
-if in_date_range and any_bear_signal
+if in_date_range and show_entry_labels and any_bear_signal
     label.new(bar_index, high + atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_down, color=color.new(marker_bear_col, 30), textcolor=color.white, size=size.small)
 
 // Trailing Mental SL Dot — driven by trail_dir (most recent signal), ratcheted
