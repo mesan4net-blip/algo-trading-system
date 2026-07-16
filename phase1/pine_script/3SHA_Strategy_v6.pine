@@ -763,7 +763,7 @@ if array.size(trade_sl_levels) > 0
             _exit_price     = close
             _pnl_dollar     = _exit_price - _entry
             _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
-            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "  " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + " " + str.format_time(_etime, "HH:mm", syminfo.timezone) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str
+            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str + "\nDate:  " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + "\nTime:  " + str.format_time(_etime, "HH:mm", syminfo.timezone)
             _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
             if active_dir == "bull" and active_sl == _sl
                 active_dir := "none"
@@ -782,7 +782,7 @@ if array.size(trade_sl_levels) > 0
             _exit_price     = close
             _pnl_dollar     = _entry - _exit_price
             _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
-            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "  " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + " " + str.format_time(_etime, "HH:mm", syminfo.timezone) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str
+            _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str + "\nDate:  " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + "\nTime:  " + str.format_time(_etime, "HH:mm", syminfo.timezone)
             _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
             if active_dir == "bear" and active_sl == _sl
                 active_dir := "none"
