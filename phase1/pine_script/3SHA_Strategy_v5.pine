@@ -781,48 +781,39 @@ if in_date_range and show_exit_markers and exit_bear
     label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup,   color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 
 // Find which bar back holds the lowest/highest for Prev N Bars
-f_prev_n_offset_long() =>
-    int offset = 0
-    float lowest = isl_low_0
-    for i = 1 to sl_lookback
-        val = isl_candle_type == "Regular" ? low[i] : isl_candle_type == "Base SHA" ? math.min(bO[i], bC[i]) : isl_candle_type == "HTF1 SHA" ? math.min(h1O[i], h1C[i]) : math.min(h2O[i], h2C[i])
-        if val < lowest
-            lowest := val
-            offset := i
-    offset
-
-f_prev_n_offset_short() =>
-    int offset = 0
-    float highest = isl_high_0
-    for i = 1 to sl_lookback
-        val = isl_candle_type == "Regular" ? high[i] : isl_candle_type == "Base SHA" ? math.max(bO[i], bC[i]) : isl_candle_type == "HTF1 SHA" ? math.max(h1O[i], h1C[i]) : math.max(h2O[i], h2C[i])
-        if val > highest
-            highest := val
-            offset := i
-    offset
-
 // ── Initial Mental SL Dot ─────────────────────────────────────────────────
-// Trigger Candle → dot on the trigger bar
-// Trade Candle   → dot on the next bar after the signal
-// Prev N Bars    → dot on the actual candle that IS the lowest/highest
-// sl_dot_offset nudges the dot visually away from the candle for clarity
-
+// For Trigger Candle
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Trigger Candle"
     label.new(bar_index, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Trigger Candle"
     label.new(bar_index, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
+// For Trade Candle
 if in_date_range and show_sl_dot and any_bull_signal[1] and isl_candle_ref == "Trade Candle"
     label.new(bar_index, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 if in_date_range and show_sl_dot and any_bear_signal[1] and isl_candle_ref == "Trade Candle"
     label.new(bar_index, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
+// For Prev N Bars — inline loop finds actual bar holding the extreme value
 if in_date_range and show_sl_dot and any_bull_signal and isl_candle_ref == "Prev N Bars"
-    n_offset = f_prev_n_offset_long()
-    label.new(bar_index - n_offset, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    int n_off_long = 0
+    float n_low = isl_low_0
+    for i = 1 to sl_lookback
+        _v = isl_candle_type == "Regular" ? low[i] : isl_candle_type == "Base SHA" ? math.min(bO[i], bC[i]) : isl_candle_type == "HTF1 SHA" ? math.min(h1O[i], h1C[i]) : math.min(h2O[i], h2C[i])
+        if _v < n_low
+            n_low := _v
+            n_off_long := i
+    label.new(bar_index - n_off_long, sl_long_preview - sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+
 if in_date_range and show_sl_dot and any_bear_signal and isl_candle_ref == "Prev N Bars"
-    n_offset = f_prev_n_offset_short()
-    label.new(bar_index - n_offset, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
+    int n_off_short = 0
+    float n_high = isl_high_0
+    for i = 1 to sl_lookback
+        _v = isl_candle_type == "Regular" ? high[i] : isl_candle_type == "Base SHA" ? math.max(bO[i], bC[i]) : isl_candle_type == "HTF1 SHA" ? math.max(h1O[i], h1C[i]) : math.max(h2O[i], h2C[i])
+        if _v > n_high
+            n_high := _v
+            n_off_short := i
+    label.new(bar_index - n_off_short, sl_short_preview + sl_dot_offset_raw, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
 // Trailing Mental SL Dot — driven by trail_dir (most recent signal), ratcheted
