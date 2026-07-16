@@ -684,6 +684,10 @@ if in_date_range and any_bear_signal
 exit_bull = false
 exit_bear = false
 
+f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.auto
+atr14 = ta.atr(14)
+
 if array.size(trade_sl_levels) > 0
     int i = 0
     while i < array.size(trade_sl_levels)
@@ -746,9 +750,6 @@ f_pending_sym(_t) => _t == "cascade" ? "→▲" : _t == "partial" ? "→◇" : _
 // ============================================================================
 // MARKER SIZE HELPER
 // ============================================================================
-f_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
-f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.auto
-atr14 = ta.atr(14)
 
 // ============================================================================
 // DRAW ENTRY MARKERS — all on current bar open (next bar after signal)
