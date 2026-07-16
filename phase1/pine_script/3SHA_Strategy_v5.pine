@@ -615,7 +615,11 @@ PENDING_GREY = color.new(#888888, 30)
 
 var string active_dir    = "none"
 var float  active_sl     = na
-var float  last_active_sl = na  // preserves last valid SL so exit marker can draw after breach
+
+// Arrays to track all pending SL levels (colored + grey markers)
+// Each signal pushes its SL price and direction — checked every bar for breach
+var float[] sl_levels    = array.new_float(0)
+var string[] sl_dirs     = array.new_string(0)
 
 // Reset state at date range boundary so first signal in range shows as colored
 // Date range gates DISPLAY only — state machine runs continuously from bar 1
@@ -665,13 +669,19 @@ exit_bull = active_dir == "bull" and not na(active_sl) and close < active_sl
 exit_bear = active_dir == "bear" and not na(active_sl) and close > active_sl
 
 if exit_bull
-    last_active_sl := active_sl
     active_dir := "none"
     active_sl  := na
 if exit_bear
-    last_active_sl := active_sl
     active_dir := "none"
     active_sl  := na
+
+// Push SL level to array for every signal (colored or grey)
+if any_bull_signal and not na(sl_long_preview) and sl_long_preview > 0
+    array.push(sl_levels, sl_long_preview)
+    array.push(sl_dirs,   "bull")
+if any_bear_signal and not na(sl_short_preview) and sl_short_preview > 0
+    array.push(sl_levels, sl_short_preview)
+    array.push(sl_dirs,   "bear")
 
 // Gate: colored marker only on the bar active_dir first becomes set
 // All subsequent signals show as grey regardless of direction
@@ -774,11 +784,22 @@ if in_date_range and show_grey_bear
 // Bull exit (SL breached below): ▼ above bar pointing down
 // Bear exit (SL breached above): ▲ below bar pointing up
 
-// Exit Markers — fired on the breach bar itself using last_active_sl
-if in_date_range and show_exit_markers and exit_bull
-    label.new(bar_index, last_active_sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
-if in_date_range and show_exit_markers and exit_bear
-    label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup,   color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+// Exit Markers — check all tracked SL levels, fire once on breach then remove
+if in_date_range and show_exit_markers and array.size(sl_levels) > 0
+    int i = 0
+    while i < array.size(sl_levels)
+        _sl  = array.get(sl_levels, i)
+        _dir = array.get(sl_dirs,   i)
+        _breached = (_dir == "bull" and close < _sl) or (_dir == "bear" and close > _sl)
+        if _breached
+            if _dir == "bull"
+                label.new(bar_index, _sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+            else
+                label.new(bar_index, _sl + sl_dot_offset_raw, "", style=label.style_triangleup,   color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+            array.remove(sl_levels, i)
+            array.remove(sl_dirs,   i)
+        else
+            i := i + 1
 
 // ── Initial Mental SL Dot ─────────────────────────────────────────────────
 // On every signal bar, find the offset to the lowest/highest bar and draw there
