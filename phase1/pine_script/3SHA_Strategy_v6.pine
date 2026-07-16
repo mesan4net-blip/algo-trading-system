@@ -105,9 +105,10 @@ ny_label_col      = input.color(color.new(#33BBEE, 0),  "New York — Label Colo
 // ============================================================================
 // INPUTS — GLOBAL DISPLAY
 // ============================================================================
-grp_global   = "④ ━━━ GLOBAL DISPLAY ━━━"
-show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
-show_borders = input.bool(true,  "Show Borders (all layers)", group=grp_global)
+grp_global      = "④ ━━━ GLOBAL DISPLAY ━━━"
+show_wicks      = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
+show_borders    = input.bool(true,  "Show Borders (all layers)", group=grp_global)
+pyramiding_allowed = input.bool(true, "Pyramiding Allowed", tooltip="When ON: multiple trades can be open simultaneously — every signal opens a new trade regardless of existing open trades.\nWhen OFF: no new trade opens while any existing trade is still active. New signals are ignored until the current trade exits.", group=grp_global)
 marker_atr_mult = input.float(1.0, "Marker ATR Offset Multiplier", minval=0.1, maxval=5.0, step=0.1, tooltip="Scales how far all markers sit from the bar. 1.0 = default. Lower = closer to bar. Higher = further away.", group=grp_global)
 
 // ============================================================================
@@ -714,7 +715,8 @@ if flip_trade and in_date_range and any_bear_signal and array.size(trade_sl_leve
             fi := fi + 1
 
 // Push new trade to array when signal fires within date range
-if in_date_range and any_bull_signal
+// Pyramiding Allowed = OFF → skip if any trade already open
+if in_date_range and any_bull_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
     active_dir := "bull"
     if not na(sl_long_preview) and sl_long_preview > 0
         active_sl := sl_long_preview
@@ -722,7 +724,7 @@ if in_date_range and any_bull_signal
         array.push(trade_sl_dirs,      "bull")
         array.push(trade_entry_prices, close)
 
-if in_date_range and any_bear_signal
+if in_date_range and any_bear_signal and (pyramiding_allowed or array.size(trade_sl_levels) == 0)
     active_dir := "bear"
     if not na(sl_short_preview) and sl_short_preview > 0
         active_sl := sl_short_preview
