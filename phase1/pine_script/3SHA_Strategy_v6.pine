@@ -724,8 +724,6 @@ if not pyramiding_allowed and in_date_range and show_exit_labels and exit_bull
     dw_entry_price := p1_entry_price
     dw_exit_price  := close
     dw_pnl         := _p1_pnl
-    dw_entry_time  := p1_entry_time
-    dw_exit_time   := time
 
 if not pyramiding_allowed and in_date_range and show_exit_markers and exit_bear
     label.new(bar_index, last_active_sl + exit_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
@@ -737,8 +735,6 @@ if not pyramiding_allowed and in_date_range and show_exit_labels and exit_bear
     dw_entry_price := p1_entry_price
     dw_exit_price  := close
     dw_pnl         := _p1_pnl
-    dw_entry_time  := p1_entry_time
-    dw_exit_time   := time
 
 // --- PATH 2: PYRAMIDING ON — array tracks multiple simultaneous trades ---
 var float[]  trade_sl_levels    = array.new_float(0)
