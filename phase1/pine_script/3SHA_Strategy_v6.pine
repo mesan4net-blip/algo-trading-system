@@ -643,6 +643,13 @@ var string active_dir     = "none"
 var float  active_sl      = na
 var float  last_active_sl = na
 
+var string trail_dir    = "none"
+
+if any_bull_signal and (pyramiding_allowed or active_dir == "none")
+    trail_dir     := "bull"
+if any_bear_signal and (pyramiding_allowed or active_dir == "none")
+    trail_dir     := "bear"
+
 var float tsl_long_val  = na
 var float tsl_short_val = na
 
