@@ -672,8 +672,9 @@ if not any_bull_signal and not any_bear_signal
     if trail_dir == "bear" and not na(tsl_short_val) and tsl_short_raw < tsl_short_val
         tsl_short_val := tsl_short_raw
 
-exit_bull = false
-exit_bear = false
+// Capture active_dir BEFORE Path 1 runs — used to gate marker display correctly
+// This ensures entry labels show on the signal bar even though active_dir gets set on same bar
+active_dir_prev = active_dir
 
 if not pyramiding_allowed
     if any_bull_signal and active_dir == "none"
@@ -813,7 +814,7 @@ is_any_active = false  // v6: no grey markers — every signal is a real trade, 
 // Suppress markers when trade already open
 // Path 1 (no pyramiding): suppress when active_dir is set
 // Path 2 (pyramiding): suppress never — every signal is a trade
-no_new_trade = not pyramiding_allowed and active_dir != "none"
+no_new_trade = not pyramiding_allowed and active_dir_prev != "none"
 
 f_show_bull(_sig, _respect) => _sig and (not _respect or not is_any_active) and not no_new_trade
 f_show_bear(_sig, _respect) => _sig and (not _respect or not is_any_active) and not no_new_trade
