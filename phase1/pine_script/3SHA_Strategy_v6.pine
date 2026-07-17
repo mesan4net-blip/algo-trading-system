@@ -683,14 +683,6 @@ exit_bear = false
 var float  dw_entry_price = na
 var float  dw_exit_price  = na
 var float  dw_pnl         = na
-var int    dw_entry_time  = na
-var int    dw_exit_time   = na
-// Reset each bar so only shows on exit bars
-dw_entry_price := na
-dw_exit_price  := na
-dw_pnl         := na
-dw_entry_time  := na
-dw_exit_time   := na
 
 if not pyramiding_allowed
     if any_bull_signal and active_dir == "none"
@@ -1089,8 +1081,7 @@ if show_hud and barstate.islast
     table.cell(hud, 1, 11, str.tostring(active_dir == "bear" ? isl_high_0 : isl_low_0, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
 
 // ── Data Window — Trade Details ───────────────────────────────────────────
-// Shows on exit bars only (na on all other bars)
-// View by hovering over an exit bar with Data Window panel open
-plot(dw_entry_price, title="Entry Price",  display=display.none)
-plot(dw_exit_price,  title="Exit Price",   display=display.none)
-plot(dw_pnl,         title="P&L ($)",      display=display.none)
+// Hover over an exit bar with Data Window panel open to see trade details
+plot(dw_entry_price, title="Entry Price",  display=display.data_window)
+plot(dw_exit_price,  title="Exit Price",   display=display.data_window)
+plot(dw_pnl,         title="P&L ($)",      display=display.data_window)
