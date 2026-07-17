@@ -635,6 +635,11 @@ PENDING_GREY = color.new(#888888, 30)
 // Trail direction — updates on signals, gated by pyramiding check
 // When pyramiding OFF and trade already open — trail stays with current direction
 // ============================================================================
+// Helper functions and common calculations
+f_sz(_s)     => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+f_dot_sz(_s) => _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Normal" ? size.normal : size.auto
+atr14        = ta.atr(14)
+
 // TRADE TRACKING — TWO PATHS BASED ON PYRAMIDING SETTING
 // ============================================================================
 
