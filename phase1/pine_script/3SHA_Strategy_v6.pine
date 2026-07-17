@@ -706,7 +706,6 @@ if not pyramiding_allowed
             p1_entry_price := close
             p1_entry_time  := time
             strategy.entry("Long", strategy.long, qty=f_qty(close, _sl_bull))
-            strategy.exit("Long Exit", from_entry="Long", stop=_sl_bull)
     if any_bear_signal and active_dir == "none"
         _sl_bear = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
         if not na(_sl_bear) and _sl_bear > 0
@@ -715,7 +714,6 @@ if not pyramiding_allowed
             p1_entry_price := close
             p1_entry_time  := time
             strategy.entry("Short", strategy.short, qty=f_qty(close, _sl_bear))
-            strategy.exit("Short Exit", from_entry="Short", stop=_sl_bear)
     _tsl_bull_b = enable_tsl and active_dir == "bull" and not na(tsl_long_val)  and close < tsl_long_val
     _tsl_bear_b = enable_tsl and active_dir == "bear" and not na(tsl_short_val) and close > tsl_short_val
     if active_dir == "bull" and not na(active_sl) and (close < active_sl or _tsl_bull_b)
@@ -783,7 +781,6 @@ if pyramiding_allowed
             array.push(trade_entry_prices, close)
             array.push(trade_entry_times,  time)
             strategy.entry("Long", strategy.long, qty=f_qty(close, _sl_bull2))
-            strategy.exit("Long Exit", from_entry="Long", stop=_sl_bull2)
     if in_date_range and any_bear_signal
         _sl_bear2 = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
         if not na(_sl_bear2) and _sl_bear2 > 0
@@ -794,7 +791,6 @@ if pyramiding_allowed
             array.push(trade_entry_prices, close)
             array.push(trade_entry_times,  time)
             strategy.entry("Short", strategy.short, qty=f_qty(close, _sl_bear2))
-            strategy.exit("Short Exit", from_entry="Short", stop=_sl_bear2)
     if array.size(trade_sl_levels) > 0
         int i = 0
         while i < array.size(trade_sl_levels)
@@ -1007,10 +1003,10 @@ if in_date_range and show_sl_dot and any_bear_signal and not no_new_trade and is
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
 // Update strategy.exit every bar with current trail SL so strategy engine respects trail
-if enable_tsl and active_dir == "bull" and not na(tsl_long_val)
-    strategy.exit("Long Exit", from_entry="Long", stop=tsl_long_val)
-if enable_tsl and active_dir == "bear" and not na(tsl_short_val)
-    strategy.exit("Short Exit", from_entry="Short", stop=tsl_short_val)
+if enable_tsl and active_dir == "bull" and not na(tsl_long_val) and close < tsl_long_val
+    strategy.close_all(comment="Trail SL Hit")
+if enable_tsl and active_dir == "bear" and not na(tsl_short_val) and close > tsl_short_val
+    strategy.close_all(comment="Trail SL Hit")
 // Entry price label — controlled by show_entry_labels toggle
 if in_date_range and show_entry_labels and any_bull_signal and not no_new_trade
     label.new(bar_index, low - atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_up, color=color.new(marker_bull_col, 30), textcolor=color.white, size=f_sz(label_size))
