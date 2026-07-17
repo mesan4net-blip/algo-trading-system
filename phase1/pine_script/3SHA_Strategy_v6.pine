@@ -673,8 +673,10 @@ if not any_bull_signal and not any_bear_signal
         tsl_short_val := tsl_short_raw
 
 // Capture active_dir BEFORE Path 1 runs — used to gate marker display correctly
-// This ensures entry labels show on the signal bar even though active_dir gets set on same bar
 active_dir_prev = active_dir
+
+exit_bull = false
+exit_bear = false
 
 if not pyramiding_allowed
     if any_bull_signal and active_dir == "none"
