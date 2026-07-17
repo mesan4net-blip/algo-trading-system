@@ -618,10 +618,6 @@ tsl_high = tsl_price_point == "Open/Close" ? (tsl_candle_type == "Base SHA" ? ma
 tsl_long_raw  = ta.lowest(tsl_low,  tsl_lookback) - sl_buffer_raw
 tsl_short_raw = ta.highest(tsl_high, tsl_lookback) + sl_buffer_raw
 
-        tsl_short_val := tsl_short_raw
-
-// Ratchet — bull trail only moves up, bear trail only moves down (declared below after active_dir)
-
 
 
 
