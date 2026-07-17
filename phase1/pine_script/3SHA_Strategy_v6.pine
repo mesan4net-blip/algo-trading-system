@@ -618,19 +618,6 @@ tsl_high = tsl_price_point == "Open/Close" ? (tsl_candle_type == "Base SHA" ? ma
 tsl_long_raw  = ta.lowest(tsl_low,  tsl_lookback) - sl_buffer_raw
 tsl_short_raw = ta.highest(tsl_high, tsl_lookback) + sl_buffer_raw
 
-var float tsl_long_val  = na
-var float tsl_short_val = na
-
-if any_bull_signal and (pyramiding_allowed or active_dir == "none")
-    tsl_long_val  := tsl_long_raw
-    tsl_short_val := na
-if any_bear_signal and (pyramiding_allowed or active_dir == "none")
-    tsl_short_val := tsl_short_raw
-    tsl_long_val  := na
-if not any_bull_signal and not any_bear_signal
-    if trail_dir == "bull" and not na(tsl_long_val) and tsl_long_raw > tsl_long_val
-        tsl_long_val := tsl_long_raw
-    if trail_dir == "bear" and not na(tsl_short_val) and tsl_short_raw < tsl_short_val
         tsl_short_val := tsl_short_raw
 
 // Ratchet — bull trail only moves up, bear trail only moves down (declared below after active_dir)
@@ -659,6 +646,20 @@ PENDING_GREY = color.new(#888888, 30)
 var string active_dir     = "none"
 var float  active_sl      = na
 var float  last_active_sl = na
+
+var float tsl_long_val  = na
+var float tsl_short_val = na
+
+if any_bull_signal and (pyramiding_allowed or active_dir == "none")
+    tsl_long_val  := tsl_long_raw
+    tsl_short_val := na
+if any_bear_signal and (pyramiding_allowed or active_dir == "none")
+    tsl_short_val := tsl_short_raw
+    tsl_long_val  := na
+if not any_bull_signal and not any_bear_signal
+    if trail_dir == "bull" and not na(tsl_long_val) and tsl_long_raw > tsl_long_val
+        tsl_long_val := tsl_long_raw
+    if trail_dir == "bear" and not na(tsl_short_val) and tsl_short_raw < tsl_short_val
 
 exit_bull = false
 exit_bear = false
