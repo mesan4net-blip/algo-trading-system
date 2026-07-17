@@ -706,6 +706,7 @@ if not pyramiding_allowed
             p1_entry_price := close
             p1_entry_time  := time
             strategy.entry("Long", strategy.long, qty=f_qty(close, _sl_bull))
+            strategy.exit("Long Exit", from_entry="Long", stop=_sl_bull)
     if any_bear_signal and active_dir == "none"
         _sl_bear = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
         if not na(_sl_bear) and _sl_bear > 0
@@ -714,6 +715,7 @@ if not pyramiding_allowed
             p1_entry_price := close
             p1_entry_time  := time
             strategy.entry("Short", strategy.short, qty=f_qty(close, _sl_bear))
+            strategy.exit("Short Exit", from_entry="Short", stop=_sl_bear)
     _tsl_bull_b = enable_tsl and active_dir == "bull" and not na(tsl_long_val)  and close < tsl_long_val
     _tsl_bear_b = enable_tsl and active_dir == "bear" and not na(tsl_short_val) and close > tsl_short_val
     if active_dir == "bull" and not na(active_sl) and (close < active_sl or _tsl_bull_b)
@@ -721,13 +723,11 @@ if not pyramiding_allowed
         last_active_sl := _tsl_bull_b and not (close < active_sl) ? tsl_long_val : active_sl
         active_dir     := "none"
         active_sl      := na
-        strategy.close("Long", comment="SL Hit")
     if active_dir == "bear" and not na(active_sl) and (close > active_sl or _tsl_bear_b)
         exit_bear      := true
         last_active_sl := _tsl_bear_b and not (close > active_sl) ? tsl_short_val : active_sl
         active_dir     := "none"
         active_sl      := na
-        strategy.close("Short", comment="SL Hit")
 
 // Path 1 exit labels — full Entry/Exit/P&L/Date/Time format
 if not pyramiding_allowed and in_date_range and show_exit_markers and exit_bull
@@ -783,6 +783,7 @@ if pyramiding_allowed
             array.push(trade_entry_prices, close)
             array.push(trade_entry_times,  time)
             strategy.entry("Long", strategy.long, qty=f_qty(close, _sl_bull2))
+            strategy.exit("Long Exit", from_entry="Long", stop=_sl_bull2)
     if in_date_range and any_bear_signal
         _sl_bear2 = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
         if not na(_sl_bear2) and _sl_bear2 > 0
@@ -793,6 +794,7 @@ if pyramiding_allowed
             array.push(trade_entry_prices, close)
             array.push(trade_entry_times,  time)
             strategy.entry("Short", strategy.short, qty=f_qty(close, _sl_bear2))
+            strategy.exit("Short Exit", from_entry="Short", stop=_sl_bear2)
     if array.size(trade_sl_levels) > 0
         int i = 0
         while i < array.size(trade_sl_levels)
@@ -814,8 +816,7 @@ if pyramiding_allowed
                 if active_dir == "bull" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
-                strategy.close("Long", comment="SL Hit")
-                array.remove(trade_sl_levels, i)    
+                        array.remove(trade_sl_levels, i)    
                 array.remove(trade_sl_dirs, i)
                 array.remove(trade_entry_prices, i)
                 array.remove(trade_entry_times, i)
@@ -840,8 +841,7 @@ if pyramiding_allowed
                 if active_dir == "bear" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
-                strategy.close("Short", comment="SL Hit")
-                array.remove(trade_sl_levels, i)
+                        array.remove(trade_sl_levels, i)
                 array.remove(trade_sl_dirs, i)
                 array.remove(trade_entry_prices, i)
                 array.remove(trade_entry_times, i)
