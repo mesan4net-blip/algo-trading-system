@@ -675,13 +675,16 @@ exit_bear = false
 
 if not pyramiding_allowed
     if any_bull_signal and active_dir == "none"
-        active_dir := "bull"
-        if not na(sl_long_preview) and sl_long_preview > 0
-            active_sl := sl_long_preview
+        // Use sl_long_preview if valid, otherwise fall back to current bar's low minus buffer
+        _sl_bull = not na(sl_long_preview) and sl_long_preview > 0 ? sl_long_preview : isl_low_0 - sl_buffer_raw
+        if not na(_sl_bull) and _sl_bull > 0
+            active_dir := "bull"
+            active_sl  := _sl_bull
     if any_bear_signal and active_dir == "none"
-        active_dir := "bear"
-        if not na(sl_short_preview) and sl_short_preview > 0
-            active_sl := sl_short_preview
+        _sl_bear = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
+        if not na(_sl_bear) and _sl_bear > 0
+            active_dir := "bear"
+            active_sl  := _sl_bear
     _tsl_bull_b = enable_tsl and active_dir == "bull" and not na(tsl_long_val)  and close < tsl_long_val
     _tsl_bear_b = enable_tsl and active_dir == "bear" and not na(tsl_short_val) and close > tsl_short_val
     if active_dir == "bull" and not na(active_sl) and (close < active_sl or _tsl_bull_b)
@@ -720,16 +723,24 @@ if pyramiding_allowed
         active_dir := "bear"
         if not na(sl_short_preview) and sl_short_preview > 0
             active_sl := sl_short_preview
-    if in_date_range and any_bull_signal and not na(sl_long_preview) and sl_long_preview > 0
-        array.push(trade_sl_levels,    sl_long_preview)
-        array.push(trade_sl_dirs,      "bull")
-        array.push(trade_entry_prices, close)
-        array.push(trade_entry_times,  time)
-    if in_date_range and any_bear_signal and not na(sl_short_preview) and sl_short_preview > 0
-        array.push(trade_sl_levels,    sl_short_preview)
-        array.push(trade_sl_dirs,      "bear")
-        array.push(trade_entry_prices, close)
-        array.push(trade_entry_times,  time)
+    if in_date_range and any_bull_signal
+        _sl_bull2 = not na(sl_long_preview) and sl_long_preview > 0 ? sl_long_preview : isl_low_0 - sl_buffer_raw
+        if not na(_sl_bull2) and _sl_bull2 > 0
+            active_dir := "bull"
+            active_sl  := _sl_bull2
+            array.push(trade_sl_levels,    _sl_bull2)
+            array.push(trade_sl_dirs,      "bull")
+            array.push(trade_entry_prices, close)
+            array.push(trade_entry_times,  time)
+    if in_date_range and any_bear_signal
+        _sl_bear2 = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
+        if not na(_sl_bear2) and _sl_bear2 > 0
+            active_dir := "bear"
+            active_sl  := _sl_bear2
+            array.push(trade_sl_levels,    _sl_bear2)
+            array.push(trade_sl_dirs,      "bear")
+            array.push(trade_entry_prices, close)
+            array.push(trade_entry_times,  time)
     if array.size(trade_sl_levels) > 0
         int i = 0
         while i < array.size(trade_sl_levels)
