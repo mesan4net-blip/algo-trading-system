@@ -809,6 +809,9 @@ if pyramiding_allowed
                     label.new(bar_index, last_active_sl - exit_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
                 if in_date_range and show_exit_labels
                     label.new(bar_index, last_active_sl - exit_dot_offset_raw - atr14 * 0.5, _exit_lbl, style=label.style_label_up, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
+                dw_entry_price := _entry
+                dw_exit_price  := _exit_price
+                dw_pnl         := _pnl_dollar
             else if _dir == "bear" and (close > _sl or _tsl_bear)
                 exit_bear      := true
                 last_active_sl := _tsl_bear and not (close > _sl) ? tsl_short_val : _sl
@@ -828,6 +831,9 @@ if pyramiding_allowed
                     label.new(bar_index, last_active_sl + exit_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
                 if in_date_range and show_exit_labels
                     label.new(bar_index, last_active_sl + exit_dot_offset_raw + atr14 * 0.5, _exit_lbl, style=label.style_label_down, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
+                dw_entry_price := _entry
+                dw_exit_price  := _exit_price
+                dw_pnl         := _pnl_dollar
             else
                 i := i + 1
 
@@ -1084,9 +1090,7 @@ if show_hud and barstate.islast
 
 // ── Data Window — Trade Details ───────────────────────────────────────────
 // Shows on exit bars only (na on all other bars)
-// View by hovering over the chart with Data Window panel open
-plot(dw_entry_price, title="Entry Price",  display=display.data_window)
-plot(dw_exit_price,  title="Exit Price",   display=display.data_window)
-plot(dw_pnl,         title="P&L ($)",      display=display.data_window)
-plot(dw_entry_time,  title="Entry Time",   display=display.data_window)
-plot(dw_exit_time,   title="Exit Time",    display=display.data_window)
+// View by hovering over an exit bar with Data Window panel open
+plot(dw_entry_price, title="Entry Price",  display=display.none)
+plot(dw_exit_price,  title="Exit Price",   display=display.none)
+plot(dw_pnl,         title="P&L ($)",      display=display.none)
