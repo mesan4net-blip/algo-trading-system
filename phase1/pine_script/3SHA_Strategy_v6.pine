@@ -722,7 +722,8 @@ if not pyramiding_allowed and in_date_range and show_exit_labels and exit_bull
     _p1_pnl     = close - p1_entry_price
     _p1_pnl_str = (_p1_pnl >= 0 ? "+" : "") + str.tostring(math.round(_p1_pnl, 2))
     _p1_col     = _p1_pnl >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
-    label.new(bar_index, last_active_sl - exit_dot_offset_raw - atr14 * 0.5, "Entry: " + str.tostring(p1_entry_price, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _p1_pnl_str + "\nEntry Date: " + str.format_time(p1_entry_time, "yyyy-MM-dd", syminfo.timezone) + "\nEntry Time: " + str.format_time(p1_entry_time, "HH:mm", syminfo.timezone), style=label.style_label_up, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
+    _p1_tooltip = "Entry: " + str.tostring(p1_entry_price, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _p1_pnl_str + "\nEntry Date: " + str.format_time(p1_entry_time, "yyyy-MM-dd", syminfo.timezone) + "\nEntry Time: " + str.format_time(p1_entry_time, "HH:mm", syminfo.timezone)
+    label.new(bar_index, last_active_sl - exit_dot_offset_raw - atr14 * 0.5, "P&L: $" + _p1_pnl_str, tooltip=_p1_tooltip, style=label.style_label_up, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
     dw_entry_price := p1_entry_price
     dw_exit_price  := close
     dw_pnl         := _p1_pnl
@@ -735,7 +736,8 @@ if not pyramiding_allowed and in_date_range and show_exit_labels and exit_bear
     _p1_pnl     = p1_entry_price - close
     _p1_pnl_str = (_p1_pnl >= 0 ? "+" : "") + str.tostring(math.round(_p1_pnl, 2))
     _p1_col     = _p1_pnl >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
-    label.new(bar_index, last_active_sl + exit_dot_offset_raw + atr14 * 0.5, "Entry: " + str.tostring(p1_entry_price, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _p1_pnl_str + "\nEntry Date: " + str.format_time(p1_entry_time, "yyyy-MM-dd", syminfo.timezone) + "\nEntry Time: " + str.format_time(p1_entry_time, "HH:mm", syminfo.timezone), style=label.style_label_down, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
+    _p1_tooltip = "Entry: " + str.tostring(p1_entry_price, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _p1_pnl_str + "\nEntry Date: " + str.format_time(p1_entry_time, "yyyy-MM-dd", syminfo.timezone) + "\nEntry Time: " + str.format_time(p1_entry_time, "HH:mm", syminfo.timezone)
+    label.new(bar_index, last_active_sl + exit_dot_offset_raw + atr14 * 0.5, "P&L: $" + _p1_pnl_str, tooltip=_p1_tooltip, style=label.style_label_down, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
     dw_entry_price := p1_entry_price
     dw_exit_price  := close
     dw_pnl         := _p1_pnl
@@ -791,7 +793,8 @@ if pyramiding_allowed
                 _pnl_dollar     = _exit_price - _entry
                 _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
                 _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
-                _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str + "\nEntry Date: " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + "\nEntry Time: " + str.format_time(_etime, "HH:mm", syminfo.timezone)
+                _exit_lbl       = "P&L: $" + _pnl_str
+                _exit_tooltip   = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str + "\nEntry Date: " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + "\nEntry Time: " + str.format_time(_etime, "HH:mm", syminfo.timezone)
                 if active_dir == "bull" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
@@ -802,7 +805,7 @@ if pyramiding_allowed
                 if in_date_range and show_exit_markers
                     label.new(bar_index, last_active_sl - exit_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
                 if in_date_range and show_exit_labels
-                    label.new(bar_index, last_active_sl - exit_dot_offset_raw - atr14 * 0.5, _exit_lbl, style=label.style_label_up, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
+                    label.new(bar_index, last_active_sl - exit_dot_offset_raw - atr14 * 0.5, _exit_lbl, tooltip=_exit_tooltip, style=label.style_label_up, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
                 dw_entry_price := _entry
                 dw_exit_price  := _exit_price
                 dw_pnl         := _pnl_dollar
@@ -815,7 +818,8 @@ if pyramiding_allowed
                 _pnl_dollar     = _entry - _exit_price
                 _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
                 _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
-                _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str + "\nEntry Date: " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + "\nEntry Time: " + str.format_time(_etime, "HH:mm", syminfo.timezone)
+                _exit_lbl       = "P&L: $" + _pnl_str
+                _exit_tooltip   = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str + "\nEntry Date: " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + "\nEntry Time: " + str.format_time(_etime, "HH:mm", syminfo.timezone)
                 if active_dir == "bear" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
@@ -826,7 +830,7 @@ if pyramiding_allowed
                 if in_date_range and show_exit_markers
                     label.new(bar_index, last_active_sl + exit_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
                 if in_date_range and show_exit_labels
-                    label.new(bar_index, last_active_sl + exit_dot_offset_raw + atr14 * 0.5, _exit_lbl, style=label.style_label_down, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
+                    label.new(bar_index, last_active_sl + exit_dot_offset_raw + atr14 * 0.5, _exit_lbl, tooltip=_exit_tooltip, style=label.style_label_down, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
                 dw_entry_price := _entry
                 dw_exit_price  := _exit_price
                 dw_pnl         := _pnl_dollar
