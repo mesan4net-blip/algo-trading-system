@@ -644,9 +644,11 @@ atr14        = ta.atr(14)
 // ============================================================================
 
 // --- PATH 1: PYRAMIDING OFF — single trade, no arrays, no timing issues ---
-var string active_dir     = "none"
-var float  active_sl      = na
-var float  last_active_sl = na
+var string active_dir       = "none"
+var float  active_sl        = na
+var float  last_active_sl   = na
+var float  p1_entry_price   = na
+var int    p1_entry_time    = na
 
 var string trail_dir    = "none"
 
@@ -678,13 +680,17 @@ if not pyramiding_allowed
         // Use sl_long_preview if valid, otherwise fall back to current bar's low minus buffer
         _sl_bull = not na(sl_long_preview) and sl_long_preview > 0 ? sl_long_preview : isl_low_0 - sl_buffer_raw
         if not na(_sl_bull) and _sl_bull > 0
-            active_dir := "bull"
-            active_sl  := _sl_bull
+            active_dir     := "bull"
+            active_sl      := _sl_bull
+            p1_entry_price := close
+            p1_entry_time  := time
     if any_bear_signal and active_dir == "none"
         _sl_bear = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
         if not na(_sl_bear) and _sl_bear > 0
-            active_dir := "bear"
-            active_sl  := _sl_bear
+            active_dir     := "bear"
+            active_sl      := _sl_bear
+            p1_entry_price := close
+            p1_entry_time  := time
     _tsl_bull_b = enable_tsl and active_dir == "bull" and not na(tsl_long_val)  and close < tsl_long_val
     _tsl_bear_b = enable_tsl and active_dir == "bear" and not na(tsl_short_val) and close > tsl_short_val
     if active_dir == "bull" and not na(active_sl) and (close < active_sl or _tsl_bull_b)
@@ -698,15 +704,24 @@ if not pyramiding_allowed
         active_dir     := "none"
         active_sl      := na
 
-// Path 1 exit labels — drawn here since no while loop
+// Path 1 exit labels — full Entry/Exit/P&L/Date/Time format
 if not pyramiding_allowed and in_date_range and show_exit_markers and exit_bull
     label.new(bar_index, last_active_sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 if not pyramiding_allowed and in_date_range and show_exit_labels and exit_bull
-    label.new(bar_index, last_active_sl - sl_dot_offset_raw - atr14 * 0.5, "Exit: " + str.tostring(close, format.mintick), style=label.style_label_up, color=color.new(#000000, 0), textcolor=color.white, size=f_sz(label_size))
+    _p1_pnl     = close - p1_entry_price
+    _p1_pnl_str = (_p1_pnl >= 0 ? "+" : "") + str.tostring(math.round(_p1_pnl, 2))
+    _p1_lbl     = "Entry: " + str.tostring(p1_entry_price, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _p1_pnl_str + "\nDate:  " + str.format_time(p1_entry_time, "yyyy-MM-dd", syminfo.timezone) + "\nTime:  " + str.format_time(p1_entry_time, "HH:mm", syminfo.timezone)
+    _p1_col     = _p1_pnl >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
+    label.new(bar_index, last_active_sl - sl_dot_offset_raw - atr14 * 0.5, _p1_lbl, style=label.style_label_up, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
+
 if not pyramiding_allowed and in_date_range and show_exit_markers and exit_bear
     label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 if not pyramiding_allowed and in_date_range and show_exit_labels and exit_bear
-    label.new(bar_index, last_active_sl + sl_dot_offset_raw + atr14 * 0.5, "Exit: " + str.tostring(close, format.mintick), style=label.style_label_down, color=color.new(#000000, 0), textcolor=color.white, size=f_sz(label_size))
+    _p1_pnl     = p1_entry_price - close
+    _p1_pnl_str = (_p1_pnl >= 0 ? "+" : "") + str.tostring(math.round(_p1_pnl, 2))
+    _p1_lbl     = "Entry: " + str.tostring(p1_entry_price, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _p1_pnl_str + "\nDate:  " + str.format_time(p1_entry_time, "yyyy-MM-dd", syminfo.timezone) + "\nTime:  " + str.format_time(p1_entry_time, "HH:mm", syminfo.timezone)
+    _p1_col     = _p1_pnl >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
+    label.new(bar_index, last_active_sl + sl_dot_offset_raw + atr14 * 0.5, _p1_lbl, style=label.style_label_down, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
 
 // --- PATH 2: PYRAMIDING ON — array tracks multiple simultaneous trades ---
 var float[]  trade_sl_levels    = array.new_float(0)
