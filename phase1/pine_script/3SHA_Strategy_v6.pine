@@ -816,7 +816,7 @@ if pyramiding_allowed
                 if active_dir == "bull" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
-                        array.remove(trade_sl_levels, i)    
+                array.remove(trade_sl_levels, i)    
                 array.remove(trade_sl_dirs, i)
                 array.remove(trade_entry_prices, i)
                 array.remove(trade_entry_times, i)
