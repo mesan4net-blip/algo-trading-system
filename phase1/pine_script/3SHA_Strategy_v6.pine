@@ -1006,6 +1006,11 @@ if in_date_range and show_sl_dot and any_bear_signal and not no_new_trade and is
     label.new(bar_index - n_offset, sl_short_preview, "", style=label.style_circle, color=sl_dot_col, size=f_dot_sz(sl_dot_size))
 
 // ── Trailing Mental SL Dot ────────────────────────────────────────────────
+// Update strategy.exit every bar with current trail SL so strategy engine respects trail
+if enable_tsl and active_dir == "bull" and not na(tsl_long_val)
+    strategy.exit("Long Exit", from_entry="Long", stop=tsl_long_val)
+if enable_tsl and active_dir == "bear" and not na(tsl_short_val)
+    strategy.exit("Short Exit", from_entry="Short", stop=tsl_short_val)
 // Entry price label — controlled by show_entry_labels toggle
 if in_date_range and show_entry_labels and any_bull_signal and not no_new_trade
     label.new(bar_index, low - atr14 * 2.0 * marker_atr_mult, "Entry: " + str.tostring(close, format.mintick), style=label.style_label_up, color=color.new(marker_bull_col, 30), textcolor=color.white, size=f_sz(label_size))
