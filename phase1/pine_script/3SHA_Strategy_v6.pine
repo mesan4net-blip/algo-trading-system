@@ -21,8 +21,8 @@
 // ============================================================================
 strategy("3SHA Strategy v6", shorttitle="3SHA-v6", overlay=true,
          initial_capital=100000, currency=currency.USD,
-         default_qty_type=strategy.fixed, default_qty_value=1,
-         calc_on_every_tick=true, process_orders_on_close=false,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10,
+         calc_on_every_tick=false, process_orders_on_close=true,
          max_bars_back=5000, max_boxes_count=500, max_labels_count=500, max_lines_count=500)
 
 // ============================================================================
@@ -109,6 +109,11 @@ grp_global      = "④ ━━━ GLOBAL DISPLAY ━━━"
 show_wicks      = input.bool(false, "Show Wicks (all layers)",   group=grp_global)
 show_borders    = input.bool(true,  "Show Borders (all layers)", group=grp_global)
 display_tz      = input.string("America/Los_Angeles", "Display Timezone", tooltip="Timezone used for date/time display in exit label tooltips. Default: America/Los_Angeles (PDT/PST). Other examples: America/New_York, Europe/London, Asia/Tokyo, UTC.", group=grp_global)
+
+// Position Sizing
+grp_sizing      = "④ ━━━ POSITION SIZING ━━━"
+max_loss_pct    = input.float(1.0,  "Max Loss Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, tooltip="Maximum % of total equity to risk on a single trade. Risk$ ÷ SL distance = shares/contracts.", group=grp_sizing)
+max_equity_pct  = input.float(20.0, "Max Equity Per Trade (%)", minval=1.0, maxval=100.0, step=1.0, tooltip="Maximum % of total equity to deploy in a single trade. Caps position size even if risk calculation suggests more.", group=grp_sizing)
 pyramiding_allowed = input.bool(true, "Pyramiding Allowed", tooltip="When ON: multiple trades can be open simultaneously — every signal opens a new trade regardless of existing open trades.\nWhen OFF: no new trade opens while any existing trade is still active. New signals are ignored until the current trade exits.", group=grp_global)
 marker_atr_mult = input.float(1.0, "Marker ATR Offset Multiplier", minval=0.1, maxval=5.0, step=0.1, tooltip="Scales how far all markers sit from the bar. 1.0 = default. Lower = closer to bar. Higher = further away.", group=grp_global)
 
@@ -682,6 +687,15 @@ dw_pnl         = float(na)
 dw_entry_time  = int(na)
 dw_exit_time   = int(na)
 
+// Position sizing — risk-based qty
+f_qty(_entry_price, _sl_price) =>
+    _equity       = strategy.equity
+    _risk_dollars = _equity * max_loss_pct  / 100
+    _sl_dist      = math.abs(_entry_price - _sl_price)
+    _qty_risk     = _sl_dist > 0 ? _risk_dollars / _sl_dist : 1
+    _qty_max      = (_equity * max_equity_pct / 100) / _entry_price
+    math.max(1, math.floor(math.min(_qty_risk, _qty_max)))
+
 if not pyramiding_allowed
     if any_bull_signal and active_dir == "none"
         // Use sl_long_preview if valid, otherwise fall back to current bar's low minus buffer
@@ -691,6 +705,7 @@ if not pyramiding_allowed
             active_sl      := _sl_bull
             p1_entry_price := close
             p1_entry_time  := time
+            strategy.entry("Long", strategy.long, qty=f_qty(close, _sl_bull))
     if any_bear_signal and active_dir == "none"
         _sl_bear = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
         if not na(_sl_bear) and _sl_bear > 0
@@ -698,6 +713,7 @@ if not pyramiding_allowed
             active_sl      := _sl_bear
             p1_entry_price := close
             p1_entry_time  := time
+            strategy.entry("Short", strategy.short, qty=f_qty(close, _sl_bear))
     _tsl_bull_b = enable_tsl and active_dir == "bull" and not na(tsl_long_val)  and close < tsl_long_val
     _tsl_bear_b = enable_tsl and active_dir == "bear" and not na(tsl_short_val) and close > tsl_short_val
     if active_dir == "bull" and not na(active_sl) and (close < active_sl or _tsl_bull_b)
@@ -705,11 +721,13 @@ if not pyramiding_allowed
         last_active_sl := _tsl_bull_b and not (close < active_sl) ? tsl_long_val : active_sl
         active_dir     := "none"
         active_sl      := na
+        strategy.close("Long", comment="SL Hit")
     if active_dir == "bear" and not na(active_sl) and (close > active_sl or _tsl_bear_b)
         exit_bear      := true
         last_active_sl := _tsl_bear_b and not (close > active_sl) ? tsl_short_val : active_sl
         active_dir     := "none"
         active_sl      := na
+        strategy.close("Short", comment="SL Hit")
 
 // Path 1 exit labels — full Entry/Exit/P&L/Date/Time format
 if not pyramiding_allowed and in_date_range and show_exit_markers and exit_bull
@@ -764,6 +782,7 @@ if pyramiding_allowed
             array.push(trade_sl_dirs,      "bull")
             array.push(trade_entry_prices, close)
             array.push(trade_entry_times,  time)
+            strategy.entry("Long", strategy.long, qty=f_qty(close, _sl_bull2))
     if in_date_range and any_bear_signal
         _sl_bear2 = not na(sl_short_preview) and sl_short_preview > 0 ? sl_short_preview : isl_high_0 + sl_buffer_raw
         if not na(_sl_bear2) and _sl_bear2 > 0
@@ -773,6 +792,7 @@ if pyramiding_allowed
             array.push(trade_sl_dirs,      "bear")
             array.push(trade_entry_prices, close)
             array.push(trade_entry_times,  time)
+            strategy.entry("Short", strategy.short, qty=f_qty(close, _sl_bear2))
     if array.size(trade_sl_levels) > 0
         int i = 0
         while i < array.size(trade_sl_levels)
@@ -794,6 +814,7 @@ if pyramiding_allowed
                 if active_dir == "bull" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
+                strategy.close("Long", comment="SL Hit")
                 array.remove(trade_sl_levels, i)    
                 array.remove(trade_sl_dirs, i)
                 array.remove(trade_entry_prices, i)
@@ -819,6 +840,7 @@ if pyramiding_allowed
                 if active_dir == "bear" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
+                strategy.close("Short", comment="SL Hit")
                 array.remove(trade_sl_levels, i)
                 array.remove(trade_sl_dirs, i)
                 array.remove(trade_entry_prices, i)
