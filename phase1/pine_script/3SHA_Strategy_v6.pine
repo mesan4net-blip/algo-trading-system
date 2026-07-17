@@ -272,7 +272,8 @@ sl_dot_size     = input.string("Auto", "SL Dot Size", options=["Auto","Tiny","Sm
 
 // Resolved values based on instrument type
 sl_buffer_raw     = is_forex ? fx_sl_buffer_pips * pip_divisor : eq_sl_buffer_pts
-sl_dot_offset_raw = is_forex ? fx_sl_dot_offset  * pip_divisor : eq_sl_dot_offset
+sl_dot_offset_raw  = is_forex ? fx_sl_dot_offset  * pip_divisor : eq_sl_dot_offset
+exit_dot_offset_raw = is_forex ? exit_dot_offset * pip_divisor : exit_dot_offset
 
 // ── Trailing Mental SL ────────────────────────────────────────────────────
 grp_tsl      = "⑨ ━━━ MENTAL STOP LOSS ━━━  ▸ Trailing SL"
@@ -678,6 +679,19 @@ active_dir_prev = active_dir
 exit_bull = false
 exit_bear = false
 
+// Data Window — stores latest exit details for plot() display
+var float  dw_entry_price = na
+var float  dw_exit_price  = na
+var float  dw_pnl         = na
+var int    dw_entry_time  = na
+var int    dw_exit_time   = na
+// Reset each bar so only shows on exit bars
+dw_entry_price := na
+dw_exit_price  := na
+dw_pnl         := na
+dw_entry_time  := na
+dw_exit_time   := na
+
 if not pyramiding_allowed
     if any_bull_signal and active_dir == "none"
         // Use sl_long_preview if valid, otherwise fall back to current bar's low minus buffer
@@ -709,22 +723,30 @@ if not pyramiding_allowed
 
 // Path 1 exit labels — full Entry/Exit/P&L/Date/Time format
 if not pyramiding_allowed and in_date_range and show_exit_markers and exit_bull
-    label.new(bar_index, last_active_sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+    label.new(bar_index, last_active_sl - exit_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 if not pyramiding_allowed and in_date_range and show_exit_labels and exit_bull
     _p1_pnl     = close - p1_entry_price
     _p1_pnl_str = (_p1_pnl >= 0 ? "+" : "") + str.tostring(math.round(_p1_pnl, 2))
-    _p1_lbl     = "Entry: " + str.tostring(p1_entry_price, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _p1_pnl_str + "\nDate:  " + str.format_time(p1_entry_time, "yyyy-MM-dd", syminfo.timezone) + "\nTime:  " + str.format_time(p1_entry_time, "HH:mm", syminfo.timezone)
     _p1_col     = _p1_pnl >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
-    label.new(bar_index, last_active_sl - sl_dot_offset_raw - atr14 * 0.5, _p1_lbl, style=label.style_label_up, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
+    label.new(bar_index, last_active_sl - exit_dot_offset_raw - atr14 * 0.5, "P&L: $" + _p1_pnl_str, style=label.style_label_up, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
+    dw_entry_price := p1_entry_price
+    dw_exit_price  := close
+    dw_pnl         := _p1_pnl
+    dw_entry_time  := p1_entry_time
+    dw_exit_time   := time
 
 if not pyramiding_allowed and in_date_range and show_exit_markers and exit_bear
-    label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+    label.new(bar_index, last_active_sl + exit_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
 if not pyramiding_allowed and in_date_range and show_exit_labels and exit_bear
     _p1_pnl     = p1_entry_price - close
     _p1_pnl_str = (_p1_pnl >= 0 ? "+" : "") + str.tostring(math.round(_p1_pnl, 2))
-    _p1_lbl     = "Entry: " + str.tostring(p1_entry_price, format.mintick) + "\nExit:  " + str.tostring(close, format.mintick) + "\nP&L:   $" + _p1_pnl_str + "\nDate:  " + str.format_time(p1_entry_time, "yyyy-MM-dd", syminfo.timezone) + "\nTime:  " + str.format_time(p1_entry_time, "HH:mm", syminfo.timezone)
     _p1_col     = _p1_pnl >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
-    label.new(bar_index, last_active_sl + sl_dot_offset_raw + atr14 * 0.5, _p1_lbl, style=label.style_label_down, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
+    label.new(bar_index, last_active_sl + exit_dot_offset_raw + atr14 * 0.5, "P&L: $" + _p1_pnl_str, style=label.style_label_down, color=_p1_col, textcolor=color.white, size=f_sz(label_size))
+    dw_entry_price := p1_entry_price
+    dw_exit_price  := close
+    dw_pnl         := _p1_pnl
+    dw_entry_time  := p1_entry_time
+    dw_exit_time   := time
 
 // --- PATH 2: PYRAMIDING ON — array tracks multiple simultaneous trades ---
 var float[]  trade_sl_levels    = array.new_float(0)
@@ -774,8 +796,8 @@ if pyramiding_allowed
                 _exit_price     = close
                 _pnl_dollar     = _exit_price - _entry
                 _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
-                _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str + "\nDate:  " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + "\nTime:  " + str.format_time(_etime, "HH:mm", syminfo.timezone)
                 _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
+                _exit_lbl       = "P&L: $" + _pnl_str
                 if active_dir == "bull" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
@@ -784,17 +806,17 @@ if pyramiding_allowed
                 array.remove(trade_entry_prices, i)
                 array.remove(trade_entry_times, i)
                 if in_date_range and show_exit_markers
-                    label.new(bar_index, last_active_sl - sl_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+                    label.new(bar_index, last_active_sl - exit_dot_offset_raw, "", style=label.style_triangledown, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
                 if in_date_range and show_exit_labels
-                    label.new(bar_index, last_active_sl - sl_dot_offset_raw - atr14 * 0.5, _exit_lbl, style=label.style_label_up, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
+                    label.new(bar_index, last_active_sl - exit_dot_offset_raw - atr14 * 0.5, _exit_lbl, style=label.style_label_up, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
             else if _dir == "bear" and (close > _sl or _tsl_bear)
                 exit_bear      := true
                 last_active_sl := _tsl_bear and not (close > _sl) ? tsl_short_val : _sl
                 _exit_price     = close
                 _pnl_dollar     = _entry - _exit_price
                 _pnl_str        = (_pnl_dollar >= 0 ? "+" : "") + str.tostring(math.round(_pnl_dollar, 2))
-                _exit_lbl       = "Entry: " + str.tostring(_entry, format.mintick) + "\nExit:  " + str.tostring(_exit_price, format.mintick) + "\nP&L:   $" + _pnl_str + "\nDate:  " + str.format_time(_etime, "yyyy-MM-dd", syminfo.timezone) + "\nTime:  " + str.format_time(_etime, "HH:mm", syminfo.timezone)
                 _exit_lbl_col   = _pnl_dollar >= 0 ? color.new(#1B5E20, 0) : color.new(#000000, 0)
+                _exit_lbl       = "P&L: $" + _pnl_str
                 if active_dir == "bear" and active_sl == _sl
                     active_dir := "none"
                     active_sl  := na
@@ -803,9 +825,9 @@ if pyramiding_allowed
                 array.remove(trade_entry_prices, i)
                 array.remove(trade_entry_times, i)
                 if in_date_range and show_exit_markers
-                    label.new(bar_index, last_active_sl + sl_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
+                    label.new(bar_index, last_active_sl + exit_dot_offset_raw, "", style=label.style_triangleup, color=exit_dot_col, size=f_dot_sz(exit_marker_size))
                 if in_date_range and show_exit_labels
-                    label.new(bar_index, last_active_sl + sl_dot_offset_raw + atr14 * 0.5, _exit_lbl, style=label.style_label_down, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
+                    label.new(bar_index, last_active_sl + exit_dot_offset_raw + atr14 * 0.5, _exit_lbl, style=label.style_label_down, color=_exit_lbl_col, textcolor=color.white, size=f_sz(label_size))
             else
                 i := i + 1
 
@@ -1060,3 +1082,11 @@ if show_hud and barstate.islast
     table.cell(hud, 0, 11, active_dir == "bear" ? "ISL High0" : "ISL Low0",  bgcolor=W, text_color=BK, text_size=SZ)
     table.cell(hud, 1, 11, str.tostring(active_dir == "bear" ? isl_high_0 : isl_low_0, format.mintick), bgcolor=W, text_color=color.gray, text_size=SZ)
 
+// ── Data Window — Trade Details ───────────────────────────────────────────
+// Shows on exit bars only (na on all other bars)
+// View by hovering over the chart with Data Window panel open
+plot(dw_entry_price, title="Entry Price",  display=display.data_window)
+plot(dw_exit_price,  title="Exit Price",   display=display.data_window)
+plot(dw_pnl,         title="P&L ($)",      display=display.data_window)
+plot(dw_entry_time,  title="Entry Time",   display=display.data_window)
+plot(dw_exit_time,   title="Exit Time",    display=display.data_window)
