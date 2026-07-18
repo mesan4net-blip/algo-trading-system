@@ -1,0 +1,440 @@
+//@version=6
+// ============================================================================
+// 3SHA — FULL ALIGNMENT STRATEGY  (v1)
+// ============================================================================
+// PART OF: the per-entry-type rebuild of 3SHA_Strategy_v6.
+//   v6 clubbed all 8 entry types into one script with a shared SL/sizing/exit
+//   engine. This is the FIRST standalone script: it trades ONLY Full Alignment
+//   (▲▼) and owns its stop, sizing, and trade-management logic end to end.
+//
+// SIGNAL (unchanged from v6 so it matches your charts exactly):
+//   All three SHA layers (Base, HTF1, HTF2) agree in direction. Fires on the
+//   bar the third layer completes the agreement. Highest conviction, slowest
+//   to fire. Definition preserved verbatim: all_bull[1] and not all_bull[2].
+//
+// WHY A DEDICATED DESIGN:
+//   Full Alignment is a multi-timeframe TREND signal. Its natural risk unit is
+//   structural (swing / SHA body), its natural invalidation is the alignment
+//   BREAKING, and its natural edge is riding a confirmed trend. So the stop,
+//   sizing, and management here are built around "stay in while the three
+//   timeframes agree; leave when they stop agreeing or structure breaks."
+//
+// EXIT PHILOSOPHY: all exits are CLOSE-BASED (mental-stop style, same as v6),
+//   and — unlike v6 — every exit path actually closes the strategy position.
+// ============================================================================
+
+strategy("3SHA Full Alignment", shorttitle="3SHA-FA", overlay=true,
+     initial_capital=100000, currency=currency.USD,
+     default_qty_type=strategy.percent_of_equity, default_qty_value=10,
+     calc_on_every_tick=false, process_orders_on_close=true, pyramiding=0,
+     max_bars_back=5000, max_labels_count=500, max_lines_count=500)
+
+// ============================================================================
+// SHA FUNCTION — Two-pass: EMA → HA → EMA   (identical to v6)
+// ============================================================================
+f_sha(_len1, _len2, _o, _h, _l, _c) =>
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
+    haC = (o1 + h1 + l1 + c1) / 4.0
+    var float haO = na
+    haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
+    haH = math.max(h1, math.max(haO, haC))
+    haL = math.min(l1, math.min(haO, haC))
+    o2  = ta.ema(haO, _len2)
+    h2  = ta.ema(haH, _len2)
+    l2  = ta.ema(haL, _len2)
+    c2  = ta.ema(haC, _len2)
+    [o2, h2, l2, c2]
+
+// ============================================================================
+// ① INSTRUMENT  (drives buffer units + session applicability + sizing units)
+// ============================================================================
+grp_inst = "① ━━━ INSTRUMENT ━━━"
+instrument_type = input.string("Forex", "Instrument Type", options=["Forex","Equity","Crypto"], tooltip="Forex: buffer/stops in pips, unit-based sizing, London/NY session filter available.\nEquity: buffer/stops in points ($), share-based sizing, session filter ignored.\nCrypto: buffer/stops in points, coin-based sizing, session filter ignored (24/7).", group=grp_inst)
+pip_divisor = input.float(0.0001, "Pip Size", minval=0.00001, step=0.00001, tooltip="Standard FX pairs: 0.0001 | JPY pairs & Gold: 0.01", group=grp_inst)
+
+is_forex  = instrument_type == "Forex"
+is_equity = instrument_type == "Equity"
+is_crypto = instrument_type == "Crypto"
+unit_label = is_forex ? "pips" : "pts"
+
+// Converts a buffer expressed in the instrument's own unit into a raw price delta
+f_unit_to_price(_v) => is_forex ? _v * pip_divisor : _v
+
+// ============================================================================
+// ② SHA LAYERS
+// ============================================================================
+grp_base = "② ━━━ BASE SHA  [Chart TF] ━━━"
+base_len1 = input.int(4, "Base Stage-1 EMA", minval=1, group=grp_base)
+base_len2 = input.int(8, "Base Stage-2 EMA", minval=1, group=grp_base)
+base_show = input.bool(true, "Show Base SHA Candles", group=grp_base)
+base_bull = input.color(color.new(#0077BB, 0), "Base Bull", group=grp_base)
+base_bear = input.color(color.new(#EE7733, 0), "Base Bear", group=grp_base)
+
+grp_htf1 = "② ━━━ HTF1 SHA  [Mid TF] ━━━"
+htf1_tf   = input.timeframe("60", "HTF1 Timeframe", group=grp_htf1)
+htf1_len1 = input.int(4, "HTF1 Stage-1 EMA", minval=1, group=grp_htf1)
+htf1_len2 = input.int(8, "HTF1 Stage-2 EMA", minval=1, group=grp_htf1)
+
+grp_htf2 = "② ━━━ HTF2 SHA  [High TF] ━━━"
+htf2_tf   = input.timeframe("240", "HTF2 Timeframe", group=grp_htf2)
+htf2_len1 = input.int(4, "HTF2 Stage-1 EMA", minval=1, group=grp_htf2)
+htf2_len2 = input.int(8, "HTF2 Stage-2 EMA", minval=1, group=grp_htf2)
+
+// ── Compute layers (HTF layers smoothed NATIVELY inside request.security,
+//    exactly as v6 — do NOT recompute HTF SHA on the chart TF) ──────────────
+[bO, bH, bL, bC]  = f_sha(base_len1, base_len2, open, high, low, close)
+[h1O, h1H, h1L, h1C] = request.security(syminfo.tickerid, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+[h2O, h2H, h2L, h2C] = request.security(syminfo.tickerid, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+
+base_ready = not na(bO)  and not na(bC)
+htf1_ready = not na(h1O) and not na(h1C)
+htf2_ready = not na(h2O) and not na(h2C)
+all_ready  = base_ready and htf1_ready and htf2_ready
+
+base_bull_bar = bC  >= bO
+htf1_bull_bar = h1C >= h1O
+htf2_bull_bar = h2C >= h2O
+
+all_bull = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
+all_bear = all_ready and (bC < bO) and (h1C < h1O) and (h2C < h2O)
+
+// SHA body extremes — used for the SHA-body stop option
+sha_top_1 = math.max(h1O, h1C)
+sha_bot_1 = math.min(h1O, h1C)
+sha_top_2 = math.max(h2O, h2C)
+sha_bot_2 = math.min(h2O, h2C)
+
+// ============================================================================
+// ③ SESSION FILTER  (Forex only; ignored for Equity/Crypto)
+// ============================================================================
+grp_sess = "③ ━━━ SESSION FILTER  [Forex] ━━━"
+use_session_filter = input.bool(true, "Only Enter In Session", tooltip="Forex only. When ON, entries fire only during London or New York full sessions. Ignored for Equity/Crypto.", group=grp_sess)
+show_london = input.bool(true, "Include London (03:00–12:00 ET)", group=grp_sess)
+show_ny     = input.bool(true, "Include New York (08:00–17:00 ET)", group=grp_sess)
+
+in_lon = show_london and not na(time("", "0300-1200", "America/New_York"))
+in_ny  = show_ny     and not na(time("", "0800-1700", "America/New_York"))
+in_session = in_lon or in_ny
+// Only Forex respects the session gate:
+sess_ok = (not use_session_filter) or (not is_forex) or in_session
+
+// ============================================================================
+// ④ ENTRY — FULL ALIGNMENT
+// ============================================================================
+grp_entry = "④ ━━━ ENTRY: FULL ALIGNMENT ━━━"
+confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): matches v6 exactly — fires the bar AFTER all three layers complete agreement (all_bull[1] and not all_bull[2]). One bar of confirmation lag.\nImmediate: fires on the bar the third layer joins (all_bull and not all_bull[1]). Earlier, slightly noisier.", group=grp_entry)
+allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
+allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
+
+// Full Alignment definition — v6-faithful ("Confirmed") or one-bar-earlier ("Immediate")
+fa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
+fa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
+
+// ============================================================================
+// ⑤ INITIAL STOP LOSS  (hard invalidation + sizing anchor)
+// ============================================================================
+grp_sl = "⑤ ━━━ INITIAL STOP ━━━"
+sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body"], tooltip="Trigger Candle: low/high of the signal bar.\nSwing (Prev N Bars): lowest low / highest high over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
+sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
+sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in the instrument's unit (pips for Forex, points/$ for Equity/Crypto). Stop is CLOSE-based.", group=grp_sl)
+min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, tooltip="Floor on stop distance in the instrument's unit. 0 = disabled. Guards against too-tight stops that oversize the position.", group=grp_sl)
+
+sl_buffer_raw = f_unit_to_price(sl_buffer_units)
+min_stop_raw  = f_unit_to_price(min_stop_units)
+
+// NOTE: ta.lowest / ta.highest keep internal state and MUST run every bar, so
+// they are computed here at global scope (never inside a conditional branch)
+// and only referenced by the stop functions below.
+swing_low  = ta.lowest(low,  sl_lookback)
+swing_high = ta.highest(high, sl_lookback)
+
+f_long_stop() =>
+    _lvl = sl_mode == "Trigger Candle"       ? low
+      :    sl_mode == "Swing (Prev N Bars)"  ? swing_low
+      :    sl_mode == "HTF1 SHA Body"        ? sha_bot_1
+      :                                        sha_bot_2
+    _s = _lvl - sl_buffer_raw
+    min_stop_raw > 0 ? math.min(_s, close - min_stop_raw) : _s
+
+f_short_stop() =>
+    _lvl = sl_mode == "Trigger Candle"       ? high
+      :    sl_mode == "Swing (Prev N Bars)"  ? swing_high
+      :    sl_mode == "HTF1 SHA Body"        ? sha_top_1
+      :                                        sha_top_2
+    _s = _lvl + sl_buffer_raw
+    min_stop_raw > 0 ? math.max(_s, close + min_stop_raw) : _s
+
+// ============================================================================
+// ⑥ POSITION SIZING  (risk-based; same math as v6, dedicated risk % here)
+// ============================================================================
+grp_size = "⑥ ━━━ POSITION SIZING ━━━"
+risk_pct = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, tooltip="% of equity risked from entry to initial stop. Full Alignment is the highest-conviction signal, so this defaults to the top of the normal band. Risk$ ÷ stop distance = size.", group=grp_size)
+max_equity_pct = input.float(20.0, "Max Equity Per Trade (%)", minval=1.0, maxval=100.0, step=1.0, tooltip="Hard cap on capital deployed, even if the risk calc allows more.", group=grp_size)
+
+f_qty(_entry, _stop) =>
+    _eq   = strategy.equity
+    _riskD = _eq * risk_pct / 100.0
+    _dist  = math.abs(_entry - _stop)
+    _qtyR  = _dist > 0 ? _riskD / _dist : 1
+    _qtyMax = (_eq * max_equity_pct / 100.0) / _entry
+    math.max(1, math.floor(math.min(_qtyR, _qtyMax)))
+
+// ============================================================================
+// ⑦ TRADE MANAGEMENT  (the Full-Alignment-specific engine)
+//   Layered, all close-based, evaluated newest-first each bar:
+//     1. Partial take-profit at a set R (optional)
+//     2. Break-even move after +Xr (optional)
+//     3. Structural trailing stop once in profit (optional)
+//     4. Alignment-break exit — the signature rule (optional)
+//     5. Hard stop breach (always on)
+// ============================================================================
+grp_mgmt = "⑦ ━━━ TRADE MANAGEMENT ━━━"
+
+use_tp1   = input.bool(false, "Partial Take-Profit", tooltip="Scale out a portion at a fixed R multiple, ride the rest on the trail/alignment. Off by default to let winners run.", group=grp_mgmt)
+tp1_r     = input.float(2.0, "  TP1 at (R multiple)", minval=0.5, step=0.5, group=grp_mgmt)
+tp1_pct   = input.float(50, "  TP1 Size (% of position)", minval=1, maxval=99, step=5, group=grp_mgmt)
+
+use_be    = input.bool(true, "Move Stop To Break-Even", tooltip="After price closes +Xr in favor, move the stop to entry (plus offset). Locks the trade to no-loss once the trend proves itself.", group=grp_mgmt)
+be_trig_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, group=grp_mgmt)
+be_offset_units = input.float(0.0, "  Break-Even Offset", minval=0, step=0.5, tooltip="Extra distance above/below entry when moving to BE, in the instrument's unit. Covers spread/commission.", group=grp_mgmt)
+
+use_trail = input.bool(true, "Structural Trailing Stop", tooltip="Once in profit, ratchet the stop to the recent swing (lowest low / highest high over the trail lookback) minus buffer. Never loosens.", group=grp_mgmt)
+trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
+trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
+
+use_align_exit = input.bool(true, "Alignment-Break Exit", tooltip="The signature Full-Alignment rule: the whole thesis is that all three timeframes agree, so exit when they stop agreeing. Close-based.", group=grp_mgmt)
+align_break_level = input.string("HTF1 Flips", "  Break Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], tooltip="Base Flips: tightest — exit the moment the chart-TF SHA turns against you.\nHTF1 Flips: exit when the MID-TF anchor turns (recommended balance).\nHTF2 Flips: loosest — only exit when the HIGH-TF turns.\nAny Layer Flips: exit if any single layer disagrees.\nAll Layers Flip: exit only on full opposite alignment.", group=grp_mgmt)
+
+be_offset_raw = f_unit_to_price(be_offset_units)
+
+// Trail references — global scope (ta.* must run every bar), used in management
+trail_low_ref  = ta.lowest(low,  trail_lookback) - sl_buffer_raw
+trail_high_ref = ta.highest(high, trail_lookback) + sl_buffer_raw
+
+// ============================================================================
+// ⑧ DATE FILTER
+// ============================================================================
+grp_date = "⑧ ━━━ DATE FILTER ━━━"
+use_date = input.bool(false, "Enable Date Range", group=grp_date)
+date_start = input.time(timestamp("2025-01-01 00:00"), "Start", group=grp_date)
+date_end   = input.time(timestamp("2026-12-31 23:59"), "End", group=grp_date)
+in_date = not use_date or (time >= date_start and time <= date_end)
+
+// ============================================================================
+// ⑨ DISPLAY
+// ============================================================================
+grp_disp = "⑨ ━━━ DISPLAY ━━━"
+show_markers = input.bool(true, "Entry / Exit Markers", group=grp_disp)
+show_stop_line = input.bool(true, "Active Stop Line", group=grp_disp)
+show_hud = input.bool(true, "State HUD", group=grp_disp)
+hud_pos = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_disp)
+
+// ============================================================================
+// TRADE STATE MACHINE  (single position; flat → long/short → flat)
+// ============================================================================
+var string pos_dir     = "flat"
+var float  entry_price = na
+var float  init_stop   = na
+var float  stop_level  = na
+var float  risk_unit   = na    // |entry - init_stop|, the R denominator
+var int    entry_bar   = na
+var bool   be_moved    = false
+var bool   tp1_taken   = false
+
+// Gate: only a fresh Full Alignment enters, only when flat, in date + session
+long_signal  = allow_longs  and fa_bull_raw and in_date and sess_ok
+short_signal = allow_shorts and fa_bear_raw and in_date and sess_ok
+
+// Per-bar event flags (for markers)
+did_exit  = false
+did_enter = false
+exit_reason = ""
+
+// ── ALIGNMENT-BREAK condition (direction-aware) ──────────────────────────
+f_align_broken_long() =>
+    align_break_level == "Base Flips"      ? not base_bull_bar
+     : align_break_level == "HTF1 Flips"    ? not htf1_bull_bar
+     : align_break_level == "HTF2 Flips"    ? not htf2_bull_bar
+     : align_break_level == "Any Layer Flips" ? (not base_bull_bar or not htf1_bull_bar or not htf2_bull_bar)
+     :                                        all_bear
+f_align_broken_short() =>
+    align_break_level == "Base Flips"      ? base_bull_bar
+     : align_break_level == "HTF1 Flips"    ? htf1_bull_bar
+     : align_break_level == "HTF2 Flips"    ? htf2_bull_bar
+     : align_break_level == "Any Layer Flips" ? (base_bull_bar or htf1_bull_bar or htf2_bull_bar)
+     :                                        all_bull
+
+// ───────────────────────────── MANAGE OPEN POSITION ────────────────────────
+// Runs before entries so a same-bar reversal (exit then opposite entry) works.
+if pos_dir == "long" and not na(stop_level)
+    _rr = risk_unit > 0 ? (close - entry_price) / risk_unit : 0.0
+
+    // 1. Partial take-profit
+    if use_tp1 and not tp1_taken and _rr >= tp1_r
+        strategy.close("FA", qty_percent=tp1_pct, comment="TP1")
+        tp1_taken := true
+        if not be_moved
+            stop_level := math.max(stop_level, entry_price + be_offset_raw)
+            be_moved := true
+
+    // 2. Break-even
+    if use_be and not be_moved and _rr >= be_trig_r
+        stop_level := math.max(stop_level, entry_price + be_offset_raw)
+        be_moved := true
+
+    // 3. Structural trail (ratchet only)
+    if use_trail and _rr >= trail_start_r
+        if trail_low_ref > stop_level
+            stop_level := trail_low_ref
+
+    // 4 & 5. Exit checks (close-based)
+    _stop_hit  = close <= stop_level
+    _align_out = use_align_exit and f_align_broken_long()
+    if _stop_hit or _align_out
+        strategy.close_all(comment = _stop_hit ? "Stop" : "Align Break")
+        did_exit := true
+        exit_reason := _stop_hit ? "STOP" : "ALIGN"
+        pos_dir := "flat"
+        entry_price := na
+        init_stop := na
+        stop_level := na
+        risk_unit := na
+        be_moved := false
+        tp1_taken := false
+
+else if pos_dir == "short" and not na(stop_level)
+    _rr = risk_unit > 0 ? (entry_price - close) / risk_unit : 0.0
+
+    if use_tp1 and not tp1_taken and _rr >= tp1_r
+        strategy.close("FA", qty_percent=tp1_pct, comment="TP1")
+        tp1_taken := true
+        if not be_moved
+            stop_level := math.min(stop_level, entry_price - be_offset_raw)
+            be_moved := true
+
+    if use_be and not be_moved and _rr >= be_trig_r
+        stop_level := math.min(stop_level, entry_price - be_offset_raw)
+        be_moved := true
+
+    if use_trail and _rr >= trail_start_r
+        if trail_high_ref < stop_level
+            stop_level := trail_high_ref
+
+    _stop_hit  = close >= stop_level
+    _align_out = use_align_exit and f_align_broken_short()
+    if _stop_hit or _align_out
+        strategy.close_all(comment = _stop_hit ? "Stop" : "Align Break")
+        did_exit := true
+        exit_reason := _stop_hit ? "STOP" : "ALIGN"
+        pos_dir := "flat"
+        entry_price := na
+        init_stop := na
+        stop_level := na
+        risk_unit := na
+        be_moved := false
+        tp1_taken := false
+
+// ───────────────────────────────── ENTRIES ────────────────────────────────
+// Only when flat (possibly just made flat above → same-bar flip).
+if pos_dir == "flat" and long_signal
+    _stop = f_long_stop()
+    if not na(_stop) and _stop < close
+        entry_price := close
+        init_stop   := _stop
+        stop_level  := _stop
+        risk_unit   := close - _stop
+        entry_bar   := bar_index
+        be_moved    := false
+        tp1_taken   := false
+        pos_dir     := "long"
+        strategy.entry("FA", strategy.long, qty=f_qty(close, _stop))
+        did_enter := true
+
+if pos_dir == "flat" and short_signal
+    _stop = f_short_stop()
+    if not na(_stop) and _stop > close
+        entry_price := close
+        init_stop   := _stop
+        stop_level  := _stop
+        risk_unit   := _stop - close
+        entry_bar   := bar_index
+        be_moved    := false
+        tp1_taken   := false
+        pos_dir     := "short"
+        strategy.entry("FA", strategy.short, qty=f_qty(close, _stop))
+        did_enter := true
+
+// ============================================================================
+// VISUALS
+// ============================================================================
+// Base SHA candles (optional; HTF layers left to your Visual scripts)
+plotcandle(base_show ? bO : na, base_show ? bH : na, base_show ? bL : na, base_show ? bC : na,
+     title="Base SHA", color = base_bull_bar ? base_bull : base_bear,
+     wickcolor = color.new(#555555, 0), bordercolor = color.new(#000000, 0))
+
+// Entry markers — filled arrows (▲▼), matching v6's Full Alignment glyphs
+plotshape(show_markers and did_enter and pos_dir == "long"  ? low  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=color.new(#0077BB, 0), size=size.small, text="▲")
+plotshape(show_markers and did_enter and pos_dir == "short" ? high : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=color.new(#EE3322, 0), size=size.small, text="▼")
+
+// Exit markers — ✕ at the exit, colored by reason (stop vs alignment break)
+plotshape(show_markers and did_exit ? close : na, title="Exit", style=shape.xcross, location=location.absolute,
+     color = exit_reason == "STOP" ? color.new(#8B0000, 0) : color.new(#000000, 0), size=size.tiny)
+
+// Active stop line
+plot(show_stop_line and pos_dir != "flat" ? stop_level : na, title="Active Stop", color=color.new(#8B0000, 0), style=plot.style_linebr, linewidth=1)
+
+// Data Window telemetry
+plot(base_bull_bar ? 1 : -1, "Base Dir",  display=display.data_window)
+plot(htf1_bull_bar ? 1 : -1, "HTF1 Dir",  display=display.data_window)
+plot(htf2_bull_bar ? 1 : -1, "HTF2 Dir",  display=display.data_window)
+plot(all_bull ? 1 : all_bear ? -1 : 0, "Alignment", display=display.data_window)
+plot(pos_dir == "long" ? 1 : pos_dir == "short" ? -1 : 0, "Position", display=display.data_window)
+
+// ============================================================================
+// STATE HUD
+// ============================================================================
+var table hud = na
+if show_hud and barstate.islast
+    _hp = hud_pos == "Top Left" ? position.top_left : hud_pos == "Top Right" ? position.top_right : hud_pos == "Bottom Left" ? position.bottom_left : position.bottom_right
+    hud := table.new(_hp, 2, 8, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
+    _bg = color.new(#1A1A1A, 10)
+    _hd = color.new(#0077BB, 0)
+    table.cell(hud, 0, 0, "3SHA FULL ALIGN", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(hud, 1, 0, confirm_mode == "Immediate" ? "IMMEDIATE" : "CONFIRMED", text_color=color.white, bgcolor=_hd, text_size=size.small)
+
+    _align_txt = all_bull ? "▲ ALL BULL" : all_bear ? "▼ ALL BEAR" : "◇ MIXED"
+    _align_col = all_bull ? color.new(#0077BB, 0) : all_bear ? color.new(#EE3322, 0) : color.new(#888888, 0)
+    table.cell(hud, 0, 1, "Alignment", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 1, _align_txt, text_color=color.white, bgcolor=_align_col, text_size=size.small)
+
+    table.cell(hud, 0, 2, "Layers B/1/2", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 2, (base_bull_bar?"▲":"▼")+" "+(htf1_bull_bar?"▲":"▼")+" "+(htf2_bull_bar?"▲":"▼"), text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    _pos_txt = pos_dir == "long" ? "LONG" : pos_dir == "short" ? "SHORT" : "FLAT"
+    _pos_col = pos_dir == "long" ? color.new(#1B5E20, 0) : pos_dir == "short" ? color.new(#8B0000, 0) : color.new(#444444, 0)
+    table.cell(hud, 0, 3, "Position", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 3, _pos_txt, text_color=color.white, bgcolor=_pos_col, text_size=size.small)
+
+    _rr_now = pos_dir == "long" and risk_unit > 0 ? (close - entry_price)/risk_unit : pos_dir == "short" and risk_unit > 0 ? (entry_price - close)/risk_unit : na
+    table.cell(hud, 0, 4, "Open R", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 4, na(_rr_now) ? "—" : str.tostring(_rr_now, "0.00")+"R", text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    table.cell(hud, 0, 5, "Entry", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 5, na(entry_price) ? "—" : str.tostring(entry_price, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    table.cell(hud, 0, 6, "Stop"+(be_moved?" (BE+)":""), text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 6, na(stop_level) ? "—" : str.tostring(stop_level, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    _sess_txt = not is_forex ? "N/A ("+instrument_type+")" : in_session ? "OPEN" : "CLOSED"
+    table.cell(hud, 0, 7, "Session", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 7, _sess_txt, text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+// ============================================================================
+// ALERTS
+// ============================================================================
+alertcondition(did_enter and pos_dir == "long",  "FA Long Entry",  "3SHA Full Alignment — LONG entry")
+alertcondition(did_enter and pos_dir == "short", "FA Short Entry", "3SHA Full Alignment — SHORT entry")
+alertcondition(did_exit, "FA Exit", "3SHA Full Alignment — position closed")
