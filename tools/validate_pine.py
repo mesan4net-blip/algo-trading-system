@@ -138,25 +138,46 @@ def check(filepath):
 
     return len(errors) == 0
 
+def remote_path(filepath):
+    """Mirror the local repo layout: use the path from 'phase1/' onward so a
+    file in phase1/strategies/ pushes to phase1/strategies/, one in
+    phase1/legacy/ to phase1/legacy/, etc. Falls back to phase1/strategies/
+    (where new per-entry scripts live) when the path isn't under phase1/."""
+    parts = filepath.replace(os.sep, '/').split('/')
+    if 'phase1' in parts:
+        return '/'.join(parts[parts.index('phase1'):])
+    return f"phase1/strategies/{os.path.basename(filepath)}"
+
+
 def push(filepath, commit_msg):
+    import urllib.request, urllib.error
     with open(filepath, 'rb') as f:
         content_b64 = base64.b64encode(f.read()).decode()
 
-    # Get current file SHA
-    import urllib.request
-    url = f"https://api.github.com/repos/{REPO}/contents/phase1/pine_script/{os.path.basename(filepath)}"
-    req = urllib.request.Request(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-    with urllib.request.urlopen(req) as r:
-        data = json.load(r)
-    file_sha = data['sha']
+    dest = remote_path(filepath)
+    url  = f"https://api.github.com/repos/{REPO}/contents/{dest}"
+    print(f"→ target: {dest}")
 
-    # Push
-    payload = json.dumps({
+    # Get current file SHA if the file already exists (needed to UPDATE).
+    # A 404 just means it's a new file — push it without a sha to CREATE it.
+    file_sha = None
+    getreq = urllib.request.Request(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    try:
+        with urllib.request.urlopen(getreq) as r:
+            file_sha = json.load(r)['sha']
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
+
+    # Push (create or update)
+    payload_obj = {
         'message': commit_msg,
         'content': content_b64,
-        'sha':     file_sha,
         'branch':  BRANCH
-    }).encode()
+    }
+    if file_sha:
+        payload_obj['sha'] = file_sha
+    payload = json.dumps(payload_obj).encode()
 
     req = urllib.request.Request(url, data=payload, method='PUT', headers={
         "Authorization": f"token {GITHUB_TOKEN}",
