@@ -140,6 +140,7 @@ sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
 sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($). Stop is CLOSE-based.", group=grp_sl)
 min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, tooltip="Floor on stop distance in price points ($). 0 = disabled. Guards against too-tight stops that oversize the position.", group=grp_sl)
+use_hard_stop = input.bool(false, "Hard Stop (intra-bar + gap protection)", tooltip="OFF (default): the stop is CLOSE-based (mental) — it fires only when a candle CLOSES beyond the stop. ON: the stop is a REAL order that fires the instant price TOUCHES it intra-bar, and protects against overnight/weekend gaps (important for stocks like QQQ). Break-even and trailing still ratchet the stop; this only changes how it is enforced. The alignment-break exit stays close-based either way.", group=grp_sl)
 
 sl_buffer_raw = sl_buffer_units
 min_stop_raw  = min_stop_units
@@ -293,6 +294,20 @@ f_align_broken_short() =>
 
 // ───────────────────────────── MANAGE OPEN POSITION ────────────────────────
 // Runs before entries so a same-bar reversal (exit then opposite entry) works.
+
+// Reconcile: if a HARD stop order filled, the engine closed the position but our
+// manual state is still "in a trade" — detect (flat book, non-flat state) and reset.
+if pos_dir != "flat" and strategy.position_size == 0 and not na(entry_bar) and bar_index > entry_bar
+    did_exit := true
+    exit_reason := "STOP"
+    pos_dir := "flat"
+    entry_price := na
+    init_stop := na
+    stop_level := na
+    risk_unit := na
+    be_moved := false
+    tp1_taken := false
+
 if pos_dir == "long" and not na(stop_level)
     _rr = risk_unit > 0 ? (close - entry_price) / risk_unit : 0.0
 
@@ -314,9 +329,11 @@ if pos_dir == "long" and not na(stop_level)
         if trail_low_ref > stop_level
             stop_level := trail_low_ref
 
-    // 4 & 5. Exit checks (close-based)
-    _stop_hit  = close <= stop_level
+    // 4 & 5. Exits — align-break is always close-based; the stop is hard or mental
     _align_out = use_align_exit and f_align_broken_long()
+    _stop_hit  = (not use_hard_stop) and (close <= stop_level)
+    if use_hard_stop and not _align_out
+        strategy.exit("FA-stop", from_entry="FA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _align_out
         strategy.close_all(comment = _stop_hit ? "Stop" : "Align Break")
         did_exit := true
@@ -347,8 +364,10 @@ else if pos_dir == "short" and not na(stop_level)
         if trail_high_ref < stop_level
             stop_level := trail_high_ref
 
-    _stop_hit  = close >= stop_level
     _align_out = use_align_exit and f_align_broken_short()
+    _stop_hit  = (not use_hard_stop) and (close >= stop_level)
+    if use_hard_stop and not _align_out
+        strategy.exit("FA-stop", from_entry="FA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _align_out
         strategy.close_all(comment = _stop_hit ? "Stop" : "Align Break")
         did_exit := true
