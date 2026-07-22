@@ -101,6 +101,11 @@ htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval
 [h1O, h1H, h1L, h1C] = request.security(syminfo.tickerid, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 [h2O, h2H, h2L, h2C] = request.security(syminfo.tickerid, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 
+// Daily open and PRIOR daily close, no look-ahead — for the gap-skip filter.
+day_open  = request.security(syminfo.tickerid, "1D", open,      barmerge.gaps_off, barmerge.lookahead_off)
+day_pclose= request.security(syminfo.tickerid, "1D", close[1],  barmerge.gaps_off, barmerge.lookahead_off)
+gap_pct   = not na(day_open) and not na(day_pclose) and day_pclose != 0 ? math.abs(day_open - day_pclose) / day_pclose * 100.0 : 0.0
+
 base_ready = not na(bO)  and not na(bC)
 htf1_ready = not na(h1O) and not na(h1C)
 htf2_ready = not na(h2O) and not na(h2C)
@@ -126,6 +131,8 @@ grp_entry = "③ ━━━ ENTRY: FULL ALIGNMENT ━━━"
 confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): matches v6 exactly — fires the bar AFTER all three layers complete agreement (all_bull[1] and not all_bull[2]). One bar of confirmation lag.\nImmediate: fires on the bar the third layer joins (all_bull and not all_bull[1]). Earlier, slightly noisier.", group=grp_entry)
 allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
 allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
+skip_gaps    = input.bool(false, "Skip Gap Entries", tooltip="When ON, a Full Alignment entry is skipped if that day's open gapped more than the threshold from the prior day's close — the alignment was likely manufactured by the gap, not earned. The day is not blocked; a later, non-gap re-alignment enters normally.", group=grp_entry)
+gap_thresh   = input.float(0.5, "  Gap Threshold (%)", minval=0.0, step=0.1, tooltip="Daily open vs prior daily close. A gap larger than this invalidates an entry that fires on the gapped day's open.", group=grp_entry)
 
 // Full Alignment definition — v6-faithful ("Confirmed") or one-bar-earlier ("Immediate")
 fa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
@@ -269,9 +276,12 @@ var int    entry_bar   = na
 var bool   be_moved    = false
 var bool   tp1_taken   = false
 
-// Gate: only a fresh Full Alignment enters, only when flat, within the date range
-long_signal  = allow_longs  and fa_bull_raw and in_date
-short_signal = allow_shorts and fa_bear_raw and in_date
+// Gate: only a fresh Full Alignment enters, only when flat, within the date range.
+// Gap skip: block only the entry that fires on a gapped daily open (not the whole day).
+is_new_day = ta.change(time("1D")) != 0
+gap_block  = skip_gaps and is_new_day and gap_pct > gap_thresh
+long_signal  = allow_longs  and fa_bull_raw and in_date and not gap_block
+short_signal = allow_shorts and fa_bear_raw and in_date and not gap_block
 
 // Per-bar event flags (for markers)
 did_exit  = false
