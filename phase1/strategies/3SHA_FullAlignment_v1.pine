@@ -135,7 +135,8 @@ fa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bea
 // ④ INITIAL STOP LOSS  (hard invalidation + sizing anchor)
 // ============================================================================
 grp_sl = "④ ━━━ INITIAL STOP ━━━"
-sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body"], tooltip="Trigger Candle: low/high of the signal bar.\nSwing (Prev N Bars): lowest low / highest high over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
+sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body"], tooltip="Trigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
+sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
 sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($). Stop is CLOSE-based.", group=grp_sl)
 min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, tooltip="Floor on stop distance in price points ($). 0 = disabled. Guards against too-tight stops that oversize the position.", group=grp_sl)
@@ -143,23 +144,34 @@ min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, toolt
 sl_buffer_raw = sl_buffer_units
 min_stop_raw  = min_stop_units
 
-// NOTE: ta.lowest / ta.highest keep internal state and MUST run every bar, so
-// they are computed here at global scope (never inside a conditional branch)
-// and only referenced by the stop functions below.
-swing_low  = ta.lowest(low,  sl_lookback)
-swing_high = ta.highest(high, sl_lookback)
+// Body extremes for the current bar
+body_low  = math.min(open, close)
+body_high = math.max(open, close)
+
+// ta.lowest / ta.highest keep internal state and MUST run every bar, so all
+// four swing variants are computed here at global scope, then selected.
+swing_low_wick  = ta.lowest(low,  sl_lookback)
+swing_high_wick = ta.highest(high, sl_lookback)
+swing_low_body  = ta.lowest(body_low,  sl_lookback)
+swing_high_body = ta.highest(body_high, sl_lookback)
+
+sl_use_body = sl_price_basis == "Body (open/close)"
+trig_low_lvl  = sl_use_body ? body_low  : low
+trig_high_lvl = sl_use_body ? body_high : high
+sw_low_lvl    = sl_use_body ? swing_low_body  : swing_low_wick
+sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
 
 f_long_stop() =>
-    _lvl = sl_mode == "Trigger Candle"       ? low
-      :    sl_mode == "Swing (Prev N Bars)"  ? swing_low
+    _lvl = sl_mode == "Trigger Candle"       ? trig_low_lvl
+      :    sl_mode == "Swing (Prev N Bars)"  ? sw_low_lvl
       :    sl_mode == "HTF1 SHA Body"        ? sha_bot_1
       :                                        sha_bot_2
     _s = _lvl - sl_buffer_raw
     min_stop_raw > 0 ? math.min(_s, close - min_stop_raw) : _s
 
 f_short_stop() =>
-    _lvl = sl_mode == "Trigger Candle"       ? high
-      :    sl_mode == "Swing (Prev N Bars)"  ? swing_high
+    _lvl = sl_mode == "Trigger Candle"       ? trig_high_lvl
+      :    sl_mode == "Swing (Prev N Bars)"  ? sw_high_lvl
       :    sl_mode == "HTF1 SHA Body"        ? sha_top_1
       :                                        sha_top_2
     _s = _lvl + sl_buffer_raw
@@ -199,18 +211,32 @@ use_be    = input.bool(true, "Move Stop To Break-Even", tooltip="After price clo
 be_trig_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, group=grp_mgmt)
 be_offset_units = input.float(0.0, "  Break-Even Offset", minval=0, step=0.5, tooltip="Extra distance above/below entry when moving to BE, in price points ($). Covers spread/commission.", group=grp_mgmt)
 
-use_trail = input.bool(true, "Structural Trailing Stop", tooltip="Once in profit, ratchet the stop to the recent swing (lowest low / highest high over the trail lookback) minus buffer. Never loosens.", group=grp_mgmt)
+use_trail = input.bool(true, "Trailing Stop", tooltip="Once in profit, ratchet the stop toward the chosen anchor. Never loosens. Close-based — only triggers when a candle CLOSES beyond it.", group=grp_mgmt)
+trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body"], tooltip="Same anchor choices as the initial stop, except Trigger Candle (a fixed entry bar can't trail).\nSwing: recent swing low/high.\nHTF1 SHA Body: trail the mid-TF trend body.\nHTF2 SHA Body: trail the high-TF trend body (loosest, rides longest).", group=grp_mgmt)
+trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="For the Swing trail anchor: Body = body edge (tighter), Wick = full extreme (wider).", group=grp_mgmt)
 trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
+trail_buffer_units = input.float(2.0, "  Trail Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the trail anchor, in price points ($).", group=grp_mgmt)
 
 use_align_exit = input.bool(true, "Alignment-Break Exit", tooltip="The signature Full-Alignment rule: the whole thesis is that all three timeframes agree, so exit when they stop agreeing. Close-based.", group=grp_mgmt)
 align_break_level = input.string("HTF1 Flips", "  Break Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], tooltip="Base Flips: tightest — exit the moment the chart-TF SHA turns against you.\nHTF1 Flips: exit when the MID-TF anchor turns (recommended balance).\nHTF2 Flips: loosest — only exit when the HIGH-TF turns.\nAny Layer Flips: exit if any single layer disagrees.\nAll Layers Flip: exit only on full opposite alignment.", group=grp_mgmt)
 
 be_offset_raw = be_offset_units
+trail_buffer_raw = trail_buffer_units
 
-// Trail references — global scope (ta.* must run every bar), used in management
-trail_low_ref  = ta.lowest(low,  trail_lookback) - sl_buffer_raw
-trail_high_ref = ta.highest(high, trail_lookback) + sl_buffer_raw
+// Trail references — all ta.* computed every bar at global scope, then selected.
+trail_sw_low_wick  = ta.lowest(low,  trail_lookback)
+trail_sw_low_body  = ta.lowest(body_low,  trail_lookback)
+trail_sw_high_wick = ta.highest(high, trail_lookback)
+trail_sw_high_body = ta.highest(body_high, trail_lookback)
+trail_use_body = trail_price_basis == "Body (open/close)"
+trail_sw_low  = trail_use_body ? trail_sw_low_body  : trail_sw_low_wick
+trail_sw_high = trail_use_body ? trail_sw_high_body : trail_sw_high_wick
+
+trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "HTF1 SHA Body" ? sha_bot_1 : sha_bot_2
+trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "HTF1 SHA Body" ? sha_top_1 : sha_top_2
+trail_low_ref  = trail_low_anchor  - trail_buffer_raw
+trail_high_ref = trail_high_anchor + trail_buffer_raw
 
 // ============================================================================
 // ⑦ DATE FILTER
