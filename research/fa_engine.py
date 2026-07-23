@@ -23,7 +23,7 @@ def sha_ohlc(df, l1, l2):
     haH=np.maximum(h1,np.maximum(haO,haC)); haL=np.minimum(l1_,np.minimum(haO,haC))
     return ema(haO,l2),ema(haH,l2),ema(haL,l2),ema(haC,l2)
 
-def align_htf(base_index, sha_o,sha_c, sha_index, dur, sha_h=None, sha_l=None):
+def align_htf(base_index, sha_o,sha_c, sha_index, dur, sha_h=None, sha_l=None, base_dur=None):
     """No-lookahead: HTF value available on the last base bar before its close (-15min conv).
 
     Returns open/close, plus high/low when supplied (needed for the Wick basis on
@@ -32,7 +32,12 @@ def align_htf(base_index, sha_o,sha_c, sha_index, dur, sha_h=None, sha_l=None):
     if sha_h is not None: d['h']=sha_h
     if sha_l is not None: d['l']=sha_l
     s=pd.DataFrame(d, index=sha_index)
-    s['ct']=pd.DatetimeIndex(s.index+dur-pd.Timedelta('15min')).as_unit('ns')
+    # A higher-timeframe value is only known once that bar CLOSES. The last base
+    # bar able to use it is the one whose own close lands on that moment, so the
+    # offset must be the BASE bar's duration -- not a hardcoded 15 minutes, which
+    # leaks the value early on any chart faster than 15m.
+    _bd = base_dur if base_dur is not None else pd.Timedelta('15min')
+    s['ct']=pd.DatetimeIndex(s.index+dur-_bd).as_unit('ns')
     s=s.sort_values('ct').reset_index(drop=True)
     left=pd.DataFrame({'t':pd.DatetimeIndex(base_index).as_unit('ns')}).sort_values('t').reset_index(drop=True)
     m=pd.merge_asof(left,s,left_on='t',right_on='ct',direction='backward').set_index('t').reindex(base_index)
@@ -57,8 +62,10 @@ def precompute(base_df, cfg, htf1_df, htf2_df, daily_df):
     bO,bH,bL,bC=sha_ohlc(base_df,*cfg['base_sha'])
     s1o,s1h,s1l,s1c=sha_ohlc(htf1_df,*cfg['htf1_sha'])
     s2o,s2h,s2l,s2c=sha_ohlc(htf2_df,*cfg['htf2_sha'])
-    h1O,h1C,h1H,h1L=align_htf(idx,s1o,s1c,htf1_df.index,cfg['htf1_dur'],s1h,s1l)
-    h2O,h2C,h2H,h2L=align_htf(idx,s2o,s2c,htf2_df.index,cfg['htf2_dur'],s2h,s2l)
+    _bd = pd.Series(idx).diff().dt.total_seconds().median()
+    base_dur = pd.Timedelta(seconds=float(_bd)) if _bd and _bd > 0 else pd.Timedelta('15min')
+    h1O,h1C,h1H,h1L=align_htf(idx,s1o,s1c,htf1_df.index,cfg['htf1_dur'],s1h,s1l,base_dur)
+    h2O,h2C,h2H,h2L=align_htf(idx,s2o,s2c,htf2_df.index,cfg['htf2_dur'],s2h,s2l,base_dur)
     bd=np.where(bC>=bO,1,-1); h1=np.where(h1C>=h1O,1,-1); h2=np.where(h2C>=h2O,1,-1)
     allb=(bd==1)&(h1==1)&(h2==1); alls=(bd==-1)&(h1==-1)&(h2==-1)
     # Confirmed (1-bar): all_bull[1] and not all_bull[2]

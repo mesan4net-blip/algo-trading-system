@@ -52,7 +52,14 @@ consistency. Never raw return, never a bare ratio.
 | 22 | Partial take-profit | off · 1R/50% · 2R/50% · 2R/33% · 3R/50% |
 | 23 | Risk per trade | 0.5% · 1% · 2% · 3% |
 | 24 | Max equity per trade | 100% · 200% |
-| 25 | **Timeframes — run last, as one sweep** | every valid trio, see below |
+| 25 | **Timeframes + exit mode — run last, together** | every valid trio × (align-exit on · hold until stopped) |
+
+Step 9 also carries four newer anchors: **Last Bar Beyond Nearest SHA · Last Bar
+Beyond Furthest SHA · Last SHA Bar Beyond Nearest SHA · Last SHA Bar Beyond
+Furthest SHA** — the most recent bar with any part past the SHA, i.e. the last
+place price was genuinely on the wrong side of the trend. On EUR/USD the two
+*furthest* variants roughly quadrupled the risk-adjusted result against the swing
+anchor: similar return, about a fifth of the drawdown.
 
 Roughly **2,000 runs** in total, a few minutes on the compiled engine.
 
@@ -77,10 +84,34 @@ error. 100% and 200% are positions that could actually be held.
 
 ---
 
-## Step 25 — timeframes
+## Step 25 — timeframes and the exit mode, together
 
-Run last, against the locked set, as a single sweep. Only valid trios:
-**base < HTF1 < HTF2**, each at least one step apart.
+Run last, against the locked set. Only valid trios: **base < HTF1 < HTF2**, each at
+least one step apart.
+
+**Sweep the exit mode alongside the timeframes, not before them.** Whether to hold a
+trade until the stop is hit — rather than exiting when the layers stop agreeing —
+turns out to depend entirely on the base timeframe, so locking it earlier in the
+sequence gives the wrong answer:
+
+| Market | Base | Exit on misalignment | Hold until stopped |
+|--------|------|---------------------:|-------------------:|
+| QQQ | 15m | -3.0%/yr, 623 trades | **+3.1%/yr, 71 trades** |
+| SPY | 15m | -3.1%/yr, 635 trades | **+3.0%/yr, 43 trades** |
+| EUR/USD | 15m | -13.3%/yr, 420 trades | **+1.6%/yr, 10 trades** |
+| QQQ | 5m | -19.9%/yr | -5.5%/yr |
+| EUR/USD | 4h | **+2.2%/yr, 293 trades** | +0.8%/yr, 17 trades |
+
+On a fast chart the base layer flips constantly, so exiting on misalignment churns
+and pays a spread every time; holding lets the slow layers play out. On a 4-hour
+base the churn is mild and the misalignment exit wins instead. Hold-until-stopped
+needs no new code — it is simply **Alignment-Break Exit = off**.
+
+**Reverse On Stop** (flip to the opposite side when stopped, only if that side is
+fully aligned) is built and defaults to off. It has yet to earn a place: with the
+misalignment exit on it never fires, because trades almost always end on that exit
+rather than on the stop. Worth re-testing in the fast-base configurations where the
+stop is the only way out.
 
 | Base | HTF1 | HTF2 |
 |------|------|------|
@@ -132,6 +163,9 @@ should be kept as a cross-check.
   measures a different indicator.
 - **Never rank on raw return or on a bare ratio.** Return per year against the worst
   dip, gated on block consistency. A tiny drawdown alone must not win a top spot.
+- **The higher-timeframe offset must follow the BASE bar's duration**, not a fixed
+  15 minutes. A hardcoded offset leaks the daily value early on any chart faster
+  than 15m — a look-ahead that makes fast-base results look falsely good.
 - **Never rebuild one timeframe from another.** Use the native export per timeframe;
   BTC's 1h and 4h files disagree by about $224 when aggregated.
 - **Charge trading costs on every fill.** 0.20% round trip for crypto, 0.02% for
