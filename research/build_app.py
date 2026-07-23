@@ -15,6 +15,42 @@ STRATEGIES = [
     ("Mid-timeframe cross", "planned", "Price crosses the mid trend body."),
 ]
 
+
+# Each correction and what it cost. Append, never overwrite — the point of a log
+# is that you can see what changed and what it did to the numbers.
+HISTORY = [
+ dict(n=1, change="First cross-market run",
+      detail="4h base, 20% equity cap, fixed 2-point stop buffer.",
+      effect="QQQ negative, SPY flat, EUR/USD weak. Strong BTC figures were in-sample."),
+ dict(n=2, change="Made the settings scale-invariant",
+      detail="Equity cap lifted and the buffer expressed as a percent of price, so one setting means the same on Bitcoin and on EUR/USD.",
+      effect="Comparable at last: BTC +41% over 1.4yr, QQQ -24%, SPY +13%, EUR/USD +10.6%."),
+ dict(n=3, change="Swept the smoothing",
+      detail="Every moving-average pair, across all four markets.",
+      effect="No pair generalised. Slower settings flattered BTC and did nothing elsewhere — a clear overfitting trap."),
+ dict(n=4, change="Dropped the 1,1 result",
+      detail="A length of 1 disables that smoothing pass, so 1,1 is a plain Heikin-Ashi, not a smoothed one.",
+      effect="BTC's best result was measuring a different indicator. Disqualified; floor set at length 2."),
+ dict(n=5, change="Unfroze the slow layer",
+      detail="It had been pinned at 2,2 in every run because that was the chart setting, never because it was tested.",
+      effect="Swung results three to six fold. Grid went from 648 to 3,888 per market."),
+ dict(n=6, change="Made the ranking time-aware",
+      detail="Return per year against the worst dip, instead of a bare ratio.",
+      effect="Collapsed an illusion: QQQ's top setting scored 11.5 while earning 0.8% a year over 26 years. Settings that held fell from 468 to 10."),
+ dict(n=7, change="Fixed position sizing",
+      detail="Sizes had been rounded down to whole units, forcing one whole Bitcoin per trade and ignoring the risk setting entirely.",
+      effect="BTC halved, from 32% a year to 15.7% — the earlier figure came from positions six times too large."),
+ dict(n=8, change="Unfroze the trailing stop",
+      detail="It had been on but pinned to one anchor in all 25,920 runs.",
+      effect="Preference splits by market: trending markets want it on, stock indices want it off. QQQ's surviving settings went from 45 to 258."),
+ dict(n=9, change="Charged trading costs",
+      detail="The engine had never applied a spread, while the plan claimed 0.1% per round trip.",
+      effect="The worst finding of the project. EUR/USD fell from 2.4% a year to 1.5% and its surviving settings from 637 to 54. BTC fell from 15.7% to 7.8%."),
+ dict(n=10, change="Fixed a look-ahead on fast charts",
+      detail="The higher-timeframe offset was hardcoded at 15 minutes, leaking the daily value early on any faster chart.",
+      effect="Made 5-minute testing honest. Also showed hold-until-stopped turns QQQ and SPY from losing to winning on a 15-minute base."),
+]
+
 CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Karla:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 :root{
@@ -133,6 +169,14 @@ background:var(--grow-lt);color:var(--grow);font:600 14px/29px var(--dsp);text-a
 .srow .i{font-weight:600;min-width:78px;font-family:var(--mono);font-size:13px}
 .srow .t{color:var(--faint);font-family:var(--mono);font-size:12.5px}
 
+.hist{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 26px 22px}
+.hrow{display:flex;gap:18px;padding:18px 0;border-top:1px solid var(--line)}
+.hrow:first-child{border-top:none}
+.hn{font:600 15px/1 var(--dsp);color:var(--grow);width:26px;flex:none;padding-top:3px}
+.hb{flex:1;min-width:0}
+.hb h4{margin:0 0 4px;font-size:16px;font-weight:600}
+.hb .d{color:var(--soft);font-size:14px;margin:0 0 7px;line-height:1.5}
+.hb .e{color:var(--ink);font-size:14px;margin:0;line-height:1.5;padding-left:12px;border-left:2px solid var(--grow)}
 .foot{margin-top:80px;padding-top:26px;border-top:1px solid var(--line2);color:var(--faint);font-size:13.5px}
 .foot .line{font:400 19px/1.5 var(--dsp);color:var(--soft);margin:0 0 10px;max-width:44ch}
 
@@ -316,6 +360,10 @@ def build(results, manifest):
 <div class="honest">This page is the record, not the engine — it can't run a test on its own. Saying <b>run &lt;market&gt;</b> in chat is what starts one.</div>
 <div class="stored"><h4>Markets held in the repository</h4>{stored}</div></div>'''
 
+    hist = ''.join(f'<div class="hrow"><span class="hn">{h["n"]}</span><div class="hb">'
+                   f'<h4>{h["change"]}</h4><p class="d">{h["detail"]}</p>'
+                   f'<p class="e">{h["effect"]}</p></div></div>' for h in HISTORY)
+
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>3SHA — research bench</title><style>{CSS}</style></head><body><div class="wrap">
@@ -349,6 +397,12 @@ def build(results, manifest):
 <div class="sh"><h2>What survived</h2><span class="tag">best settings per market</span></div>
 <p class="sub">The three strongest settings for each market, with the full grid kept underneath so nothing is hidden.</p>
 {ins}
+</section>
+
+<section class="sec">
+<div class="sh"><h2>What changed</h2><span class="tag">and what it cost</span></div>
+<p class="sub">Every correction made to the method, in order. Most of them made the results worse — which is the point. A number is only worth having once you know what was wrong with the one before it.</p>
+<div class="hist">{hist}</div>
 </section>
 
 <section class="sec">
