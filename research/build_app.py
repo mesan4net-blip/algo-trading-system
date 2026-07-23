@@ -252,7 +252,7 @@ def grove_html(res):
     pct = round(held / n * 100)
     return f'''<div class="grove">
 <div class="gtop"><span class="nm">{res['instrument']}</span>
-<span class="meta">{res['span']} · {res['bars']:,} bars</span>
+<span class="meta">{res['span']} · {res['bars']:,} bars · {res.get('cost_pct',0)}% cost</span>
 <span class="score">{held} of {n:,} held ({pct}%)</span></div>
 <div class="matrix">{head}{body}</div>
 <div class="legend"><span class="axis">rows — chart &amp; mid smoothing &nbsp;·&nbsp; columns — slow-layer smoothing</span>
@@ -295,7 +295,7 @@ def build(results, manifest):
             picks = '<div class="pick"><div class="body"><div class="set">Nothing traded enough to judge.</div></div></div>'
         allr = ''.join(row_html(r) for r in res['all_runs'])
         ins += f'''<div class="inst"><div class="ih"><span class="nm">{res['instrument']}</span>
-<span class="meta">{res['base_tf']} chart · {res['htf1_tf']} and {res['htf2_tf']} filters · {res['span']} · {res['years']} years</span></div>
+<span class="meta">{res['base_tf']} chart · {res['htf1_tf']} and {res['htf2_tf']} filters · {res['span']} · {res['years']} years · {res.get('cost_pct',0)}% round-trip cost</span></div>
 {picks}
 <div class="readnote">Ranked by how many separate periods stayed profitable, then by return <em>per year</em> against the worst dip. A small drawdown alone can't earn a top spot — the return has to be worth the wait. Tested over {res['years']} years; each period covers about {blk:,} bars.</div>
 <details class="all"><summary>Show all {len(res['all_runs'])} variations</summary>
