@@ -1,0 +1,207 @@
+{
+ "instruments": {
+  "BTCUSDT": {
+   "instrument": "BTCUSDT",
+   "venue": "BINANCE",
+   "timeframes": {
+    "5m": {
+     "file": "data/BTCUSDT/5m.csv",
+     "bars": 2908,
+     "start": "2026-07-11",
+     "end": "2026-07-21",
+     "src_export": "BINANCE_BTCUSDT__5.csv"
+    },
+    "15m": {
+     "file": "data/BTCUSDT/15m.csv",
+     "bars": 22301,
+     "start": "2025-12-01",
+     "end": "2026-07-21",
+     "src_export": "BINANCE_BTCUSDT__15.csv"
+    },
+    "1h": {
+     "file": "data/BTCUSDT/1h.csv",
+     "bars": 22376,
+     "start": "2024-01-01",
+     "end": "2026-07-21",
+     "src_export": "BINANCE_BTCUSDT__60.csv"
+    },
+    "4h": {
+     "file": "data/BTCUSDT/4h.csv",
+     "bars": 3102,
+     "start": "2025-02-19",
+     "end": "2026-07-21",
+     "src_export": "BINANCE_BTCUSDT__240.csv"
+    },
+    "1D": {
+     "file": "data/BTCUSDT/1D.csv",
+     "bars": 3086,
+     "start": "2018-02-08",
+     "end": "2026-07-21",
+     "src_export": "BINANCE_BTCUSDT__1D.csv"
+    },
+    "1W": {
+     "file": "data/BTCUSDT/1W.csv",
+     "bars": 467,
+     "start": "2017-08-14",
+     "end": "2026-07-20",
+     "src_export": "BINANCE_BTCUSDT__1W.csv"
+    },
+    "1M": {
+     "file": "data/BTCUSDT/1M.csv",
+     "bars": 106,
+     "start": "2017-10-01",
+     "end": "2026-07-01",
+     "src_export": "BINANCE_BTCUSDT__1M.csv"
+    }
+   }
+  },
+  "EURUSD": {
+   "instrument": "EURUSD",
+   "venue": "FOREXCOM",
+   "timeframes": {
+    "5m": {
+     "file": "data/EURUSD/5m.csv",
+     "bars": 21022,
+     "start": "2026-04-12",
+     "end": "2026-07-22",
+     "src_export": "FOREXCOM_EURUSD__5.csv"
+    },
+    "15m": {
+     "file": "data/EURUSD/15m.csv",
+     "bars": 20064,
+     "start": "2025-09-30",
+     "end": "2026-07-22",
+     "src_export": "FOREXCOM_EURUSD__15.csv"
+    },
+    "1h": {
+     "file": "data/EURUSD/1h.csv",
+     "bars": 22126,
+     "start": "2023-01-02",
+     "end": "2026-07-22",
+     "src_export": "FOREXCOM_EURUSD__60.csv"
+    },
+    "4h": {
+     "file": "data/EURUSD/4h.csv",
+     "bars": 14565,
+     "start": "2017-03-12",
+     "end": "2026-07-22",
+     "src_export": "FOREXCOM_EURUSD__240.csv"
+    },
+    "1D": {
+     "file": "data/EURUSD/1D.csv",
+     "bars": 5344,
+     "start": "2006-01-03",
+     "end": "2026-07-22",
+     "src_export": "FOREXCOM_EURUSD__1D.csv"
+    },
+    "1W": {
+     "file": "data/EURUSD/1W.csv",
+     "bars": 1073,
+     "start": "2006-01-02",
+     "end": "2026-07-20",
+     "src_export": "FOREXCOM_EURUSD__1W.csv"
+    }
+   }
+  },
+  "QQQ": {
+   "instrument": "QQQ",
+   "venue": "BATS",
+   "timeframes": {
+    "5m": {
+     "file": "data/QQQ/5m.csv",
+     "bars": 20052,
+     "start": "2025-07-14",
+     "end": "2026-07-22",
+     "src_export": "BATS_QQQ__5.csv"
+    },
+    "15m": {
+     "file": "data/QQQ/15m.csv",
+     "bars": 20366,
+     "start": "2023-06-01",
+     "end": "2026-07-22",
+     "src_export": "BATS_QQQ__15.csv"
+    },
+    "1h": {
+     "file": "data/QQQ/1h.csv",
+     "bars": 20275,
+     "start": "2015-01-02",
+     "end": "2026-07-22",
+     "src_export": "BATS_QQQ__60.csv"
+    },
+    "4h": {
+     "file": "data/QQQ/4h.csv",
+     "bars": 12799,
+     "start": "2000-01-03",
+     "end": "2026-07-22",
+     "src_export": "BATS_QQQ__240.csv"
+    },
+    "1D": {
+     "file": "data/QQQ/1D.csv",
+     "bars": 6884,
+     "start": "1999-03-10",
+     "end": "2026-07-22",
+     "src_export": "BATS_QQQ__1D.csv"
+    },
+    "1W": {
+     "file": "data/QQQ/1W.csv",
+     "bars": 1429,
+     "start": "1999-03-08",
+     "end": "2026-07-20",
+     "src_export": "BATS_QQQ__1W.csv"
+    }
+   }
+  },
+  "SPY": {
+   "instrument": "SPY",
+   "venue": "BATS",
+   "timeframes": {
+    "5m": {
+     "file": "data/SPY/5m.csv",
+     "bars": 20052,
+     "start": "2025-07-14",
+     "end": "2026-07-22",
+     "src_export": "BATS_SPY__5.csv"
+    },
+    "15m": {
+     "file": "data/SPY/15m.csv",
+     "bars": 20366,
+     "start": "2023-06-01",
+     "end": "2026-07-22",
+     "src_export": "BATS_SPY__15.csv"
+    },
+    "1h": {
+     "file": "data/SPY/1h.csv",
+     "bars": 20279,
+     "start": "2015-01-02",
+     "end": "2026-07-22",
+     "src_export": "BATS_SPY__60.csv"
+    },
+    "4h": {
+     "file": "data/SPY/4h.csv",
+     "bars": 13324,
+     "start": "2000-01-03",
+     "end": "2026-07-22",
+     "src_export": "BATS_SPY__240.csv"
+    },
+    "1D": {
+     "file": "data/SPY/1D.csv",
+     "bars": 8426,
+     "start": "1993-01-29",
+     "end": "2026-07-22",
+     "src_export": "BATS_SPY__1D__1_.csv"
+    },
+    "1W": {
+     "file": "data/SPY/1W.csv",
+     "bars": 1748,
+     "start": "1993-01-25",
+     "end": "2026-07-20",
+     "src_export": "BATS_SPY__1W.csv"
+    }
+   }
+  }
+ },
+ "notes": {
+  "BINANCE_BTCUSDT25U2026__15.csv": "illiquid dated futures contract from an early export \u2014 NOT used; superseded by BTCUSDT spot",
+  "known_issue": "BTCUSDT 1h and 4h exports disagree (~$224 mean when 1h is aggregated to 4h). Always use native per-timeframe files; never rebuild one timeframe from another."
+ }
+}
