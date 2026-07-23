@@ -104,7 +104,12 @@ def precompute(base_df, cfg, htf1_df, htf2_df, daily_df):
         beyond[(basis,'ha','h2','hi')]=_ff(a_hi>e2t,a_hi)
         beyond[(basis,'near','lo')]=np.abs(c-e1b)<=np.abs(c-e2b)
         beyond[(basis,'near','hi')]=np.abs(c-e1t)<=np.abs(c-e2t)
-    P=dict(idx=idx,o=o,h=h,l=l,c=c,beyond=beyond,bd=bd,h1=h1,h2=h2,allb=allb,alls=alls,fb=fb,fs=fs,
+    cross_dn=np.r_[False,(bC[1:]<h1C[1:])&(bC[:-1]>=h1C[:-1])]
+    cross_up=np.r_[False,(bC[1:]>h1C[1:])&(bC[:-1]<=h1C[:-1])]
+    shab={'Base':(np.minimum(bO,bC),np.maximum(bO,bC)),
+          'HTF1':(np.minimum(h1O,h1C),np.maximum(h1O,h1C)),
+          'HTF2':(np.minimum(h2O,h2C),np.maximum(h2O,h2C))}
+    P=dict(idx=idx,o=o,h=h,l=l,c=c,beyond=beyond,cross_dn=cross_dn,cross_up=cross_up,shab=shab,bd=bd,h1=h1,h2=h2,allb=allb,alls=alls,fb=fb,fs=fs,
         base_bull=bd==1, htf1_bull=h1==1, htf2_bull=h2==1,
         body_low=body_low, body_high=body_high,
         sha_bot1=np.minimum(h1O,h1C), sha_top1=np.maximum(h1O,h1C),
@@ -254,7 +259,12 @@ def default_cfg():
         use_trail=True, trail_mode='Swing', trail_basis='Body', trail_start_r=1.0,
         trail_lookback=6, trail_buffer=2.0,
         use_align_exit=True, align_level='HTF1',
-        reverse_on_stop=False)
+        reverse_on_stop=False,
+        align_confirm_bars=1, use_sha_break=False, sha_break_layer='HTF1',
+        use_target=False, target_r=3.0,
+        use_giveback=False, giveback_pct=40.0, giveback_min_r=1.0,
+        use_time_stop=False, time_stop_bars=30, time_stop_min_r=0.5,
+        use_cross_exit=False)
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +285,9 @@ except ImportError:
 @njit(cache=True)
 def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
           allb, alls, use_rev,
+          shab_bot, shab_top, cross_dn, cross_up,
+          confirm_bars, use_shab, use_tgt, tgt_r, use_give, give_pct, give_min,
+          use_time, time_bars, time_min_r, use_cross,
           minstop, risk_pct, maxeq_pct, equity0,
           use_be, be_trig, be_off, use_trail, trail_start,
           use_align, use_hard, use_tp1, tp1_r, tp1_pct, cost):
@@ -286,6 +299,7 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
     pos = 0
     entry = 0.0; stop = 0.0; risk = 0.0; qty = 0.0
     be = False; tptaken = False
+    bad = 0; peak = 0.0; ebar = 0
     for i in range(n):
         stopped = 0          # +1 a long was stopped this bar, -1 a short was
         if pos == 1:
@@ -301,19 +315,27 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                 be = True
             if use_trail and rr >= trail_start:
                 if tlow[i] > stop: stop = tlow[i]
-            align_out = use_align and abl[i]
+            if rr > peak: peak = rr
+            bad = bad + 1 if abl[i] else 0
+            align_out = use_align and bad >= confirm_bars
+            other = align_out
+            if use_shab and c[i] < shab_bot[i]: other = True
+            if use_tgt and rr >= tgt_r: other = True
+            if use_give and peak >= give_min and rr <= peak * (1.0 - give_pct): other = True
+            if use_time and (i - ebar) >= time_bars and rr < time_min_r: other = True
+            if use_cross and cross_dn[i]: other = True
             if use_hard:
                 hit = l[i] <= stop
                 px = min(o[i], stop) if hit else c[i]
             else:
                 hit = c[i] <= stop
                 px = c[i]
-            if hit or align_out:
+            if hit or other:
                 equity += qty * (px - entry) - cost * qty * (entry + px) * 0.5
                 tr_ret[ntr] = px / entry - 1.0 - cost; ntr += 1
                 if hit:
                     stopped = 1
-                pos = 0; be = False; tptaken = False
+                pos = 0; be = False; tptaken = False; bad = 0; peak = 0.0
         elif pos == -1:
             rr = (entry - c[i]) / risk if risk > 0 else 0.0
             if use_tp1 and (not tptaken) and rr >= tp1_r:
@@ -327,19 +349,27 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                 be = True
             if use_trail and rr >= trail_start:
                 if thigh[i] < stop: stop = thigh[i]
-            align_out = use_align and abshort[i]
+            if rr > peak: peak = rr
+            bad = bad + 1 if abshort[i] else 0
+            align_out = use_align and bad >= confirm_bars
+            other = align_out
+            if use_shab and c[i] > shab_top[i]: other = True
+            if use_tgt and rr >= tgt_r: other = True
+            if use_give and peak >= give_min and rr <= peak * (1.0 - give_pct): other = True
+            if use_time and (i - ebar) >= time_bars and rr < time_min_r: other = True
+            if use_cross and cross_up[i]: other = True
             if use_hard:
                 hit = h[i] >= stop
                 px = max(o[i], stop) if hit else c[i]
             else:
                 hit = c[i] >= stop
                 px = c[i]
-            if hit or align_out:
+            if hit or other:
                 equity += qty * (entry - px) - cost * qty * (entry + px) * 0.5
                 tr_ret[ntr] = entry / px - 1.0 - cost; ntr += 1
                 if hit:
                     stopped = -1
-                pos = 0; be = False; tptaken = False
+                pos = 0; be = False; tptaken = False; bad = 0; peak = 0.0
         if pos == 0:
             # Reverse on stop: flip only if the opposite side is fully aligned now.
             rev_l = use_rev and stopped == -1 and allb[i]
@@ -355,6 +385,7 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                     if q > 0:
                         entry = c[i]; stop = st; risk = dist; qty = q
                         be = False; tptaken = False; pos = 1
+                        bad = 0; peak = 0.0; ebar = i
             elif fs[i] or rev_s:
                 st = ahigh[i]
                 if minstop > 0 and c[i] + minstop > st: st = c[i] + minstop
@@ -366,6 +397,7 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                     if q > 0:
                         entry = c[i]; stop = st; risk = dist; qty = q
                         be = False; tptaken = False; pos = -1
+                        bad = 0; peak = 0.0; ebar = i
         eq[i] = equity
     return eq, tr_ret[:ntr]
 
@@ -430,6 +462,16 @@ def backtest_fast(P, cfg, cost=0.001):
         np.ascontiguousarray(tlow), np.ascontiguousarray(thigh),
         np.ascontiguousarray(P['allb']), np.ascontiguousarray(P['alls']),
         bool(cfg.get('reverse_on_stop', False)),
+        np.ascontiguousarray(P['shab'][cfg.get('sha_break_layer','HTF1')][0]),
+        np.ascontiguousarray(P['shab'][cfg.get('sha_break_layer','HTF1')][1]),
+        np.ascontiguousarray(P['cross_dn']), np.ascontiguousarray(P['cross_up']),
+        int(cfg.get('align_confirm_bars', 1)),
+        bool(cfg.get('use_sha_break', False)),
+        bool(cfg.get('use_target', False)), float(cfg.get('target_r', 3.0)),
+        bool(cfg.get('use_giveback', False)), float(cfg.get('giveback_pct', 40.0)) / 100.0,
+        float(cfg.get('giveback_min_r', 1.0)),
+        bool(cfg.get('use_time_stop', False)), int(cfg.get('time_stop_bars', 30)),
+        float(cfg.get('time_stop_min_r', 0.5)), bool(cfg.get('use_cross_exit', False)),
         float(cfg['min_stop']), float(cfg['risk_pct']), float(cfg['max_equity_pct']),
         float(cfg['equity0']), bool(cfg['use_be']), float(cfg['be_trig_r']), float(cfg['be_offset']),
         bool(cfg['use_trail']), float(cfg['trail_start_r']), bool(cfg['use_align_exit']),

@@ -297,6 +297,28 @@ trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, g
 trail_buffer_units = input.float(2.0, "  Trail Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the trail anchor, in price points ($).", group=grp_mgmt)
 
 reverse_on_stop = input.bool(false, "Reverse On Stop", tooltip="When the stop is hit, immediately open the opposite side IF that side is fully aligned at that moment (and its direction is allowed, and the gap filter passes). Built to cut the sideways bleed of exiting and re-entering the same way. Note: it does NOT wait for a fresh alignment signal — the opposite alignment simply has to be present.\n\nFor hold-until-stopped behaviour, switch Alignment-Break Exit OFF: the stop then becomes the only way out, with break-even and the trail still tightening it.", group=grp_mgmt)
+// ── EXIT SCENARIOS ─────────────────────────────────────────────────────────
+// Seven ways a trade can end, each independent and each off unless enabled.
+// Whichever triggers first closes the trade. All are close-based unless the
+// hard stop is on.
+align_confirm_bars = input.int(1, "  Break Must Hold (bars)", minval=1, maxval=20, tooltip="1 = exit the moment the layer flips (original behaviour). 2 or 3 requires the misalignment to persist, which is the same idea as the Confirmed entry mode applied to the way out. Directly targets exit churn on fast charts.", group=grp_mgmt)
+
+use_sha_break = input.bool(false, "Exit: Price Back Through SHA", tooltip="Close when price closes back through the chosen SHA body — for a long, below its lower edge. Different from that layer FLIPPING: the trend line can still point up while price collapses back through it, so this is an earlier warning.", group=grp_mgmt)
+sha_break_layer = input.string("HTF1", "  Which Layer", options=["Base","HTF1","HTF2"], group=grp_mgmt)
+
+use_target = input.bool(false, "Exit: Profit Target", tooltip="Close the WHOLE position at a multiple of the initial risk. Caps winners — usually costly for a trend system, but may suit markets that grind rather than run.", group=grp_mgmt)
+target_r = input.float(3.0, "  Target (R)", minval=0.5, step=0.5, group=grp_mgmt)
+
+use_giveback = input.bool(false, "Exit: Give-Back", tooltip="Close if the trade hands back this share of its best profit. A percentage alternative to the structural trail, and it behaves very differently in chop.", group=grp_mgmt)
+giveback_pct = input.float(40.0, "  Give-Back (% of peak profit)", minval=5, maxval=95, step=5, group=grp_mgmt)
+giveback_min_r = input.float(1.0, "  Only After (R)", minval=0.1, step=0.1, tooltip="Give-back is ignored until the trade has reached at least this much profit.", group=grp_mgmt)
+
+use_time_stop = input.bool(false, "Exit: Time Stop", tooltip="Close a trade that has gone nowhere after N bars. Cuts positions that only bleed spread.", group=grp_mgmt)
+time_stop_bars = input.int(30, "  After (bars)", minval=1, group=grp_mgmt)
+time_stop_min_r = input.float(0.5, "  Unless Ahead By (R)", minval=0.0, step=0.1, group=grp_mgmt)
+
+use_cross_exit = input.bool(false, "Exit: Chart SHA Crosses Mid SHA", tooltip="Close when the chart-timeframe SHA crosses the mid-timeframe SHA against the trade — the two lines crossing rather than either one flipping.", group=grp_mgmt)
+
 use_align_exit = input.bool(true, "Alignment-Break Exit", tooltip="The signature Full-Alignment rule: the whole thesis is that all three timeframes agree, so exit when they stop agreeing. Close-based.", group=grp_mgmt)
 align_break_level = input.string("HTF1 Flips", "  Break Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], tooltip="Base Flips: tightest — exit the moment the chart-TF SHA turns against you.\nHTF1 Flips: exit when the MID-TF anchor turns (recommended balance).\nHTF2 Flips: loosest — only exit when the HIGH-TF turns.\nAny Layer Flips: exit if any single layer disagrees.\nAll Layers Flip: exit only on full opposite alignment.", group=grp_mgmt)
 
@@ -346,6 +368,8 @@ var float  risk_unit   = na    // |entry - init_stop|, the R denominator
 var int    entry_bar   = na
 var bool   be_moved    = false
 var bool   tp1_taken   = false
+var int    bad_bars    = 0     // consecutive bars the alignment has been broken
+var float  peak_r      = 0.0   // best R reached, for the give-back exit
 
 // Gate: only a fresh Full Alignment enters, only when flat, within the date range.
 // Gap skip: block only the entry that fires on a gapped daily open (not the whole day).
@@ -361,6 +385,14 @@ stopped_from = ""   // "long"/"short" when a STOP (not an align break) closed a 
 exit_reason = ""
 
 // ── ALIGNMENT-BREAK condition (direction-aware) ──────────────────────────
+// Chart SHA crossing the mid SHA (computed globally — ta.* must run every bar)
+cross_dn = ta.crossunder(bC, h1C)
+cross_up = ta.crossover(bC, h1C)
+
+// Which SHA body edge the "price back through" exit watches
+shab_bot = sha_break_layer == "Base" ? math.min(bO, bC) : sha_break_layer == "HTF1" ? sha_bot_1 : sha_bot_2
+shab_top = sha_break_layer == "Base" ? math.max(bO, bC) : sha_break_layer == "HTF1" ? sha_top_1 : sha_top_2
+
 f_align_broken_long() =>
     align_break_level == "Base Flips"      ? not base_bull_bar
      : align_break_level == "HTF1 Flips"    ? not htf1_bull_bar
@@ -412,16 +444,27 @@ if pos_dir == "long" and not na(stop_level)
             stop_level := trail_low_ref
 
     // 4 & 5. Exits — align-break is always close-based; the stop is hard or mental
-    _align_out = use_align_exit and f_align_broken_long()
+    peak_r := math.max(peak_r, _rr)
+    bad_bars := f_align_broken_long() ? bad_bars + 1 : 0
+    _align_out = use_align_exit and bad_bars >= align_confirm_bars
+    _sha_out   = use_sha_break and close < shab_bot
+    _tgt_out   = use_target and _rr >= target_r
+    _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
+    _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
+    _cross_out = use_cross_exit and cross_dn
+    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
     _stop_hit  = (not use_hard_stop) and (close <= stop_level)
-    if use_hard_stop and not _align_out
+    if use_hard_stop and not _other_out
         strategy.exit("FA-stop", from_entry="FA", stop=stop_level)   // real intra-bar, gap-safe
-    if _stop_hit or _align_out
-        strategy.close_all(comment = _stop_hit ? "Stop" : "Align Break")
+    if _stop_hit or _other_out
+        _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
+        strategy.close_all(comment = _why)
         did_exit := true
-        exit_reason := _stop_hit ? "STOP" : "ALIGN"
+        exit_reason := _stop_hit ? "STOP" : "EXIT"
         if _stop_hit
             stopped_from := "long"
+        bad_bars := 0
+        peak_r := 0.0
         pos_dir := "flat"
         entry_price := na
         init_stop := na
@@ -448,16 +491,27 @@ else if pos_dir == "short" and not na(stop_level)
         if trail_high_ref < stop_level
             stop_level := trail_high_ref
 
-    _align_out = use_align_exit and f_align_broken_short()
+    peak_r := math.max(peak_r, _rr)
+    bad_bars := f_align_broken_short() ? bad_bars + 1 : 0
+    _align_out = use_align_exit and bad_bars >= align_confirm_bars
+    _sha_out   = use_sha_break and close > shab_top
+    _tgt_out   = use_target and _rr >= target_r
+    _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
+    _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
+    _cross_out = use_cross_exit and cross_up
+    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
     _stop_hit  = (not use_hard_stop) and (close >= stop_level)
-    if use_hard_stop and not _align_out
+    if use_hard_stop and not _other_out
         strategy.exit("FA-stop", from_entry="FA", stop=stop_level)   // real intra-bar, gap-safe
-    if _stop_hit or _align_out
-        strategy.close_all(comment = _stop_hit ? "Stop" : "Align Break")
+    if _stop_hit or _other_out
+        _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
+        strategy.close_all(comment = _why)
         did_exit := true
-        exit_reason := _stop_hit ? "STOP" : "ALIGN"
+        exit_reason := _stop_hit ? "STOP" : "EXIT"
         if _stop_hit
             stopped_from := "short"
+        bad_bars := 0
+        peak_r := 0.0
         pos_dir := "flat"
         entry_price := na
         init_stop := na
@@ -483,6 +537,8 @@ if pos_dir == "flat" and (long_signal or rev_long)
         risk_unit   := close - _stop
         entry_bar   := bar_index
         be_moved    := false
+        bad_bars    := 0
+        peak_r      := 0.0
         tp1_taken   := false
         pos_dir     := "long"
         strategy.entry("FA", strategy.long, qty=f_qty(close, _stop))
@@ -497,6 +553,8 @@ if pos_dir == "flat" and (short_signal or rev_short)
         risk_unit   := _stop - close
         entry_bar   := bar_index
         be_moved    := false
+        bad_bars    := 0
+        peak_r      := 0.0
         tp1_taken   := false
         pos_dir     := "short"
         strategy.entry("FA", strategy.short, qty=f_qty(close, _stop))

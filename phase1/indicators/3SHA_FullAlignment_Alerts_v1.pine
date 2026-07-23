@@ -216,6 +216,18 @@ trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, g
 trail_buffer_units = input.float(2.0, "  Trail Buffer", minval=0, step=0.5, group=grp_mgmt)
 
 reverse_on_stop = input.bool(false, "Reverse On Stop", tooltip="On a stop hit, immediately flip to the opposite side IF that side is fully aligned at that moment, its direction is allowed, and the gap filter passes.", group=grp_mgmt)
+align_confirm_bars = input.int(1, "  Break Must Hold (bars)", minval=1, maxval=20, group=grp_mgmt)
+use_sha_break = input.bool(false, "Exit: Price Back Through SHA", group=grp_mgmt)
+sha_break_layer = input.string("HTF1", "  Which Layer", options=["Base","HTF1","HTF2"], group=grp_mgmt)
+use_target = input.bool(false, "Exit: Profit Target", group=grp_mgmt)
+target_r = input.float(3.0, "  Target (R)", minval=0.5, step=0.5, group=grp_mgmt)
+use_giveback = input.bool(false, "Exit: Give-Back", group=grp_mgmt)
+giveback_pct = input.float(40.0, "  Give-Back (% of peak)", minval=5, maxval=95, step=5, group=grp_mgmt)
+giveback_min_r = input.float(1.0, "  Only After (R)", minval=0.1, step=0.1, group=grp_mgmt)
+use_time_stop = input.bool(false, "Exit: Time Stop", group=grp_mgmt)
+time_stop_bars = input.int(30, "  After (bars)", minval=1, group=grp_mgmt)
+time_stop_min_r = input.float(0.5, "  Unless Ahead By (R)", minval=0.0, step=0.1, group=grp_mgmt)
+use_cross_exit = input.bool(false, "Exit: Chart SHA Crosses Mid SHA", group=grp_mgmt)
 use_align_exit = input.bool(true, "Alignment-Break Exit", group=grp_mgmt)
 align_break_level = input.string("HTF1 Flips", "  Break Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], group=grp_mgmt)
 
@@ -231,6 +243,11 @@ trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_
 trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "HTF1 SHA Body" ? sha_top_1 : sha_top_2
 trail_low_ref  = trail_low_anchor  - trail_buffer_units
 trail_high_ref = trail_high_anchor + trail_buffer_units
+
+cross_dn = ta.crossunder(bC, h1C)
+cross_up = ta.crossover(bC, h1C)
+shab_bot = sha_break_layer == "Base" ? math.min(bO, bC) : sha_break_layer == "HTF1" ? sha_bot_1 : sha_bot_2
+shab_top = sha_break_layer == "Base" ? math.max(bO, bC) : sha_break_layer == "HTF1" ? sha_top_1 : sha_top_2
 
 f_align_broken_long() =>
     align_break_level == "Base Flips"        ? not base_bull_bar
@@ -254,6 +271,9 @@ var float  entry_price = na
 var float  stop_level  = na
 var float  risk_unit   = na
 var bool   be_moved    = false
+var int    bad_bars    = 0
+var float  peak_r      = 0.0
+var int    entry_bar   = na
 
 ev_entry_long  = false
 ev_entry_short = false
@@ -269,11 +289,14 @@ if pos_dir == "long" and not na(stop_level)
         be_moved := true
     if use_trail and _r >= trail_start_r
         stop_level := math.max(stop_level, trail_low_ref)
-    _align_out = use_align_exit and f_align_broken_long()
+    peak_r := math.max(peak_r, _r)
+    bad_bars := f_align_broken_long() ? bad_bars + 1 : 0
+    _align_out = use_align_exit and bad_bars >= align_confirm_bars
+    _other = _align_out or (use_sha_break and close < shab_bot) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_dn)
     _stop_hit  = use_hard_stop ? (low <= stop_level) : (close <= stop_level)
-    if _stop_hit or _align_out
+    if _stop_hit or _other
         ev_stop_hit    := _stop_hit
-        ev_align_break := _align_out and not _stop_hit
+        ev_align_break := _other and not _stop_hit
         if _stop_hit
             stopped_from := "long"
         pos_dir := "flat"
@@ -281,6 +304,8 @@ if pos_dir == "long" and not na(stop_level)
         stop_level := na
         risk_unit := na
         be_moved := false
+        bad_bars := 0
+        peak_r := 0.0
 
 else if pos_dir == "short" and not na(stop_level)
     _r = risk_unit > 0 ? (entry_price - close) / risk_unit : 0.0
@@ -289,11 +314,14 @@ else if pos_dir == "short" and not na(stop_level)
         be_moved := true
     if use_trail and _r >= trail_start_r
         stop_level := math.min(stop_level, trail_high_ref)
-    _align_out = use_align_exit and f_align_broken_short()
+    peak_r := math.max(peak_r, _r)
+    bad_bars := f_align_broken_short() ? bad_bars + 1 : 0
+    _align_out = use_align_exit and bad_bars >= align_confirm_bars
+    _other = _align_out or (use_sha_break and close > shab_top) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_up)
     _stop_hit  = use_hard_stop ? (high >= stop_level) : (close >= stop_level)
-    if _stop_hit or _align_out
+    if _stop_hit or _other
         ev_stop_hit    := _stop_hit
-        ev_align_break := _align_out and not _stop_hit
+        ev_align_break := _other and not _stop_hit
         if _stop_hit
             stopped_from := "short"
         pos_dir := "flat"
@@ -301,6 +329,8 @@ else if pos_dir == "short" and not na(stop_level)
         stop_level := na
         risk_unit := na
         be_moved := false
+        bad_bars := 0
+        peak_r := 0.0
 
 // ── then entries ───────────────────────────────────────────────────────────
 long_signal  = allow_longs  and fa_bull_raw and not gap_block
@@ -316,6 +346,9 @@ if pos_dir == "flat" and (long_signal or rev_long)
         stop_level := _s
         risk_unit := close - _s
         be_moved := false
+        bad_bars := 0
+        peak_r := 0.0
+        entry_bar := bar_index
         ev_entry_long := true
 
 else if pos_dir == "flat" and (short_signal or rev_short)
@@ -326,6 +359,9 @@ else if pos_dir == "flat" and (short_signal or rev_short)
         stop_level := _s
         risk_unit := _s - close
         be_moved := false
+        bad_bars := 0
+        peak_r := 0.0
+        entry_bar := bar_index
         ev_entry_short := true
 
 // ============================================================================
