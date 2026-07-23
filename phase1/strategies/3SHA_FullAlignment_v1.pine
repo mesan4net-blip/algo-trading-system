@@ -142,7 +142,7 @@ fa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bea
 // ④ INITIAL STOP LOSS  (hard invalidation + sizing anchor)
 // ============================================================================
 grp_sl = "④ ━━━ INITIAL STOP ━━━"
-sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body","Last Price Cross — Nearest SHA","Last Price Cross — Furthest SHA","Last SHA Cross — Nearest SHA","Last SHA Cross — Furthest SHA"], tooltip="Trigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
+sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA"], tooltip="Last Bar Beyond ... : the most recent bar that sat entirely past the SHA's far edge (below it for a long, above it for a short) — the last place price was genuinely on the wrong side of the trend. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher SHA layer is closer to price. No lookback limit.\n\nTrigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
 sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
 sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($). Stop is CLOSE-based.", group=grp_sl)
@@ -169,8 +169,12 @@ trig_high_lvl = sl_use_body ? body_high : high
 sw_low_lvl    = sl_use_body ? swing_low_body  : swing_low_wick
 sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
 
-// ── LAST-CROSS ANCHORS ─────────────────────────────────────────────────────
-// "The last candle that had any part BELOW the SHA" (mirrored for shorts).
+// ── LAST-BAR-BEYOND ANCHORS ────────────────────────────────────────────────
+// NOT a crossing event — that is the entry signal. This is a POSITION: the most
+// recent bar that sat BEYOND the SHA. For a long, any part of the bar below the
+// SHA's lower edge; for a short, any part above its upper edge. A bar that only
+// pokes into the SHA body does NOT count — it must clear the far edge, i.e. be
+// genuinely on the wrong side of the trend.
 // Tracked forward one bar at a time (O(1)) rather than searched backwards, so
 // there is NO lookback limit — the anchor can be any distance away.
 // Basis follows the Anchor Uses setting: Body compares body edges only and
@@ -225,10 +229,10 @@ f_long_stop() =>
       :    sl_mode == "Swing (Prev N Bars)"             ? sw_low_lvl
       :    sl_mode == "HTF1 SHA Body"                   ? sha_bot_1
       :    sl_mode == "HTF2 SHA Body"                   ? sha_bot_2
-      :    sl_mode == "Last Price Cross — Nearest SHA"  ? (na(_lcp)  ? sw_low_lvl : _lcp)
-      :    sl_mode == "Last Price Cross — Furthest SHA" ? (na(_lcpF) ? sw_low_lvl : _lcpF)
-      :    sl_mode == "Last SHA Cross — Nearest SHA"    ? (na(_lch)  ? sw_low_lvl : _lch)
-      :    sl_mode == "Last SHA Cross — Furthest SHA"   ? (na(_lchF) ? sw_low_lvl : _lchF)
+      :    sl_mode == "Last Bar Beyond Nearest SHA"  ? (na(_lcp)  ? sw_low_lvl : _lcp)
+      :    sl_mode == "Last Bar Beyond Furthest SHA" ? (na(_lcpF) ? sw_low_lvl : _lcpF)
+      :    sl_mode == "Last SHA Bar Beyond Nearest SHA"    ? (na(_lch)  ? sw_low_lvl : _lch)
+      :    sl_mode == "Last SHA Bar Beyond Furthest SHA"   ? (na(_lchF) ? sw_low_lvl : _lchF)
       :                                                   sw_low_lvl
     _s = _lvl - sl_buffer_raw
     min_stop_raw > 0 ? math.min(_s, close - min_stop_raw) : _s
@@ -243,10 +247,10 @@ f_short_stop() =>
       :    sl_mode == "Swing (Prev N Bars)"             ? sw_high_lvl
       :    sl_mode == "HTF1 SHA Body"                   ? sha_top_1
       :    sl_mode == "HTF2 SHA Body"                   ? sha_top_2
-      :    sl_mode == "Last Price Cross — Nearest SHA"  ? (na(_hcp)  ? sw_high_lvl : _hcp)
-      :    sl_mode == "Last Price Cross — Furthest SHA" ? (na(_hcpF) ? sw_high_lvl : _hcpF)
-      :    sl_mode == "Last SHA Cross — Nearest SHA"    ? (na(_hch)  ? sw_high_lvl : _hch)
-      :    sl_mode == "Last SHA Cross — Furthest SHA"   ? (na(_hchF) ? sw_high_lvl : _hchF)
+      :    sl_mode == "Last Bar Beyond Nearest SHA"  ? (na(_hcp)  ? sw_high_lvl : _hcp)
+      :    sl_mode == "Last Bar Beyond Furthest SHA" ? (na(_hcpF) ? sw_high_lvl : _hcpF)
+      :    sl_mode == "Last SHA Bar Beyond Nearest SHA"    ? (na(_hch)  ? sw_high_lvl : _hch)
+      :    sl_mode == "Last SHA Bar Beyond Furthest SHA"   ? (na(_hchF) ? sw_high_lvl : _hchF)
       :                                                   sw_high_lvl
     _s = _lvl + sl_buffer_raw
     min_stop_raw > 0 ? math.max(_s, close + min_stop_raw) : _s
