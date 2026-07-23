@@ -188,7 +188,7 @@ def blocks_dots(r):
 
 def setting_str(r):
     return (f"{r['sha']} / {r.get('htf2','2,2')} · {r['exit']} flip · {r['anchor']} · "
-            f"{r['basis']} · {r['stop']} · risk {r['risk']}%")
+            f"{r['basis']} · {r['stop']} · trail {r.get('trail','Swing 6')}")
 
 
 def pick_html(r, rank):

@@ -32,8 +32,15 @@ def cfg_from(combo, buf):
              align_level=combo['exit'], sl_mode=combo['anchor'],
              sl_basis=combo['basis'], trail_basis=combo['basis'],
              use_hard_stop=(combo['stop_style'] == 'hard'),
-             risk_pct=combo['risk'], max_equity_pct=400.0,
+             risk_pct=1.0, max_equity_pct=400.0,
              sl_buffer=buf, trail_buffer=buf)
+    t = combo['trail']
+    if t == 'off':
+        c['use_trail'] = False
+    elif t.startswith('Swing'):
+        c.update(use_trail=True, trail_mode='Swing', trail_lookback=int(t.split()[1]))
+    else:
+        c.update(use_trail=True, trail_mode=t)
     return c
 
 
@@ -92,7 +99,7 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True)
             sha=f"{combo['sha'][0]},{combo['sha'][1]}",
             htf2=f"{combo['htf2'][0]},{combo['htf2'][1]}", exit=combo['exit'],
             anchor=combo['anchor'], basis=combo['basis'],
-            stop=combo['stop_style'], risk=combo['risk'],
+            stop=combo['stop_style'], trail=combo['trail'],
             trades=m['trades'], win=m['win'], ret=m['ret'], maxdd=m['maxdd'],
             retdd=m['retdd'], blocks=bp, nblocks=TP.BLOCKS,
             block_detail=[round(x, 2) for x in bl],

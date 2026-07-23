@@ -46,11 +46,11 @@ PLAN = {
         "values": ["mental", "hard"],
         "fmt": str,
     },
-    "risk": {
-        "label": "Risk per trade",
-        "plain": "Percent of the account risked from entry to stop. Scales return and drawdown together.",
-        "values": [0.5, 1.0, 2.0],
-        "fmt": lambda v: f"{v}%",
+    "trail": {
+        "label": "Trailing stop",
+        "plain": "What the stop follows once the trade is ahead, or off entirely. Only bites when the exit trigger is loose enough to let a trade run.",
+        "values": ["off", "Swing 3", "Swing 6", "HTF1 Body", "HTF2 Body"],
+        "fmt": str,
     },
 }
 
@@ -60,7 +60,8 @@ FIXED = [
     ("Trailing stop", "on -- swing/6 bars, same basis, starts at +1R, close-based"),
     ("Partial take-profit", "off"),
     ("Gap skip", "off"),
-    ("Position sizing", "fractional, risk% of equity divided by the stop distance"),
+    ("Risk per trade", "1% of equity, every trade"),
+    ("Position sizing", "fractional, risk divided by the stop distance"),
     ("Leverage limit", "4x equity -- a position is never larger than that"),
     ("Stop buffer", "0.05% of median price (scale-relative, so it means the same on any instrument)"),
     ("Cost", "0.1% per round trip"),
@@ -79,9 +80,9 @@ def expand():
                 for an in PLAN["anchor"]["values"]:
                     for ba in PLAN["basis"]["values"]:
                         for st in PLAN["stop_style"]["values"]:
-                            for rk in PLAN["risk"]["values"]:
+                            for tr in PLAN["trail"]["values"]:
                                 yield dict(sha=sha, htf2=h2, exit=ex, anchor=an,
-                                           basis=ba, stop_style=st, risk=rk)
+                                           basis=ba, stop_style=st, trail=tr)
 
 
 def count():
