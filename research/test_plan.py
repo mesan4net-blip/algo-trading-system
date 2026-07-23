@@ -11,9 +11,15 @@ the Smoothed Heikin-Ashi into a plain Heikin-Ashi -- a different indicator.)
 
 PLAN = {
     "sha": {
-        "label": "SHA smoothing (base + HTF1)",
-        "plain": "How much the trend layers are smoothed. Smaller reacts sooner but whipsaws more; larger is calmer but later.",
+        "label": "Smoothing — chart + mid layer",
+        "plain": "How much the chart and mid-timeframe trend layers are smoothed. Smaller reacts sooner but whipsaws more; larger is calmer but later.",
         "values": [(2, 4), (3, 6), (4, 8), (6, 11), (8, 16), (10, 20)],
+        "fmt": lambda v: f"{v[0]},{v[1]}",
+    },
+    "htf2": {
+        "label": "Smoothing — slow layer",
+        "plain": "The slow filter that gates every trade. Swung separately because the chart and the slow layer often want different speeds.",
+        "values": [(2, 2), (3, 6), (4, 8), (6, 11), (8, 16), (10, 20)],
         "fmt": lambda v: f"{v[0]},{v[1]}",
     },
     "exit": {
@@ -50,7 +56,6 @@ PLAN = {
 
 FIXED = [
     ("Entry", "Full Alignment, Confirmed (1 bar) -- longs and shorts"),
-    ("HTF2 smoothing", "2,2 (held fixed)"),
     ("Break-even", "on -- stop moves to entry at +1R"),
     ("Trailing stop", "on -- swing/6 bars, same basis, starts at +1R, close-based"),
     ("Partial take-profit", "off"),
@@ -68,13 +73,14 @@ BLOCKS = 5
 def expand():
     """Yield every combination in the plan as a dict."""
     for sha in PLAN["sha"]["values"]:
-        for ex in PLAN["exit"]["values"]:
-            for an in PLAN["anchor"]["values"]:
-                for ba in PLAN["basis"]["values"]:
-                    for st in PLAN["stop_style"]["values"]:
-                        for rk in PLAN["risk"]["values"]:
-                            yield dict(sha=sha, exit=ex, anchor=an, basis=ba,
-                                       stop_style=st, risk=rk)
+        for h2 in PLAN["htf2"]["values"]:
+            for ex in PLAN["exit"]["values"]:
+                for an in PLAN["anchor"]["values"]:
+                    for ba in PLAN["basis"]["values"]:
+                        for st in PLAN["stop_style"]["values"]:
+                            for rk in PLAN["risk"]["values"]:
+                                yield dict(sha=sha, htf2=h2, exit=ex, anchor=an,
+                                           basis=ba, stop_style=st, risk=rk)
 
 
 def count():
@@ -85,7 +91,7 @@ def count():
 
 
 def describe(c):
-    return (f"{c['sha'][0]},{c['sha'][1]} · {PLAN['exit']['fmt'](c['exit'])} · "
+    return (f"{c['sha'][0]},{c['sha'][1]} · {c['htf2'][0]},{c['htf2'][1]} · {PLAN['exit']['fmt'](c['exit'])} · "
             f"{c['anchor']} · {c['basis']} · {c['stop_style']} · {c['risk']}%")
 
 

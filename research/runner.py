@@ -28,7 +28,7 @@ def load(path):
 
 def cfg_from(combo, buf):
     c = default_cfg()
-    c.update(base_sha=combo['sha'], htf1_sha=combo['sha'], htf2_sha=(2, 2),
+    c.update(base_sha=combo['sha'], htf1_sha=combo['sha'], htf2_sha=combo['htf2'],
              align_level=combo['exit'], sl_mode=combo['anchor'],
              sl_basis=combo['basis'], trail_basis=combo['basis'],
              use_hard_stop=(combo['stop_style'] == 'hard'),
@@ -63,13 +63,13 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True)
     # precompute cache keyed by SHA pair (the only thing precompute depends on)
     pc_full, pc_seg = {}, {}
 
-    def get_full(sha, c):
-        if sha not in pc_full:
-            pc_full[sha] = precompute(base, c, h1, h2, daily)
-        return pc_full[sha]
+    def get_full(key, c):
+        if key not in pc_full:
+            pc_full[key] = precompute(base, c, h1, h2, daily)
+        return pc_full[key]
 
-    def get_seg(sha, i, c):
-        k = (sha, i)
+    def get_seg(key, i, c):
+        k = (key, i)
         if k not in pc_seg:
             pc_seg[k] = precompute(segs[i], c, h1, h2, daily)
         return pc_seg[k]
@@ -80,15 +80,17 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True)
         c = cfg_from(combo, buf)
         c['htf1_dur'] = TF_DUR[htf1_tf]
         c['htf2_dur'] = TF_DUR[htf2_tf]
-        m = metrics(backtest(get_full(combo['sha'], c), c))
+        key = (combo['sha'], combo['htf2'])
+        m = metrics(backtest(get_full(key, c), c))
         bl = []
         if m['trades'] >= TP.MIN_TRADES:
             for i in range(TP.BLOCKS):
-                bl.append(metrics(backtest(get_seg(combo['sha'], i, c), c))['retdd'])
+                bl.append(metrics(backtest(get_seg(key, i, c), c))['retdd'])
         bp = sum(1 for x in bl if x > 0)
         rows.append(dict(
             idx=j,
-            sha=f"{combo['sha'][0]},{combo['sha'][1]}", exit=combo['exit'],
+            sha=f"{combo['sha'][0]},{combo['sha'][1]}",
+            htf2=f"{combo['htf2'][0]},{combo['htf2'][1]}", exit=combo['exit'],
             anchor=combo['anchor'], basis=combo['basis'],
             stop=combo['stop_style'], risk=combo['risk'],
             trades=m['trades'], win=m['win'], ret=m['ret'], maxdd=m['maxdd'],

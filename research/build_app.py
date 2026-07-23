@@ -53,15 +53,15 @@ border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:44px}
 .gtop .nm{font:600 21px/1 var(--dsp);font-variation-settings:'SOFT' 40}
 .gtop .meta{font:400 12.5px/1 var(--mono);color:var(--faint)}
 .gtop .score{margin-left:auto;font:500 12.5px/1 var(--mono);color:var(--grow)}
-.grows{margin-top:16px}
-.grow-row{display:flex;align-items:center;gap:11px;margin-bottom:5px}
-.grow-row .sha{font:500 11.5px/1 var(--mono);color:var(--faint);width:46px;text-align:right;flex:none}
-.cells{display:flex;gap:2px;flex-wrap:nowrap;flex:1}
-.c{height:15px;flex:1;border-radius:2px;background:#EDF1EA}
-.c.h{background:var(--grow)}
-.c.f{background:var(--honey)}
-.c.x{background:#E6EBE3}
-.c.t{background:#F0F3EE}
+.matrix{margin-top:18px}
+.mrow{display:flex;gap:4px;margin-bottom:4px;align-items:center}
+.mrow .rl{font:500 11.5px/1 var(--mono);color:var(--faint);width:46px;text-align:right;flex:none}
+.mc{flex:1;height:34px;border-radius:4px;background:#F0F3EE;display:flex;align-items:center;justify-content:center;
+font:500 12.5px/1 var(--mono);color:var(--grow)}
+.mc.dk{color:#fff}
+.mc.lbl{background:none;height:20px;color:var(--faint);font-size:11.5px}
+.mrow.head{margin-bottom:6px}
+.legend .axis{color:var(--soft)}
 .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid var(--line);
 font:400 12.5px/1 var(--mono);color:var(--soft);align-items:center}
 .legend i{width:11px;height:11px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:-1px}
@@ -140,7 +140,7 @@ background:var(--grow-lt);color:var(--grow);font:600 14px/29px var(--dsp);text-a
 .plan{grid-template-columns:1fr;gap:0}
 .plan .v{padding-top:0;border-top:none}
 .pick{flex-wrap:wrap}
-.grow-row .sha{width:40px}
+.mrow .rl{width:38px}
 }
 @media(prefers-reduced-motion:no-preference){
 .reveal{opacity:0;transform:translateY(14px);animation:up .7s cubic-bezier(.2,.7,.3,1) forwards}
@@ -149,6 +149,30 @@ background:var(--grow-lt);color:var(--grow);font:600 14px/29px var(--dsp);text-a
 """
 
 VMAP = {'holds': 'h', 'fragile': 'f', 'fails': 'x', 'thin': 't'}
+
+
+def enrich(res):
+    """Add annualised return and a time-aware ratio, then re-rank.
+
+    Profit-divided-by-pain has no sense of time: +24% earned over 26 years scores the
+    same as +24% in one year. Annualising fixes that, so a setting that barely moves
+    can no longer top the table on a small drawdown alone.
+    """
+    a, b = [s.strip() for s in res['span'].split('→')]
+    yrs = max((datetime.date.fromisoformat(b) - datetime.date.fromisoformat(a)).days / 365.25, 0.25)
+    res['years'] = round(yrs, 1)
+    for r in res['all_runs']:
+        g = 1 + r['ret'] / 100.0
+        r['cagr'] = round(((g ** (1 / yrs)) - 1) * 100, 2) if g > 0 else -100.0
+        dd = abs(r['maxdd'])
+        r['mar'] = round(r['cagr'] / dd, 2) if dd > 0.01 else 0.0
+        if r['verdict'] == 'holds' and r['mar'] < 0.25:
+            r['verdict'] = 'fragile'          # positive but not paying for the wait
+    res['all_runs'].sort(key=lambda r: (r['blocks'], r['mar']), reverse=True)
+    ranked = [r for r in res['all_runs'] if r['trades'] >= TP.MIN_TRADES]
+    res['top'] = ranked[:3]
+    res['n_holds'] = sum(1 for r in res['all_runs'] if r['verdict'] == 'holds')
+    return res
 
 
 def num(v, plus=False):
@@ -163,57 +187,76 @@ def blocks_dots(r):
 
 
 def setting_str(r):
-    return f"{r['sha']} · {r['exit']} flip · {r['anchor']} · {r['basis']} · {r['stop']} · risk {r['risk']}%"
+    return (f"{r['sha']} / {r.get('htf2','2,2')} · {r['exit']} flip · {r['anchor']} · "
+            f"{r['basis']} · {r['stop']} · risk {r['risk']}%")
 
 
 def pick_html(r, rank):
     return f'''<div class="pick"><span class="rk">{rank}</span><div class="body">
 <div class="set">{setting_str(r)}</div>
 <div class="nums"><span>{r['trades']} trades</span><span>{r['win']}% won</span>
-<span>return <b>{'+' if r['ret']>0 else ''}{r['ret']}%</b></span>
+<span>per year <b>{'+' if r['cagr']>0 else ''}{r['cagr']}%</b></span>
+<span>total <b>{'+' if r['ret']>0 else ''}{r['ret']}%</b></span>
 <span>worst dip <b>{r['maxdd']}%</b></span>
-<span>profit&divide;pain <b>{r['retdd']}</b></span>
+<span>year&divide;dip <b>{r['mar']}</b></span>
 <span>{r['blocks']} of {r['nblocks']} periods{blocks_dots(r)}</span></div></div>
 <span class="vb {r['verdict']}">{r['verdict']}</span></div>'''
 
 
-HEAD = ("<tr><th class='l'>Setting</th><th>Trades</th><th>Win%</th><th>Return%</th>"
-        "<th>Worst dip%</th><th>Profit&divide;pain</th><th>Periods</th><th class='l'>Verdict</th></tr>")
+HEAD = ("<tr><th class='l'>Setting</th><th>Trades</th><th>Win%</th><th>Per year%</th><th>Total%</th>"
+        "<th>Worst dip%</th><th>Year&divide;dip</th><th>Periods</th><th class='l'>Verdict</th></tr>")
 
 
 def row_html(r):
     return (f"<tr><td class='l'>{setting_str(r)}</td><td>{r['trades']}</td><td>{r['win']}</td>"
-            f"{num(r['ret'], True)}{num(r['maxdd'])}{num(r['retdd'])}"
+            f"{num(r['cagr'], True)}{num(r['ret'], True)}{num(r['maxdd'])}{num(r['mar'])}"
             f"<td>{r['blocks']}/{r['nblocks']}</td><td class='l'>{r['verdict']}</td></tr>")
 
 
 def grove_html(res):
-    by_sha = {}
+    rowv = [TP.PLAN['sha']['fmt'](v) for v in TP.PLAN['sha']['values']]
+    colv = [TP.PLAN['htf2']['fmt'](v) for v in TP.PLAN['htf2']['values']]
+    cellmap = {}
     for r in res['all_runs']:
-        by_sha.setdefault(r['sha'], []).append(r)
-    order = [TP.PLAN['sha']['fmt'](v) for v in TP.PLAN['sha']['values']]
-    rows = ''
-    for sha in order:
-        rs = sorted(by_sha.get(sha, []), key=lambda x: x['idx'])
+        k = (r['sha'], r.get('htf2', '2,2'))
+        c = cellmap.setdefault(k, {'n': 0, 'held': 0, 'best': None})
+        c['n'] += 1
+        if r['verdict'] == 'holds':
+            c['held'] += 1
+        if c['best'] is None or r['mar'] > c['best']['mar']:
+            c['best'] = r
+    per = max((c['n'] for c in cellmap.values()), default=1)
+
+    head = '<div class="mrow head"><span class="rl"></span>' + ''.join(
+        f'<span class="mc lbl">{c}</span>' for c in colv) + '</div>'
+    body = ''
+    for rv in rowv:
         cells = ''
-        for r in rs:
-            tip = ''
-            if r['verdict'] in ('holds', 'fragile'):
-                tip = f' title="{setting_str(r)} — profit/pain {r["retdd"]}, {r["blocks"]}/{r["nblocks"]} periods"'
-            cells += f'<span class="c {VMAP[r["verdict"]]}"{tip}></span>'
-        rows += f'<div class="grow-row"><span class="sha">{sha}</span><span class="cells">{cells}</span></div>'
+        for cv in colv:
+            c = cellmap.get((rv, cv))
+            if not c:
+                cells += '<span class="mc"></span>'
+                continue
+            frac = c['held'] / max(c['n'], 1)
+            b = c['best']
+            tip = (f"chart {rv} · slow {cv} — {c['held']} of {c['n']} held, "
+                   f"best {b['cagr']}%/yr vs {b['maxdd']}% dip")
+            style = f"background:rgba(46,122,90,{round(0.06 + frac * 0.94, 3)})" if frac > 0 else ""
+            txt = c['held'] if c['held'] else ''
+            dark = ' dk' if frac > 0.45 else ''
+            cells += f'<span class="mc v{dark}" style="{style}" title="{tip}">{txt}</span>'
+        body += f'<div class="mrow"><span class="rl">{rv}</span>{cells}</div>'
+
     held = res['n_holds']
     n = max(len(res['all_runs']), 1)
     pct = round(held / n * 100)
     return f'''<div class="grove">
 <div class="gtop"><span class="nm">{res['instrument']}</span>
 <span class="meta">{res['span']} · {res['bars']:,} bars</span>
-<span class="score">{held} of {n} held ({pct}%)</span></div>
-<div class="grows">{rows}</div>
-<div class="legend"><span><i style="background:var(--grow)"></i>held</span>
-<span><i style="background:var(--honey)"></i>fragile</span>
-<span><i style="background:#E6EBE3"></i>failed</span>
-<span style="color:var(--faint)">each row is one smoothing setting · each mark one of 108 variations</span></div></div>'''
+<span class="score">{held} of {n:,} held ({pct}%)</span></div>
+<div class="matrix">{head}{body}</div>
+<div class="legend"><span class="axis">rows — chart &amp; mid smoothing &nbsp;·&nbsp; columns — slow-layer smoothing</span>
+<span style="color:var(--faint)">number = how many of the {per} variations in that pairing survived every period</span></div></div>'''
 
 
 def build(results, manifest):
@@ -252,9 +295,9 @@ def build(results, manifest):
             picks = '<div class="pick"><div class="body"><div class="set">Nothing traded enough to judge.</div></div></div>'
         allr = ''.join(row_html(r) for r in res['all_runs'])
         ins += f'''<div class="inst"><div class="ih"><span class="nm">{res['instrument']}</span>
-<span class="meta">{res['base_tf']} chart · {res['htf1_tf']} and {res['htf2_tf']} filters · {res['span']}</span></div>
+<span class="meta">{res['base_tf']} chart · {res['htf1_tf']} and {res['htf2_tf']} filters · {res['span']} · {res['years']} years</span></div>
 {picks}
-<div class="readnote">Ranked by how many separate periods stayed profitable, then by profit against pain — never by return alone. Each period here covers about {blk:,} bars.</div>
+<div class="readnote">Ranked by how many separate periods stayed profitable, then by return <em>per year</em> against the worst dip. A small drawdown alone can't earn a top spot — the return has to be worth the wait. Tested over {res['years']} years; each period covers about {blk:,} bars.</div>
 <details class="all"><summary>Show all {len(res['all_runs'])} variations</summary>
 <div class="scroll"><table>{HEAD}{allr}</table></div></details></div>'''
 
@@ -313,6 +356,18 @@ def build(results, manifest):
 {run}
 </section>
 
+<section class="sec">
+<div class="sh"><h2>Known problems</h2><span class="tag">read before trusting a number</span></div>
+<p class="sub">Open faults in the current run, kept here on purpose so nothing on this page reads better than it deserves.</p>
+<div class="card">
+<div style="padding:0 0 16px;border-bottom:1px solid var(--line)">
+<h4 style="margin:0 0 4px;font-size:15.5px">Position sizing does not honour the risk setting</h4>
+<p style="margin:0;color:var(--soft);font-size:14px;line-height:1.55">Sizes are rounded down to whole units, so on a high-priced market like Bitcoin every trade becomes one whole coin — roughly 60% of the account — no matter which risk figure is chosen. On the cheaper markets the 100% ceiling binds instead and every trade uses the whole account. Either way the risk column is currently inert, and returns reflect maximum-size positions rather than a measured 1% risk. Fix: allow fractional sizes and re-run.</p></div>
+<div style="padding:16px 0 0">
+<h4 style="margin:0 0 4px;font-size:15.5px">Bitcoin has only 1.4 years of history</h4>
+<p style="margin:0;color:var(--soft);font-size:14px;line-height:1.55">Its five test periods are about three months each, against roughly five years each for the index markets. The same &ldquo;5 of 5&rdquo; therefore means far less on Bitcoin, and its strong yearly figure should be read as promising rather than proven.</p></div>
+</div></section>
+
 <footer class="foot">
 <p class="line">Built slowly, on purpose. Every number here is a backtest — a careful record of the past, never a promise about what comes next.</p>
 <p>Engine reconciled to TradingView to the penny: entries, position state and stop levels all match. Generated {now}.</p>
@@ -321,13 +376,30 @@ def build(results, manifest):
 
 
 if __name__ == "__main__":
-    manifest = json.load(open(os.path.join(DATA, "manifest.json")))
-    results = []
-    for inst in manifest['instruments']:
-        print(f"  running {inst} ...")
-        results.append(run_instrument(inst, verbose=False))
+    import sys, time
     out = os.path.join(REPO, "research")
-    json.dump(results, open(os.path.join(out, "instrument_results.json"), "w"), indent=1)
-    html = build(results, manifest)
-    open(os.path.join(out, "index.html"), "w").write(html)
-    print(f"wrote index.html ({len(html)//1024} KB) · {sum(len(r['all_runs']) for r in results)} runs")
+    cache = os.path.join(out, "runs")
+    os.makedirs(cache, exist_ok=True)
+    manifest = json.load(open(os.path.join(DATA, "manifest.json")))
+    arg = sys.argv[1] if len(sys.argv) > 1 else "build"
+
+    if arg != "build":
+        t0 = time.time()
+        res = run_instrument(arg, verbose=False)
+        json.dump(res, open(os.path.join(cache, f"{arg}.json"), "w"))
+        top = res['top'][0] if res['top'] else None
+        print(f"{arg}: {len(res['all_runs'])} runs in {time.time()-t0:.0f}s · {res['n_holds']} held")
+        if top:
+            print(f"  best  {setting_str(top)}")
+            print(f"        ret {top['ret']}%  dd {top['maxdd']}%  p/p {top['retdd']}  "
+                  f"{top['blocks']}/{top['nblocks']} periods  {top['trades']} trades")
+    else:
+        results = []
+        for inst in manifest['instruments']:
+            f = os.path.join(cache, f"{inst}.json")
+            if os.path.exists(f):
+                results.append(enrich(json.load(open(f))))
+        html = build(results, manifest)
+        open(os.path.join(out, "index.html"), "w").write(html)
+        print(f"index.html ({len(html)//1024} KB) · {len(results)} markets · "
+              f"{sum(len(r['all_runs']) for r in results):,} runs")
