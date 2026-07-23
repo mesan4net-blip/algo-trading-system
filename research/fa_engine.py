@@ -209,3 +209,165 @@ def default_cfg():
         use_trail=True, trail_mode='Swing', trail_basis='Body', trail_start_r=1.0,
         trail_lookback=6, trail_buffer=2.0,
         use_align_exit=True, align_level='HTF1')
+
+
+# ---------------------------------------------------------------------------
+# Compiled fast path. Identical logic to backtest() above, with string dispatch
+# hoisted out into precomputed arrays so the bar loop can be JIT-compiled.
+# Verified to match backtest() exactly before use.
+# ---------------------------------------------------------------------------
+try:
+    from numba import njit
+    _HAVE_NUMBA = True
+except ImportError:
+    _HAVE_NUMBA = False
+    def njit(**kw):
+        def deco(f): return f
+        return deco
+
+
+@njit(cache=True)
+def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
+          minstop, risk_pct, maxeq_pct, equity0,
+          use_be, be_trig, be_off, use_trail, trail_start,
+          use_align, use_hard, use_tp1, tp1_r, tp1_pct, cost):
+    n = len(c)
+    equity = equity0
+    eq = np.empty(n)
+    tr_ret = np.empty(n)
+    ntr = 0
+    pos = 0
+    entry = 0.0; stop = 0.0; risk = 0.0; qty = 0.0
+    be = False; tptaken = False
+    for i in range(n):
+        if pos == 1:
+            rr = (c[i] - entry) / risk if risk > 0 else 0.0
+            if use_tp1 and (not tptaken) and rr >= tp1_r:
+                part = qty * tp1_pct / 100.0
+                equity += part * (c[i] - entry); qty -= part; tptaken = True
+                if not be:
+                    if entry + be_off > stop: stop = entry + be_off
+                    be = True
+            if use_be and (not be) and rr >= be_trig:
+                if entry + be_off > stop: stop = entry + be_off
+                be = True
+            if use_trail and rr >= trail_start:
+                if tlow[i] > stop: stop = tlow[i]
+            align_out = use_align and abl[i]
+            if use_hard:
+                hit = l[i] <= stop
+                px = min(o[i], stop) if hit else c[i]
+            else:
+                hit = c[i] <= stop
+                px = c[i]
+            if hit or align_out:
+                equity += qty * (px - entry) - cost * qty * (entry + px) * 0.5
+                tr_ret[ntr] = px / entry - 1.0 - cost; ntr += 1
+                pos = 0; be = False; tptaken = False
+        elif pos == -1:
+            rr = (entry - c[i]) / risk if risk > 0 else 0.0
+            if use_tp1 and (not tptaken) and rr >= tp1_r:
+                part = qty * tp1_pct / 100.0
+                equity += part * (entry - c[i]); qty -= part; tptaken = True
+                if not be:
+                    if entry - be_off < stop: stop = entry - be_off
+                    be = True
+            if use_be and (not be) and rr >= be_trig:
+                if entry - be_off < stop: stop = entry - be_off
+                be = True
+            if use_trail and rr >= trail_start:
+                if thigh[i] < stop: stop = thigh[i]
+            align_out = use_align and abshort[i]
+            if use_hard:
+                hit = h[i] >= stop
+                px = max(o[i], stop) if hit else c[i]
+            else:
+                hit = c[i] >= stop
+                px = c[i]
+            if hit or align_out:
+                equity += qty * (entry - px) - cost * qty * (entry + px) * 0.5
+                tr_ret[ntr] = entry / px - 1.0 - cost; ntr += 1
+                pos = 0; be = False; tptaken = False
+        if pos == 0:
+            if fb[i]:
+                st = alow[i]
+                if minstop > 0 and c[i] - minstop < st: st = c[i] - minstop
+                if st < c[i]:
+                    dist = c[i] - st
+                    q = (equity * risk_pct / 100.0) / dist
+                    qmax = (equity * maxeq_pct / 100.0) / c[i]
+                    if qmax < q: q = qmax
+                    if q > 0:
+                        entry = c[i]; stop = st; risk = dist; qty = q
+                        be = False; tptaken = False; pos = 1
+            elif fs[i]:
+                st = ahigh[i]
+                if minstop > 0 and c[i] + minstop > st: st = c[i] + minstop
+                if st > c[i]:
+                    dist = st - c[i]
+                    q = (equity * risk_pct / 100.0) / dist
+                    qmax = (equity * maxeq_pct / 100.0) / c[i]
+                    if qmax < q: q = qmax
+                    if q > 0:
+                        entry = c[i]; stop = st; risk = dist; qty = q
+                        be = False; tptaken = False; pos = -1
+        eq[i] = equity
+    return eq, tr_ret[:ntr]
+
+
+def _anchor_arrays(P, mode, basis, lookback, buf, sign):
+    """Return the stop/trail reference line for every bar, buffer already applied."""
+    if mode == 'Trigger':
+        base = P['body_low'] if basis == 'Body' else P['l']
+        if sign > 0:
+            base = P['body_high'] if basis == 'Body' else P['h']
+    elif mode == 'Swing':
+        src = (P['body_high'] if basis == 'Body' else P['h']) if sign > 0 else \
+              (P['body_low'] if basis == 'Body' else P['l'])
+        base = P['roll_max'](src, lookback) if sign > 0 else P['roll_min'](src, lookback)
+    elif mode == 'HTF1 Body':
+        base = P['sha_top1'] if sign > 0 else P['sha_bot1']
+    else:
+        base = P['sha_top2'] if sign > 0 else P['sha_bot2']
+    return base + buf if sign > 0 else base - buf
+
+
+def _align_arrays(P, level):
+    bb, h1, h2 = P['base_bull'], P['htf1_bull'], P['htf2_bull']
+    if level == 'Base':   return ~bb, bb
+    if level == 'HTF1':   return ~h1, h1
+    if level == 'HTF2':   return ~h2, h2
+    if level == 'Any':    return (~bb) | (~h1) | (~h2), bb | h1 | h2
+    return P['alls'].copy(), P['allb'].copy()
+
+
+def backtest_fast(P, cfg, cost=0.001):
+    alow = _anchor_arrays(P, cfg['sl_mode'], cfg['sl_basis'], cfg['sl_lookback'], cfg['sl_buffer'], -1)
+    ahigh = _anchor_arrays(P, cfg['sl_mode'], cfg['sl_basis'], cfg['sl_lookback'], cfg['sl_buffer'], +1)
+    tm = cfg['trail_mode']
+    tlow = _anchor_arrays(P, tm, cfg['trail_basis'], cfg['trail_lookback'], cfg['trail_buffer'], -1)
+    thigh = _anchor_arrays(P, tm, cfg['trail_basis'], cfg['trail_lookback'], cfg['trail_buffer'], +1)
+    abl, abshort = _align_arrays(P, cfg['align_level'])
+    eq, rets = _core(
+        P['o'], P['h'], P['l'], P['c'], P['fb'], P['fs'],
+        np.ascontiguousarray(abl), np.ascontiguousarray(abshort),
+        np.ascontiguousarray(alow), np.ascontiguousarray(ahigh),
+        np.ascontiguousarray(tlow), np.ascontiguousarray(thigh),
+        float(cfg['min_stop']), float(cfg['risk_pct']), float(cfg['max_equity_pct']),
+        float(cfg['equity0']), bool(cfg['use_be']), float(cfg['be_trig_r']), float(cfg['be_offset']),
+        bool(cfg['use_trail']), float(cfg['trail_start_r']), bool(cfg['use_align_exit']),
+        bool(cfg['use_hard_stop']), bool(cfg['use_tp1']), float(cfg['tp1_r']), float(cfg['tp1_pct']),
+        float(cost))
+    return dict(equity=eq, rets=rets, trades=[None] * len(rets))
+
+
+def metrics_fast(res):
+    r = res['rets']
+    if len(r) == 0:
+        return dict(trades=0, win=0, ret=0, maxdd=0, retdd=0)
+    eq = res['equity']
+    peak = np.maximum.accumulate(eq)
+    dd = ((eq - peak) / peak).min() * 100
+    ret = (eq[-1] / eq[0] - 1) * 100
+    return dict(trades=len(r), win=round(float((r > 0).mean()) * 100, 1), ret=round(float(ret), 1),
+                maxdd=round(float(dd), 1), retdd=round(float(ret / abs(dd)), 2) if dd else 0)

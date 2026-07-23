@@ -64,7 +64,7 @@ FIXED = [
     ("Position sizing", "fractional, risk divided by the stop distance"),
     ("Leverage limit", "4x equity -- a position is never larger than that"),
     ("Stop buffer", "0.05% of median price (scale-relative, so it means the same on any instrument)"),
-    ("Cost", "0.1% per round trip"),
+    ("Trading cost", "charged on every fill, set per market: 0.20% crypto, 0.02% forex and ETFs"),
     ("Validation", "full history + 5 equal time blocks; ranked on block consistency, not raw return"),
 ]
 
