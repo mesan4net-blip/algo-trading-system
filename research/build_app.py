@@ -1,166 +1,322 @@
-"""build_app.py — run the plan on every stored instrument and generate the app page."""
+"""build_app.py — run the plan on every stored instrument and generate the bench page."""
 import os, json, datetime, warnings
 warnings.filterwarnings('ignore')
 import test_plan as TP
 from runner import run_instrument, REPO, DATA
 
 STRATEGIES = [
-    ("Full Alignment", "3SHA-FA", "validated", "All three timeframes agree for the first time."),
-    ("Partial Alignment", "", "not built", "Two of the three timeframes agree."),
-    ("Full Cluster Cross", "", "not built", "All three SHA bodies cross together."),
-    ("Pullback Resume", "", "not built", "Re-entry after a pullback inside an existing trend."),
-    ("Early Trend", "", "not built", "Earliest turn signal, before full agreement."),
-    ("Trend Continuation", "", "not built", "Adds while a trend is already running."),
-    ("HTF2 Price Cross", "", "not built", "Price crosses the high-timeframe body."),
-    ("HTF1 Price Cross", "", "not built", "Price crosses the mid-timeframe body."),
+    ("Full alignment", "live", "All three timeframes agree for the first time."),
+    ("Partial alignment", "planned", "Two of the three agree."),
+    ("Full cluster cross", "planned", "All three bodies cross together."),
+    ("Pullback resume", "planned", "Re-entry after a dip inside a live trend."),
+    ("Early trend", "planned", "The first turn, before full agreement."),
+    ("Trend continuation", "planned", "Adds while a trend is already running."),
+    ("High-timeframe cross", "planned", "Price crosses the slow trend body."),
+    ("Mid-timeframe cross", "planned", "Price crosses the mid trend body."),
 ]
 
 CSS = """
-:root{--bg:#0e141b;--pan:#141c26;--pan2:#111823;--line:#243040;--ink:#e9e7df;--mut:#8a97a8;--dim:#5f6b7a;
---amber:#d9a441;--teal:#57bf9f;--rose:#d76d81;--head:#0b1017}
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Karla:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+:root{
+--paper:#F5F8F2; --card:#FFFFFF; --ink:#16241E; --soft:#54655C; --faint:#8FA096;
+--grow:#2E7A5A; --grow-lt:#E4F0E7; --honey:#B87A16; --honey-lt:#FAF0DC; --clay:#A9483A; --clay-lt:#F8E9E5;
+--line:#E1E9DE; --line2:#CBD8C8;
+--dsp:'Fraunces',Georgia,serif; --ui:'Karla',system-ui,sans-serif; --mono:'IBM Plex Mono',monospace;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:32px 20px 70px}
-h1{font:600 15px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.15em;text-transform:uppercase;color:var(--amber);margin:0 0 6px}
-.lead{color:var(--mut);max-width:74ch;margin:0}
-.gen{color:var(--dim);font:11.5px ui-monospace,monospace;margin-top:6px}
-.sec{margin-top:30px}
-.sech{font:600 12px ui-monospace,monospace;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin:0 0 10px}
-.card{background:var(--pan);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
-.pgrid{display:grid;grid-template-columns:minmax(150px,auto) 1fr;gap:9px 18px;font-size:13px;align-items:baseline}
-.pname{color:var(--ink)}
-.pvals{font:12.5px ui-monospace,monospace;color:var(--amber)}
-.pplain{grid-column:1/-1;color:var(--dim);font-size:12px;margin:-4px 0 6px;padding-left:2px}
-.tot{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font:12px ui-monospace,monospace;color:var(--mut)}
-.tot b{color:var(--ink);font-weight:600}
-.fx{display:grid;grid-template-columns:minmax(140px,auto) 1fr;gap:5px 16px;font-size:12px;color:var(--mut);margin-top:10px}
-.fx span:nth-child(odd){color:var(--dim)}
-.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-.scard{background:var(--pan);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
-.scard.on{border-color:#2f5d4d}
-.sn{font-size:13.5px;font-weight:600;margin:0}
-.sd{font-size:12px;color:var(--dim);margin:3px 0 0}
-.pill{display:inline-block;font:10.5px ui-monospace,monospace;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--mut);margin-top:8px}
-.pill.ok{color:var(--teal);border-color:#2f5d4d}
-.inst{background:var(--pan);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}
-.ihead{padding:14px 18px;background:var(--head);display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline}
-.iname{font:600 15px ui-monospace,monospace}
-.imeta{color:var(--mut);font:12px ui-monospace,monospace}
-.ibody{padding:14px 18px}
-.tt{width:100%;border-collapse:collapse;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
-.tt th{color:var(--dim);text-align:right;padding:6px 7px;border-bottom:1px solid var(--line);font-weight:500;white-space:nowrap}
-.tt th.l,.tt td.l{text-align:left}
-.tt td{padding:7px 7px;border-bottom:1px solid #1b2530;text-align:right;white-space:nowrap}
-.rank{color:var(--amber);font-weight:600}
-.pos{color:var(--teal)}.neg{color:var(--rose)}
-.v-holds{background:#123328;color:var(--teal);padding:2px 8px;border-radius:20px;font-size:11px}
-.v-fragile{background:#332a12;color:var(--amber);padding:2px 8px;border-radius:20px;font-size:11px}
-.v-fails{background:#331a1f;color:var(--rose);padding:2px 8px;border-radius:20px;font-size:11px}
-.v-thin{background:#1c242e;color:var(--dim);padding:2px 8px;border-radius:20px;font-size:11px}
-details.all{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
-details.all>summary{cursor:pointer;color:var(--mut);font:12px ui-monospace,monospace;list-style:none}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 var(--ui);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px 96px}
+code{font:400 13px var(--mono);background:var(--grow-lt);padding:2px 6px;border-radius:4px}
+
+.hero{padding:72px 0 40px}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--grow);margin:0 0 22px}
+.hero h1{font:600 clamp(40px,6.5vw,72px)/1.02 var(--dsp);font-variation-settings:'SOFT' 40,'WONK' 1;letter-spacing:-.02em;margin:0 0 20px;max-width:16ch}
+.hero p{font-size:18px;line-height:1.6;color:var(--soft);max-width:56ch;margin:0}
+
+.mstrip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);
+border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:44px}
+.m{background:var(--card);padding:20px 22px}
+.m .n{font:600 34px/1 var(--dsp);font-variation-settings:'SOFT' 40;letter-spacing:-.02em;display:block}
+.m .l{font:500 12px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:9px;display:block}
+
+.sec{margin-top:76px}
+.sh{display:flex;align-items:baseline;gap:14px;margin:0 0 8px;flex-wrap:wrap}
+.sh h2{font:600 30px/1.15 var(--dsp);font-variation-settings:'SOFT' 40;letter-spacing:-.015em;margin:0}
+.sh .tag{font:500 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+.sub{color:var(--soft);max-width:62ch;margin:0 0 26px;font-size:15.5px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px 28px}
+
+.grove{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-bottom:14px}
+.gtop{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.gtop .nm{font:600 21px/1 var(--dsp);font-variation-settings:'SOFT' 40}
+.gtop .meta{font:400 12.5px/1 var(--mono);color:var(--faint)}
+.gtop .score{margin-left:auto;font:500 12.5px/1 var(--mono);color:var(--grow)}
+.grows{margin-top:16px}
+.grow-row{display:flex;align-items:center;gap:11px;margin-bottom:5px}
+.grow-row .sha{font:500 11.5px/1 var(--mono);color:var(--faint);width:46px;text-align:right;flex:none}
+.cells{display:flex;gap:2px;flex-wrap:nowrap;flex:1}
+.c{height:15px;flex:1;border-radius:2px;background:#EDF1EA}
+.c.h{background:var(--grow)}
+.c.f{background:var(--honey)}
+.c.x{background:#E6EBE3}
+.c.t{background:#F0F3EE}
+.legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid var(--line);
+font:400 12.5px/1 var(--mono);color:var(--soft);align-items:center}
+.legend i{width:11px;height:11px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:-1px}
+
+.plan{display:grid;grid-template-columns:minmax(160px,auto) 1fr;gap:0 26px}
+.plan .k{padding:15px 0;border-top:1px solid var(--line);font-weight:600;font-size:15px}
+.plan .v{padding:15px 0;border-top:1px solid var(--line)}
+.plan .k.first,.plan .v.first{border-top:none}
+.plan .vals{font:500 13.5px/1.7 var(--mono);color:var(--grow)}
+.plan .why{color:var(--soft);font-size:14px;margin-top:3px}
+.fixed{margin-top:24px;padding-top:20px;border-top:1px solid var(--line);
+display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:11px 30px}
+.fixed div{font-size:13.5px;color:var(--soft);display:flex;gap:9px}
+.fixed b{color:var(--ink);font-weight:600;flex:none;min-width:118px}
+
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));gap:12px}
+.scard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.scard.live{border-color:var(--grow);background:var(--grow-lt)}
+.scard h3{font:600 17px/1.2 var(--dsp);font-variation-settings:'SOFT' 40;margin:0 0 5px}
+.scard p{font-size:13.5px;color:var(--soft);margin:0 0 12px;line-height:1.5}
+.st{font:500 10.5px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.scard.live .st{color:var(--grow)}
+
+.inst{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-bottom:14px}
+.ih{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap;margin-bottom:18px}
+.ih .nm{font:600 24px/1 var(--dsp);font-variation-settings:'SOFT' 40;letter-spacing:-.01em}
+.ih .meta{font:400 12.5px/1.5 var(--mono);color:var(--faint)}
+.pick{display:flex;gap:15px;align-items:flex-start;padding:15px 0;border-top:1px solid var(--line)}
+.pick .rk{font:600 15px/1 var(--dsp);color:var(--faint);width:19px;flex:none;padding-top:3px}
+.pick .body{flex:1;min-width:0}
+.pick .set{font:500 13.5px/1.5 var(--mono);word-break:break-word}
+.pick .nums{display:flex;gap:19px;flex-wrap:wrap;margin-top:7px;font-size:13px;color:var(--soft)}
+.pick .nums b{color:var(--ink);font-weight:600;font-family:var(--mono)}
+.vb{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-radius:20px;flex:none}
+.vb.holds{background:var(--grow-lt);color:var(--grow)}
+.vb.fragile{background:var(--honey-lt);color:var(--honey)}
+.vb.fails{background:var(--clay-lt);color:var(--clay)}
+.vb.thin{background:#EEF1EC;color:var(--faint)}
+.blocks{display:inline-flex;gap:3px;vertical-align:-1px;margin-left:3px}
+.blocks i{width:7px;height:7px;border-radius:50%;background:#DCE4D9;display:inline-block}
+.blocks i.on{background:var(--grow)}
+.readnote{margin-top:16px;padding:13px 16px;background:var(--grow-lt);border-radius:10px;font-size:13.5px;color:#28503F}
+
+details.all{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+details.all>summary{cursor:pointer;font:500 13px/1 var(--mono);color:var(--grow);list-style:none}
 details.all>summary::-webkit-details-marker{display:none}
-details.all>summary::before{content:"\\25B8 ";color:var(--amber)}
-details.all[open]>summary::before{content:"\\25BE "}
-.scroll{overflow:auto;max-height:460px;margin-top:10px}
-.note{border-left:2px solid var(--amber);background:#121a23;padding:9px 13px;margin:12px 0;font-size:12.5px;color:#c9cfd8}
-.steps{counter-reset:s;list-style:none;padding:0;margin:0}
-.steps li{counter-increment:s;position:relative;padding-left:30px;margin-bottom:11px;font-size:13px;color:var(--mut)}
-.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:20px;height:20px;border-radius:50%;background:var(--head);border:1px solid var(--line);color:var(--amber);font:11px/19px ui-monospace,monospace;text-align:center}
-.steps b{color:var(--ink);font-weight:600}
-.dt{width:100%;border-collapse:collapse;font:12px ui-monospace,monospace;margin-top:10px}
-.dt td{padding:5px 8px;border-bottom:1px solid #1b2530;color:var(--mut)}
-.dt td:first-child{color:var(--ink)}
-.dt td:last-child{text-align:right;color:var(--dim)}
-.foot{color:var(--dim);font:11px ui-monospace,monospace;margin-top:26px;border-top:1px solid var(--line);padding-top:12px}
+details.all>summary::before{content:"+ ";font-weight:600}
+details.all[open]>summary::before{content:"\\2013 "}
+.scroll{overflow:auto;max-height:440px;margin-top:14px;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font:400 12.5px/1.5 var(--mono)}
+th{position:sticky;top:0;background:#F0F4EE;color:var(--soft);text-align:right;padding:9px 10px;font-weight:500;
+white-space:nowrap;border-bottom:1px solid var(--line)}
+th.l,td.l{text-align:left}
+td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid #F0F3EE}
+tbody tr:hover td{background:#F7FAF5}
+.pos{color:var(--grow)}.neg{color:var(--clay)}
+
+.steps{list-style:none;padding:0;margin:0;counter-reset:s}
+.steps li{counter-increment:s;position:relative;padding-left:44px;margin-bottom:20px}
+.steps li:last-child{margin-bottom:0}
+.steps li::before{content:counter(s);position:absolute;left:0;top:-2px;width:29px;height:29px;border-radius:50%;
+background:var(--grow-lt);color:var(--grow);font:600 14px/29px var(--dsp);text-align:center}
+.steps h4{margin:0 0 3px;font-size:15.5px;font-weight:600}
+.steps p{margin:0;color:var(--soft);font-size:14px;line-height:1.55}
+.honest{margin-top:24px;padding:15px 18px;background:var(--honey-lt);border-radius:10px;font-size:14px;color:#6E4A0C}
+.stored{margin-top:26px;padding-top:20px;border-top:1px solid var(--line)}
+.stored h4{font:500 11.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+.srow{display:flex;gap:14px;align-items:baseline;padding:8px 0;border-bottom:1px solid #F0F3EE;font-size:13.5px;flex-wrap:wrap}
+.srow .i{font-weight:600;min-width:78px;font-family:var(--mono);font-size:13px}
+.srow .t{color:var(--faint);font-family:var(--mono);font-size:12.5px}
+
+.foot{margin-top:80px;padding-top:26px;border-top:1px solid var(--line2);color:var(--faint);font-size:13.5px}
+.foot .line{font:400 19px/1.5 var(--dsp);color:var(--soft);margin:0 0 10px;max-width:44ch}
+
+@media(max-width:640px){
+.plan{grid-template-columns:1fr;gap:0}
+.plan .v{padding-top:0;border-top:none}
+.pick{flex-wrap:wrap}
+.grow-row .sha{width:40px}
+}
+@media(prefers-reduced-motion:no-preference){
+.reveal{opacity:0;transform:translateY(14px);animation:up .7s cubic-bezier(.2,.7,.3,1) forwards}
+@keyframes up{to{opacity:1;transform:none}}
+}
 """
 
+VMAP = {'holds': 'h', 'fragile': 'f', 'fails': 'x', 'thin': 't'}
 
-def fmt_num(v, plus=False):
+
+def num(v, plus=False):
     cls = 'pos' if v > 0 else 'neg' if v < 0 else ''
-    s = f"{'+' if plus and v > 0 else ''}{v}"
-    return f'<td class="{cls}">{s}</td>'
+    return f'<td class="{cls}">{"+" if plus and v > 0 else ""}{v}</td>'
 
 
-def row_html(r, rank=None):
-    setting = f"{r['sha']} · {r['exit']} · {r['anchor']} · {r['basis']} · {r['stop']} · {r['risk']}%"
-    rk = f'<td class="rank">{rank}</td>' if rank else '<td></td>'
-    return (f"<tr>{rk}<td class='l'>{setting}</td><td>{r['trades']}</td><td>{r['win']}</td>"
-            f"{fmt_num(r['ret'], True)}{fmt_num(r['maxdd'])}{fmt_num(r['retdd'])}"
-            f"<td>{r['blocks']}/{r['nblocks']}</td>"
-            f"<td><span class='v-{r['verdict']}'>{r['verdict']}</span></td></tr>")
+def blocks_dots(r):
+    return ('<span class="blocks">' +
+            ''.join(f'<i class="{"on" if i < r["blocks"] else ""}"></i>' for i in range(r['nblocks'])) +
+            '</span>')
 
 
-HEAD = ("<tr><th></th><th class='l'>Setting</th><th>Trades</th><th>Win%</th>"
-        "<th>Return%</th><th>MaxDrop%</th><th>Profit&divide;Pain</th><th>Blocks+</th><th>Verdict</th></tr>")
+def setting_str(r):
+    return f"{r['sha']} · {r['exit']} flip · {r['anchor']} · {r['basis']} · {r['stop']} · risk {r['risk']}%"
+
+
+def pick_html(r, rank):
+    return f'''<div class="pick"><span class="rk">{rank}</span><div class="body">
+<div class="set">{setting_str(r)}</div>
+<div class="nums"><span>{r['trades']} trades</span><span>{r['win']}% won</span>
+<span>return <b>{'+' if r['ret']>0 else ''}{r['ret']}%</b></span>
+<span>worst dip <b>{r['maxdd']}%</b></span>
+<span>profit&divide;pain <b>{r['retdd']}</b></span>
+<span>{r['blocks']} of {r['nblocks']} periods{blocks_dots(r)}</span></div></div>
+<span class="vb {r['verdict']}">{r['verdict']}</span></div>'''
+
+
+HEAD = ("<tr><th class='l'>Setting</th><th>Trades</th><th>Win%</th><th>Return%</th>"
+        "<th>Worst dip%</th><th>Profit&divide;pain</th><th>Periods</th><th class='l'>Verdict</th></tr>")
+
+
+def row_html(r):
+    return (f"<tr><td class='l'>{setting_str(r)}</td><td>{r['trades']}</td><td>{r['win']}</td>"
+            f"{num(r['ret'], True)}{num(r['maxdd'])}{num(r['retdd'])}"
+            f"<td>{r['blocks']}/{r['nblocks']}</td><td class='l'>{r['verdict']}</td></tr>")
+
+
+def grove_html(res):
+    by_sha = {}
+    for r in res['all_runs']:
+        by_sha.setdefault(r['sha'], []).append(r)
+    order = [TP.PLAN['sha']['fmt'](v) for v in TP.PLAN['sha']['values']]
+    rows = ''
+    for sha in order:
+        rs = sorted(by_sha.get(sha, []), key=lambda x: x['idx'])
+        cells = ''
+        for r in rs:
+            tip = ''
+            if r['verdict'] in ('holds', 'fragile'):
+                tip = f' title="{setting_str(r)} — profit/pain {r["retdd"]}, {r["blocks"]}/{r["nblocks"]} periods"'
+            cells += f'<span class="c {VMAP[r["verdict"]]}"{tip}></span>'
+        rows += f'<div class="grow-row"><span class="sha">{sha}</span><span class="cells">{cells}</span></div>'
+    held = res['n_holds']
+    n = max(len(res['all_runs']), 1)
+    pct = round(held / n * 100)
+    return f'''<div class="grove">
+<div class="gtop"><span class="nm">{res['instrument']}</span>
+<span class="meta">{res['span']} · {res['bars']:,} bars</span>
+<span class="score">{held} of {n} held ({pct}%)</span></div>
+<div class="grows">{rows}</div>
+<div class="legend"><span><i style="background:var(--grow)"></i>held</span>
+<span><i style="background:var(--honey)"></i>fragile</span>
+<span><i style="background:#E6EBE3"></i>failed</span>
+<span style="color:var(--faint)">each row is one smoothing setting · each mark one of 108 variations</span></div></div>'''
 
 
 def build(results, manifest):
-    now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+    now = datetime.datetime.utcnow().strftime('%d %B %Y')
+    total_runs = sum(len(r['all_runs']) for r in results)
+    total_holds = sum(r['n_holds'] for r in results)
+    live = sum(1 for s in STRATEGIES if s[1] == 'live')
 
-    # 1. test plan
-    plan = '<div class="card"><div class="pgrid">'
-    for k, v in TP.PLAN.items():
+    metrics = f'''<div class="mstrip">
+<div class="m"><span class="n">{len(results)}</span><span class="l">markets tested</span></div>
+<div class="m"><span class="n">{total_runs:,}</span><span class="l">backtests run</span></div>
+<div class="m"><span class="n">{total_holds}</span><span class="l">settings that held</span></div>
+<div class="m"><span class="n">{live}<span style="color:var(--faint);font-size:22px"> / {len(STRATEGIES)}</span></span><span class="l">signals built</span></div>
+</div>'''
+
+    plan = '<div class="card"><div class="plan">'
+    for i, (k, v) in enumerate(TP.PLAN.items()):
+        f = ' first' if i == 0 else ''
         vals = " · ".join(str(v['fmt'](x)) for x in v['values'])
-        plan += f'<span class="pname">{v["label"]}</span><span class="pvals">{vals}</span>'
-        plan += f'<span class="pplain">{v["plain"]}</span>'
-    plan += '</div>'
-    plan += f'<div class="tot"><b>{TP.count()}</b> combinations per strategy, per instrument &nbsp;·&nbsp; every instrument gets the identical grid</div>'
-    plan += '<div class="fx">' + ''.join(f'<span>{a}</span><span>{b}</span>' for a, b in TP.FIXED) + '</div></div>'
+        plan += f'<div class="k{f}">{v["label"]}</div><div class="v{f}"><div class="vals">{vals}</div><div class="why">{v["plain"]}</div></div>'
+    plan += '</div><div class="fixed">'
+    plan += ''.join(f'<div><b>{a}</b><span>{b}</span></div>' for a, b in TP.FIXED)
+    plan += '</div></div>'
 
-    # 2. strategies
-    sg = '<div class="sgrid">'
-    for name, code, status, desc in STRATEGIES:
-        on = ' on' if status == 'validated' else ''
-        pill = f'<span class="pill ok">{status}</span>' if status == 'validated' else f'<span class="pill">{status}</span>'
-        sg += f'<div class="scard{on}"><p class="sn">{name}</p><p class="sd">{desc}</p>{pill}</div>'
-    sg += '</div>'
+    sg = '<div class="sgrid">' + ''.join(
+        f'<div class="scard{" live" if st=="live" else ""}"><h3>{n}</h3><p>{d}</p><span class="st">{st}</span></div>'
+        for n, st, d in STRATEGIES) + '</div>'
 
-    # 3. instruments
+    groves = ''.join(grove_html(r) for r in results)
+
     ins = ''
     for res in results:
-        blk_len = res['bars'] // TP.BLOCKS
-        top = ''.join(row_html(r, i + 1) for i, r in enumerate(res['top']))
-        if not top:
-            top = '<tr><td colspan="9" style="text-align:left;color:var(--dim)">No setting produced enough trades to judge.</td></tr>'
-        allrows = ''.join(row_html(r) for r in res['all_runs'])
-        ins += f'''<div class="inst">
-<div class="ihead"><span class="iname">{res['instrument']}</span>
-<span class="imeta">{res['base_tf']} base · {res['htf1_tf']} + {res['htf2_tf']} filters · {res['span']} · {res['bars']:,} bars</span>
-<span class="imeta">{res['n_holds']} of {TP.count()} settings hold</span></div>
-<div class="ibody">
-<table class="tt">{HEAD}{top}</table>
-<div class="note">Ranked by how many independent time blocks stayed profitable, then by profit-to-pain — not by raw return. Each block here is about {blk_len:,} bars.</div>
-<details class="all"><summary>All {len(res['all_runs'])} runs</summary><div class="scroll"><table class="tt">{HEAD}{allrows}</table></div></details>
-</div></div>'''
+        blk = res['bars'] // TP.BLOCKS
+        picks = ''.join(pick_html(r, i + 1) for i, r in enumerate(res['top']))
+        if not picks:
+            picks = '<div class="pick"><div class="body"><div class="set">Nothing traded enough to judge.</div></div></div>'
+        allr = ''.join(row_html(r) for r in res['all_runs'])
+        ins += f'''<div class="inst"><div class="ih"><span class="nm">{res['instrument']}</span>
+<span class="meta">{res['base_tf']} chart · {res['htf1_tf']} and {res['htf2_tf']} filters · {res['span']}</span></div>
+{picks}
+<div class="readnote">Ranked by how many separate periods stayed profitable, then by profit against pain — never by return alone. Each period here covers about {blk:,} bars.</div>
+<details class="all"><summary>Show all {len(res['all_runs'])} variations</summary>
+<div class="scroll"><table>{HEAD}{allr}</table></div></details></div>'''
 
-    # 4. run page
-    dt = ''
+    stored = ''
     for inst, v in manifest['instruments'].items():
-        tfs = ', '.join(f"{k} ({v['timeframes'][k]['bars']:,})" for k in v['timeframes'])
-        dt += f"<tr><td>{inst}</td><td>{v['venue']}</td><td>{tfs}</td></tr>"
+        tfs = ' · '.join(f"{k} {v['timeframes'][k]['bars']:,}" for k in v['timeframes'])
+        stored += f'<div class="srow"><span class="i">{inst}</span><span class="t">{v["venue"]}</span><span class="t">{tfs}</span></div>'
+
     run = f'''<div class="card">
 <ol class="steps">
-<li><b>Upload the data</b> in chat and name the instrument. Any number of timeframe files — 4h, daily and weekly are the minimum this plan needs.</li>
-<li><b>Files are stored in the repo</b> under <code>data/&lt;INSTRUMENT&gt;/</code> so they never need re-uploading.</li>
-<li><b>The full plan runs</b> — {TP.count()} combinations per strategy — and every setting is checked across {TP.BLOCKS} independent time blocks.</li>
-<li><b>This page regenerates</b> with a new instrument section: top 3 settings, plus the full grid underneath.</li>
+<li><h4>Bring the market</h4><p>Upload any number of timeframe files and name the instrument. The plan needs a 4-hour chart plus daily and weekly at minimum.</p></li>
+<li><h4>It gets kept</h4><p>Files are stored in the repository under <code>data/</code>, so a market only ever has to be uploaded once.</p></li>
+<li><h4>Every variation runs</h4><p>All {TP.count()} combinations, then each one re-checked across {TP.BLOCKS} separate stretches of history.</p></li>
+<li><h4>The page grows</h4><p>A new section appears here with the settings that held, and the full grid underneath.</p></li>
 </ol>
-<div class="note">This page is the record, not the machine — it can't run the engine itself. Saying "run &lt;instrument&gt;" in chat is what starts a test.</div>
-<p style="color:var(--dim);font:11.5px ui-monospace,monospace;margin:14px 0 0">Data currently stored</p>
-<table class="dt">{dt}</table></div>'''
+<div class="honest">This page is the record, not the engine — it can't run a test on its own. Saying <b>run &lt;market&gt;</b> in chat is what starts one.</div>
+<div class="stored"><h4>Markets held in the repository</h4>{stored}</div></div>'''
 
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>3SHA Test Bench</title>
-<style>{CSS}</style></head><body><div class="wrap">
-<h1>3SHA Test Bench</h1>
-<p class="lead">One fixed test plan, applied identically to every instrument. Settings are ranked by whether they survive across independent time periods — a high return that only works once ranks below a modest one that keeps working.</p>
-<p class="gen">generated {now}</p>
-<div class="sec"><p class="sech">1 · Test plan</p>{plan}</div>
-<div class="sec"><p class="sech">2 · Strategies</p>{sg}</div>
-<div class="sec"><p class="sech">3 · Instruments — top settings</p>{ins}</div>
-<div class="sec"><p class="sech">4 · Run</p>{run}</div>
-<p class="foot">Engine reconciled to TradingView to the penny (entries, position state, stop levels). Backtests only — no live trading result is implied.</p>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3SHA — research bench</title><style>{CSS}</style></head><body><div class="wrap">
+
+<header class="hero reveal">
+<p class="eyebrow">3SHA · research bench</p>
+<h1>What holds up when you actually check.</h1>
+<p>One idea, {TP.count()} ways to trade it, put through the same honest examination on every market. Most of them fail — and knowing exactly which ones, and where, is worth more than any single good result.</p>
+{metrics}
+</header>
+
+<section class="sec">
+<div class="sh"><h2>The terrain</h2><span class="tag">every variation, at a glance</span></div>
+<p class="sub">Each mark is one complete backtest. Green survived across separate stretches of history; amber held only partly; pale ones didn't make it. A real edge shows up as a band of green, not a lone bright dot.</p>
+{groves}
+</section>
+
+<section class="sec">
+<div class="sh"><h2>What gets tested</h2><span class="tag">the fixed plan</span></div>
+<p class="sub">Every market is put through this identical grid, so results can be compared instead of each one being quietly tuned to look good.</p>
+{plan}
+</section>
+
+<section class="sec">
+<div class="sh"><h2>The signals</h2><span class="tag">{live} of {len(STRATEGIES)} built</span></div>
+<p class="sub">Each entry type is built and proven on its own before any of them are combined.</p>
+{sg}
+</section>
+
+<section class="sec">
+<div class="sh"><h2>What survived</h2><span class="tag">best settings per market</span></div>
+<p class="sub">The three strongest settings for each market, with the full grid kept underneath so nothing is hidden.</p>
+{ins}
+</section>
+
+<section class="sec">
+<div class="sh"><h2>Add a market</h2></div>
+{run}
+</section>
+
+<footer class="foot">
+<p class="line">Built slowly, on purpose. Every number here is a backtest — a careful record of the past, never a promise about what comes next.</p>
+<p>Engine reconciled to TradingView to the penny: entries, position state and stop levels all match. Generated {now}.</p>
+</footer>
 </div></body></html>'''
 
 
@@ -174,8 +330,4 @@ if __name__ == "__main__":
     json.dump(results, open(os.path.join(out, "instrument_results.json"), "w"), indent=1)
     html = build(results, manifest)
     open(os.path.join(out, "index.html"), "w").write(html)
-    print(f"wrote index.html ({len(html)//1024} KB) · {sum(len(r['all_runs']) for r in results)} total runs")
-    for r in results:
-        t = r['top'][0] if r['top'] else None
-        print(f"  {r['instrument']:8s} holds={r['n_holds']:3d}  best={t['sha']+' '+t['exit'] if t else '-'} "
-              f"r/DD={t['retdd'] if t else '-'} blocks={str(t['blocks'])+'/5' if t else '-'}")
+    print(f"wrote index.html ({len(html)//1024} KB) · {sum(len(r['all_runs']) for r in results)} runs")

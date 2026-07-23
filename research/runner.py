@@ -87,6 +87,7 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True)
                 bl.append(metrics(backtest(get_seg(combo['sha'], i, c), c))['retdd'])
         bp = sum(1 for x in bl if x > 0)
         rows.append(dict(
+            idx=j,
             sha=f"{combo['sha'][0]},{combo['sha'][1]}", exit=combo['exit'],
             anchor=combo['anchor'], basis=combo['basis'],
             stop=combo['stop_style'], risk=combo['risk'],
