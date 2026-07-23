@@ -142,7 +142,7 @@ fa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bea
 // ④ INITIAL STOP LOSS  (hard invalidation + sizing anchor)
 // ============================================================================
 grp_sl = "④ ━━━ INITIAL STOP ━━━"
-sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body"], tooltip="Trigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
+sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body","Last Price Cross — Nearest SHA","Last Price Cross — Furthest SHA","Last SHA Cross — Nearest SHA","Last SHA Cross — Furthest SHA"], tooltip="Trigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
 sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
 sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($). Stop is CLOSE-based.", group=grp_sl)
@@ -169,19 +169,85 @@ trig_high_lvl = sl_use_body ? body_high : high
 sw_low_lvl    = sl_use_body ? swing_low_body  : swing_low_wick
 sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
 
+// ── LAST-CROSS ANCHORS ─────────────────────────────────────────────────────
+// "The last candle that had any part BELOW the SHA" (mirrored for shorts).
+// Tracked forward one bar at a time (O(1)) rather than searched backwards, so
+// there is NO lookback limit — the anchor can be any distance away.
+// Basis follows the Anchor Uses setting: Body compares body edges only and
+// ignores wicks on both the candle and the SHA; Wick compares full extremes.
+// "Nearest / furthest" is decided at ENTRY time, by which of the two higher
+// SHA layers is closer to price right then.
+px_low_test  = sl_use_body ? body_low  : low
+px_high_test = sl_use_body ? body_high : high
+ha_low_test  = sl_use_body ? math.min(bO, bC) : bL
+ha_high_test = sl_use_body ? math.max(bO, bC) : bH
+h1_bot_edge  = sl_use_body ? sha_bot_1 : h1L
+h1_top_edge  = sl_use_body ? sha_top_1 : h1H
+h2_bot_edge  = sl_use_body ? sha_bot_2 : h2L
+h2_top_edge  = sl_use_body ? sha_top_2 : h2H
+
+var float xl_px_h1 = na, var float xl_px_h2 = na
+var float xl_ha_h1 = na, var float xl_ha_h2 = na
+var float xh_px_h1 = na, var float xh_px_h2 = na
+var float xh_ha_h1 = na, var float xh_ha_h2 = na
+if not na(h1_bot_edge) and px_low_test  < h1_bot_edge
+    xl_px_h1 := px_low_test
+if not na(h2_bot_edge) and px_low_test  < h2_bot_edge
+    xl_px_h2 := px_low_test
+if not na(h1_bot_edge) and ha_low_test  < h1_bot_edge
+    xl_ha_h1 := ha_low_test
+if not na(h2_bot_edge) and ha_low_test  < h2_bot_edge
+    xl_ha_h2 := ha_low_test
+if not na(h1_top_edge) and px_high_test > h1_top_edge
+    xh_px_h1 := px_high_test
+if not na(h2_top_edge) and px_high_test > h2_top_edge
+    xh_px_h2 := px_high_test
+if not na(h1_top_edge) and ha_high_test > h1_top_edge
+    xh_ha_h1 := ha_high_test
+if not na(h2_top_edge) and ha_high_test > h2_top_edge
+    xh_ha_h2 := ha_high_test
+
+// Which higher layer is nearer to price right now
+d_h1_bot = na(h1_bot_edge) ? 1e18 : math.abs(close - h1_bot_edge)
+d_h2_bot = na(h2_bot_edge) ? 1e18 : math.abs(close - h2_bot_edge)
+d_h1_top = na(h1_top_edge) ? 1e18 : math.abs(close - h1_top_edge)
+d_h2_top = na(h2_top_edge) ? 1e18 : math.abs(close - h2_top_edge)
+near_is_h1_long  = d_h1_bot <= d_h2_bot
+near_is_h1_short = d_h1_top <= d_h2_top
+
 f_long_stop() =>
-    _lvl = sl_mode == "Trigger Candle"       ? trig_low_lvl
-      :    sl_mode == "Swing (Prev N Bars)"  ? sw_low_lvl
-      :    sl_mode == "HTF1 SHA Body"        ? sha_bot_1
-      :                                        sha_bot_2
+    _near = near_is_h1_long
+    _lcp  = _near ? xl_px_h1 : xl_px_h2
+    _lcpF = _near ? xl_px_h2 : xl_px_h1
+    _lch  = _near ? xl_ha_h1 : xl_ha_h2
+    _lchF = _near ? xl_ha_h2 : xl_ha_h1
+    _lvl = sl_mode == "Trigger Candle"                  ? trig_low_lvl
+      :    sl_mode == "Swing (Prev N Bars)"             ? sw_low_lvl
+      :    sl_mode == "HTF1 SHA Body"                   ? sha_bot_1
+      :    sl_mode == "HTF2 SHA Body"                   ? sha_bot_2
+      :    sl_mode == "Last Price Cross — Nearest SHA"  ? (na(_lcp)  ? sw_low_lvl : _lcp)
+      :    sl_mode == "Last Price Cross — Furthest SHA" ? (na(_lcpF) ? sw_low_lvl : _lcpF)
+      :    sl_mode == "Last SHA Cross — Nearest SHA"    ? (na(_lch)  ? sw_low_lvl : _lch)
+      :    sl_mode == "Last SHA Cross — Furthest SHA"   ? (na(_lchF) ? sw_low_lvl : _lchF)
+      :                                                   sw_low_lvl
     _s = _lvl - sl_buffer_raw
     min_stop_raw > 0 ? math.min(_s, close - min_stop_raw) : _s
 
 f_short_stop() =>
-    _lvl = sl_mode == "Trigger Candle"       ? trig_high_lvl
-      :    sl_mode == "Swing (Prev N Bars)"  ? sw_high_lvl
-      :    sl_mode == "HTF1 SHA Body"        ? sha_top_1
-      :                                        sha_top_2
+    _near = near_is_h1_short
+    _hcp  = _near ? xh_px_h1 : xh_px_h2
+    _hcpF = _near ? xh_px_h2 : xh_px_h1
+    _hch  = _near ? xh_ha_h1 : xh_ha_h2
+    _hchF = _near ? xh_ha_h2 : xh_ha_h1
+    _lvl = sl_mode == "Trigger Candle"                  ? trig_high_lvl
+      :    sl_mode == "Swing (Prev N Bars)"             ? sw_high_lvl
+      :    sl_mode == "HTF1 SHA Body"                   ? sha_top_1
+      :    sl_mode == "HTF2 SHA Body"                   ? sha_top_2
+      :    sl_mode == "Last Price Cross — Nearest SHA"  ? (na(_hcp)  ? sw_high_lvl : _hcp)
+      :    sl_mode == "Last Price Cross — Furthest SHA" ? (na(_hcpF) ? sw_high_lvl : _hcpF)
+      :    sl_mode == "Last SHA Cross — Nearest SHA"    ? (na(_hch)  ? sw_high_lvl : _hch)
+      :    sl_mode == "Last SHA Cross — Furthest SHA"   ? (na(_hchF) ? sw_high_lvl : _hchF)
+      :                                                   sw_high_lvl
     _s = _lvl + sl_buffer_raw
     min_stop_raw > 0 ? math.max(_s, close + min_stop_raw) : _s
 
@@ -226,6 +292,7 @@ trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
 trail_buffer_units = input.float(2.0, "  Trail Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the trail anchor, in price points ($).", group=grp_mgmt)
 
+reverse_on_stop = input.bool(false, "Reverse On Stop", tooltip="When the stop is hit, immediately open the opposite side IF that side is fully aligned at that moment (and its direction is allowed, and the gap filter passes). Built to cut the sideways bleed of exiting and re-entering the same way. Note: it does NOT wait for a fresh alignment signal — the opposite alignment simply has to be present.\n\nFor hold-until-stopped behaviour, switch Alignment-Break Exit OFF: the stop then becomes the only way out, with break-even and the trail still tightening it.", group=grp_mgmt)
 use_align_exit = input.bool(true, "Alignment-Break Exit", tooltip="The signature Full-Alignment rule: the whole thesis is that all three timeframes agree, so exit when they stop agreeing. Close-based.", group=grp_mgmt)
 align_break_level = input.string("HTF1 Flips", "  Break Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], tooltip="Base Flips: tightest — exit the moment the chart-TF SHA turns against you.\nHTF1 Flips: exit when the MID-TF anchor turns (recommended balance).\nHTF2 Flips: loosest — only exit when the HIGH-TF turns.\nAny Layer Flips: exit if any single layer disagrees.\nAll Layers Flip: exit only on full opposite alignment.", group=grp_mgmt)
 
@@ -286,6 +353,7 @@ short_signal = allow_shorts and fa_bear_raw and in_date and not gap_block
 // Per-bar event flags (for markers)
 did_exit  = false
 did_enter = false
+stopped_from = ""   // "long"/"short" when a STOP (not an align break) closed a trade this bar
 exit_reason = ""
 
 // ── ALIGNMENT-BREAK condition (direction-aware) ──────────────────────────
@@ -348,6 +416,8 @@ if pos_dir == "long" and not na(stop_level)
         strategy.close_all(comment = _stop_hit ? "Stop" : "Align Break")
         did_exit := true
         exit_reason := _stop_hit ? "STOP" : "ALIGN"
+        if _stop_hit
+            stopped_from := "long"
         pos_dir := "flat"
         entry_price := na
         init_stop := na
@@ -382,6 +452,8 @@ else if pos_dir == "short" and not na(stop_level)
         strategy.close_all(comment = _stop_hit ? "Stop" : "Align Break")
         did_exit := true
         exit_reason := _stop_hit ? "STOP" : "ALIGN"
+        if _stop_hit
+            stopped_from := "short"
         pos_dir := "flat"
         entry_price := na
         init_stop := na
@@ -390,9 +462,15 @@ else if pos_dir == "short" and not na(stop_level)
         be_moved := false
         tp1_taken := false
 
+// ── REVERSE ON STOP ────────────────────────────────────────────────────────
+// Flip only if the opposite side is FULLY ALIGNED at this moment, its direction
+// is permitted, and the gap filter passes. It does not require a fresh signal.
+rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and in_date and not gap_block
+rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and in_date and not gap_block
+
 // ───────────────────────────────── ENTRIES ────────────────────────────────
 // Only when flat (possibly just made flat above → same-bar flip).
-if pos_dir == "flat" and long_signal
+if pos_dir == "flat" and (long_signal or rev_long)
     _stop = f_long_stop()
     if not na(_stop) and _stop < close
         entry_price := close
@@ -406,7 +484,7 @@ if pos_dir == "flat" and long_signal
         strategy.entry("FA", strategy.long, qty=f_qty(close, _stop))
         did_enter := true
 
-if pos_dir == "flat" and short_signal
+if pos_dir == "flat" and (short_signal or rev_short)
     _stop = f_short_stop()
     if not na(_stop) and _stop > close
         entry_price := close
