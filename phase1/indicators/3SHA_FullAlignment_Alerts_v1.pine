@@ -1,0 +1,322 @@
+//@version=6
+// ============================================================================
+// 3SHA — FULL ALIGNMENT ALERTS  (companion indicator to 3SHA-FA strategy)
+// ============================================================================
+// WHY A SEPARATE SCRIPT:
+//   TradingView does not allow alertcondition() inside a strategy, and a
+//   strategy only signals when it would actually TAKE a trade (flat-only,
+//   pyramiding=0) — so a condition met while already in a position is silent.
+//   This indicator fires on EVERY occurrence, and gives one alert per event
+//   type so sound/popup can be set separately for each.
+//
+// THE CALCULATION BLOCK BELOW MIRRORS 3SHA_FullAlignment_v1.pine VERBATIM.
+//   Do not edit it here independently. If the strategy changes, copy the
+//   change across and re-verify that the alignment output matches.
+//
+// ALERT SETUP (in TradingView, not in this code):
+//   Right-click chart -> Add alert -> Condition = "3SHA-FA Alerts" -> pick the
+//   event. Notifications tab: tick "Show popup" and "Play sound".
+//   SET TRIGGER TO "Once Per Bar Close". The signal is close-based; firing
+//   intrabar produces phantom alerts that vanish when the candle closes.
+// ============================================================================
+
+indicator("3SHA Full Alignment Alerts", shorttitle="3SHA-FA Alerts", overlay=true,
+     max_labels_count=500, max_lines_count=500)
+
+// ============================================================================
+// SHA FUNCTION — two-pass EMA -> HA -> EMA   (verbatim from the strategy)
+// ============================================================================
+f_sha(_len1, _len2, _o, _h, _l, _c) =>
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
+    haC = (o1 + h1 + l1 + c1) / 4.0
+    var float haO = na
+    haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
+    haH = math.max(h1, math.max(haO, haC))
+    haL = math.min(l1, math.min(haO, haC))
+    o2  = ta.ema(haO, _len2)
+    h2  = ta.ema(haH, _len2)
+    l2  = ta.ema(haL, _len2)
+    c2  = ta.ema(haC, _len2)
+    [o2, h2, l2, c2]
+
+// ============================================================================
+// ① SHA LAYERS
+// ============================================================================
+grp_base = "① ━━━ BASE LAYER (chart TF) ━━━"
+base_len1 = input.int(4, "Base Stage-1 EMA", minval=1, group=grp_base)
+base_len2 = input.int(8, "Base Stage-2 EMA", minval=1, group=grp_base)
+
+grp_htf1 = "② ━━━ HTF1 — MID LAYER ━━━"
+htf1_tf   = input.timeframe("60", "HTF1 Timeframe", group=grp_htf1)
+htf1_len1 = input.int(4, "HTF1 Stage-1 EMA", minval=1, group=grp_htf1)
+htf1_len2 = input.int(8, "HTF1 Stage-2 EMA", minval=1, group=grp_htf1)
+
+grp_htf2 = "③ ━━━ HTF2 — SLOW LAYER ━━━"
+htf2_tf   = input.timeframe("240", "HTF2 Timeframe", group=grp_htf2)
+htf2_len1 = input.int(4, "HTF2 Stage-1 EMA", minval=1, group=grp_htf2)
+htf2_len2 = input.int(8, "HTF2 Stage-2 EMA", minval=1, group=grp_htf2)
+
+// ── Compute layers (HTF smoothed natively inside request.security) ──────────
+[bO, bH, bL, bC]     = f_sha(base_len1, base_len2, open, high, low, close)
+[h1O, h1H, h1L, h1C] = request.security(syminfo.tickerid, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+[h2O, h2H, h2L, h2C] = request.security(syminfo.tickerid, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+
+day_open   = request.security(syminfo.tickerid, "1D", open,     barmerge.gaps_off, barmerge.lookahead_off)
+day_pclose = request.security(syminfo.tickerid, "1D", close[1], barmerge.gaps_off, barmerge.lookahead_off)
+gap_pct    = not na(day_open) and not na(day_pclose) and day_pclose != 0 ? math.abs(day_open - day_pclose) / day_pclose * 100.0 : 0.0
+
+base_ready = not na(bO)  and not na(bC)
+htf1_ready = not na(h1O) and not na(h1C)
+htf2_ready = not na(h2O) and not na(h2C)
+all_ready  = base_ready and htf1_ready and htf2_ready
+
+base_bull_bar = bC  >= bO
+htf1_bull_bar = h1C >= h1O
+htf2_bull_bar = h2C >= h2O
+
+all_bull = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
+all_bear = all_ready and (bC < bO) and (h1C < h1O) and (h2C < h2O)
+
+sha_top_1 = math.max(h1O, h1C)
+sha_bot_1 = math.min(h1O, h1C)
+sha_top_2 = math.max(h2O, h2C)
+sha_bot_2 = math.min(h2O, h2C)
+
+// ============================================================================
+// ④ ENTRY
+// ============================================================================
+grp_entry = "④ ━━━ ENTRY ━━━"
+confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed: fires the bar AFTER all three layers agree. One bar of lag, matches the strategy default.\nImmediate: fires on the bar the third layer joins. Earlier, noisier.", group=grp_entry)
+allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
+allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
+skip_gaps    = input.bool(false, "Skip Gap Entries", tooltip="Skip an entry that fires on a day whose open gapped more than the threshold from the prior day's close.", group=grp_entry)
+gap_thresh   = input.float(0.5, "  Gap Threshold (%)", minval=0.0, step=0.1, group=grp_entry)
+
+fa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
+fa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
+
+is_new_day = ta.change(time("1D")) != 0
+gap_block  = skip_gaps and is_new_day and gap_pct > gap_thresh
+
+// ============================================================================
+// ⑤ INITIAL STOP  (needed so stop-hit alerts match the strategy)
+// ============================================================================
+grp_sl = "⑤ ━━━ INITIAL STOP ━━━"
+sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body"], group=grp_sl)
+sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], group=grp_sl)
+sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
+sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($).", group=grp_sl)
+min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, tooltip="0 = disabled.", group=grp_sl)
+use_hard_stop = input.bool(false, "Hard Stop (intra-bar)", tooltip="OFF: stop-hit alerts fire only when a candle CLOSES beyond the stop (matches the strategy default).\nON: fires the moment price touches the stop intra-bar.", group=grp_sl)
+
+body_low  = math.min(open, close)
+body_high = math.max(open, close)
+
+swing_low_wick  = ta.lowest(low,  sl_lookback)
+swing_high_wick = ta.highest(high, sl_lookback)
+swing_low_body  = ta.lowest(body_low,  sl_lookback)
+swing_high_body = ta.highest(body_high, sl_lookback)
+
+sl_use_body   = sl_price_basis == "Body (open/close)"
+trig_low_lvl  = sl_use_body ? body_low  : low
+trig_high_lvl = sl_use_body ? body_high : high
+sw_low_lvl    = sl_use_body ? swing_low_body  : swing_low_wick
+sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
+
+f_long_stop() =>
+    _lvl = sl_mode == "Trigger Candle"      ? trig_low_lvl
+      :    sl_mode == "Swing (Prev N Bars)" ? sw_low_lvl
+      :    sl_mode == "HTF1 SHA Body"       ? sha_bot_1
+      :                                       sha_bot_2
+    _s = _lvl - sl_buffer_units
+    min_stop_units > 0 ? math.min(_s, close - min_stop_units) : _s
+
+f_short_stop() =>
+    _lvl = sl_mode == "Trigger Candle"      ? trig_high_lvl
+      :    sl_mode == "Swing (Prev N Bars)" ? sw_high_lvl
+      :    sl_mode == "HTF1 SHA Body"       ? sha_top_1
+      :                                       sha_top_2
+    _s = _lvl + sl_buffer_units
+    min_stop_units > 0 ? math.max(_s, close + min_stop_units) : _s
+
+// ============================================================================
+// ⑥ TRADE MANAGEMENT
+// ============================================================================
+grp_mgmt = "⑥ ━━━ TRADE MANAGEMENT ━━━"
+use_be = input.bool(true, "Move Stop To Break-Even", group=grp_mgmt)
+be_trigger_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, group=grp_mgmt)
+be_offset_units = input.float(0.0, "  Break-Even Offset", minval=0, step=0.5, group=grp_mgmt)
+
+use_trail = input.bool(true, "Trailing Stop", group=grp_mgmt)
+trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body"], group=grp_mgmt)
+trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], group=grp_mgmt)
+trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
+trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
+trail_buffer_units = input.float(2.0, "  Trail Buffer", minval=0, step=0.5, group=grp_mgmt)
+
+use_align_exit = input.bool(true, "Alignment-Break Exit", group=grp_mgmt)
+align_break_level = input.string("HTF1 Flips", "  Break Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], group=grp_mgmt)
+
+trail_sw_low_wick  = ta.lowest(low,  trail_lookback)
+trail_sw_low_body  = ta.lowest(body_low,  trail_lookback)
+trail_sw_high_wick = ta.highest(high, trail_lookback)
+trail_sw_high_body = ta.highest(body_high, trail_lookback)
+trail_use_body = trail_price_basis == "Body (open/close)"
+trail_sw_low   = trail_use_body ? trail_sw_low_body  : trail_sw_low_wick
+trail_sw_high  = trail_use_body ? trail_sw_high_body : trail_sw_high_wick
+
+trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "HTF1 SHA Body" ? sha_bot_1 : sha_bot_2
+trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "HTF1 SHA Body" ? sha_top_1 : sha_top_2
+trail_low_ref  = trail_low_anchor  - trail_buffer_units
+trail_high_ref = trail_high_anchor + trail_buffer_units
+
+f_align_broken_long() =>
+    align_break_level == "Base Flips"        ? not base_bull_bar
+     : align_break_level == "HTF1 Flips"     ? not htf1_bull_bar
+     : align_break_level == "HTF2 Flips"     ? not htf2_bull_bar
+     : align_break_level == "Any Layer Flips" ? (not base_bull_bar or not htf1_bull_bar or not htf2_bull_bar)
+     :                                         all_bear
+
+f_align_broken_short() =>
+    align_break_level == "Base Flips"        ? base_bull_bar
+     : align_break_level == "HTF1 Flips"     ? htf1_bull_bar
+     : align_break_level == "HTF2 Flips"     ? htf2_bull_bar
+     : align_break_level == "Any Layer Flips" ? (base_bull_bar or htf1_bull_bar or htf2_bull_bar)
+     :                                         all_bull
+
+// ============================================================================
+// ⑦ TRADE STATE  (hypothetical position, so exit and stop alerts can fire)
+// ============================================================================
+var string pos_dir     = "flat"
+var float  entry_price = na
+var float  stop_level  = na
+var float  risk_unit   = na
+var bool   be_moved    = false
+
+ev_entry_long  = false
+ev_entry_short = false
+ev_stop_hit    = false
+ev_align_break = false
+
+// ── manage the open hypothetical position first ────────────────────────────
+if pos_dir == "long" and not na(stop_level)
+    _r = risk_unit > 0 ? (close - entry_price) / risk_unit : 0.0
+    if use_be and not be_moved and _r >= be_trigger_r
+        stop_level := math.max(stop_level, entry_price + be_offset_units)
+        be_moved := true
+    if use_trail and _r >= trail_start_r
+        stop_level := math.max(stop_level, trail_low_ref)
+    _align_out = use_align_exit and f_align_broken_long()
+    _stop_hit  = use_hard_stop ? (low <= stop_level) : (close <= stop_level)
+    if _stop_hit or _align_out
+        ev_stop_hit    := _stop_hit
+        ev_align_break := _align_out and not _stop_hit
+        pos_dir := "flat"
+        entry_price := na
+        stop_level := na
+        risk_unit := na
+        be_moved := false
+
+else if pos_dir == "short" and not na(stop_level)
+    _r = risk_unit > 0 ? (entry_price - close) / risk_unit : 0.0
+    if use_be and not be_moved and _r >= be_trigger_r
+        stop_level := math.min(stop_level, entry_price - be_offset_units)
+        be_moved := true
+    if use_trail and _r >= trail_start_r
+        stop_level := math.min(stop_level, trail_high_ref)
+    _align_out = use_align_exit and f_align_broken_short()
+    _stop_hit  = use_hard_stop ? (high >= stop_level) : (close >= stop_level)
+    if _stop_hit or _align_out
+        ev_stop_hit    := _stop_hit
+        ev_align_break := _align_out and not _stop_hit
+        pos_dir := "flat"
+        entry_price := na
+        stop_level := na
+        risk_unit := na
+        be_moved := false
+
+// ── then entries ───────────────────────────────────────────────────────────
+long_signal  = allow_longs  and fa_bull_raw and not gap_block
+short_signal = allow_shorts and fa_bear_raw and not gap_block
+
+if pos_dir == "flat" and long_signal
+    _s = f_long_stop()
+    if _s < close
+        pos_dir := "long"
+        entry_price := close
+        stop_level := _s
+        risk_unit := close - _s
+        be_moved := false
+        ev_entry_long := true
+
+else if pos_dir == "flat" and short_signal
+    _s = f_short_stop()
+    if _s > close
+        pos_dir := "short"
+        entry_price := close
+        stop_level := _s
+        risk_unit := _s - close
+        be_moved := false
+        ev_entry_short := true
+
+// ============================================================================
+// ⑧ ALERTS  — toggle each on/off, then set sound/popup per alert in TradingView
+// ============================================================================
+grp_al = "⑦ ━━━ ALERTS ━━━"
+al_entry  = input.bool(true, "Entry alerts", group=grp_al)
+al_exit   = input.bool(true, "Alignment-break exit alerts", group=grp_al)
+al_stop   = input.bool(true, "Stop-hit alerts", group=grp_al)
+al_signal_only = input.bool(false, "Signal-only mode (ignore position state)", tooltip="OFF: entry alerts fire only when flat, matching the strategy.\nON: every Full Alignment fires, even while a hypothetical trade is already open.", group=grp_al)
+
+raw_long  = allow_longs  and fa_bull_raw and not gap_block
+raw_short = allow_shorts and fa_bear_raw and not gap_block
+
+fire_entry_long  = al_entry and (al_signal_only ? raw_long  : ev_entry_long)
+fire_entry_short = al_entry and (al_signal_only ? raw_short : ev_entry_short)
+fire_align_break = al_exit and ev_align_break
+fire_stop_hit    = al_stop and ev_stop_hit
+fire_any_entry   = fire_entry_long or fire_entry_short
+fire_any_exit    = fire_align_break or fire_stop_hit
+
+alertcondition(fire_entry_long,  "Entry LONG",  "3SHA-FA LONG entry on {{ticker}} {{interval}} at {{close}}")
+alertcondition(fire_entry_short, "Entry SHORT", "3SHA-FA SHORT entry on {{ticker}} {{interval}} at {{close}}")
+alertcondition(fire_align_break, "Exit — alignment break", "3SHA-FA alignment broke on {{ticker}} {{interval}} at {{close}} — exit")
+alertcondition(fire_stop_hit,    "Exit — stop hit", "3SHA-FA stop hit on {{ticker}} {{interval}} at {{close}} — exit")
+alertcondition(fire_any_entry,   "Any entry", "3SHA-FA entry on {{ticker}} {{interval}} at {{close}}")
+alertcondition(fire_any_exit,    "Any exit",  "3SHA-FA exit on {{ticker}} {{interval}} at {{close}}")
+
+// ============================================================================
+// ⑨ DISPLAY
+// ============================================================================
+grp_disp = "⑧ ━━━ DISPLAY ━━━"
+show_marks = input.bool(true, "Show entry/exit markers", group=grp_disp)
+show_stop  = input.bool(true, "Show active stop line", group=grp_disp)
+show_panel = input.bool(true, "Show status panel", group=grp_disp)
+col_long   = input.color(color.new(#26A69A, 0), "Long", inline="c", group=grp_disp)
+col_short  = input.color(color.new(#EF5350, 0), "Short", inline="c", group=grp_disp)
+col_exit   = input.color(color.new(#FFA726, 0), "Exit", inline="c", group=grp_disp)
+
+plotshape(show_marks and fire_entry_long,  title="Long entry",  style=shape.triangleup,   location=location.belowbar, color=col_long,  size=size.small, text="FA")
+plotshape(show_marks and fire_entry_short, title="Short entry", style=shape.triangledown, location=location.abovebar, color=col_short, size=size.small, text="FA")
+plotshape(show_marks and fire_align_break, title="Align break", style=shape.xcross, location=location.absolute, color=col_exit, size=size.tiny)
+plotshape(show_marks and fire_stop_hit,    title="Stop hit",    style=shape.xcross, location=location.absolute, color=col_short, size=size.tiny)
+
+plot(show_stop and pos_dir != "flat" ? stop_level : na, "Active stop", color=color.new(color.gray, 20), style=plot.style_stepline, linewidth=1)
+
+if show_panel and barstate.islast
+    var table tb = table.new(position.top_right, 2, 5, border_width=1)
+    _dir = pos_dir == "flat" ? "—" : str.upper(pos_dir)
+    _col = pos_dir == "long" ? col_long : pos_dir == "short" ? col_short : color.gray
+    table.cell(tb, 0, 0, "3SHA-FA", text_color=color.white, bgcolor=color.new(color.black, 20), text_size=size.small)
+    table.cell(tb, 1, 0, _dir, text_color=color.white, bgcolor=_col, text_size=size.small)
+    table.cell(tb, 0, 1, "Base",  text_size=size.small, text_color=color.gray)
+    table.cell(tb, 1, 1, base_bull_bar ? "bull" : "bear", text_size=size.small, text_color=base_bull_bar ? col_long : col_short)
+    table.cell(tb, 0, 2, "HTF1",  text_size=size.small, text_color=color.gray)
+    table.cell(tb, 1, 2, htf1_bull_bar ? "bull" : "bear", text_size=size.small, text_color=htf1_bull_bar ? col_long : col_short)
+    table.cell(tb, 0, 3, "HTF2",  text_size=size.small, text_color=color.gray)
+    table.cell(tb, 1, 3, htf2_bull_bar ? "bull" : "bear", text_size=size.small, text_color=htf2_bull_bar ? col_long : col_short)
+    table.cell(tb, 0, 4, "Stop",  text_size=size.small, text_color=color.gray)
+    table.cell(tb, 1, 4, pos_dir == "flat" ? "—" : str.tostring(stop_level, format.mintick), text_size=size.small, text_color=color.white)
