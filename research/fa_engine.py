@@ -23,13 +23,21 @@ def sha_ohlc(df, l1, l2):
     haH=np.maximum(h1,np.maximum(haO,haC)); haL=np.minimum(l1_,np.minimum(haO,haC))
     return ema(haO,l2),ema(haH,l2),ema(haL,l2),ema(haC,l2)
 
-def align_htf(base_index, sha_o,sha_c, sha_index, dur):
-    """No-lookahead: HTF value available on the last base bar before its close (-15min conv)."""
-    s=pd.DataFrame({'o':sha_o,'c':sha_c}, index=sha_index)
+def align_htf(base_index, sha_o,sha_c, sha_index, dur, sha_h=None, sha_l=None):
+    """No-lookahead: HTF value available on the last base bar before its close (-15min conv).
+
+    Returns open/close, plus high/low when supplied (needed for the Wick basis on
+    the last-bar-beyond anchors)."""
+    d={'o':sha_o,'c':sha_c}
+    if sha_h is not None: d['h']=sha_h
+    if sha_l is not None: d['l']=sha_l
+    s=pd.DataFrame(d, index=sha_index)
     s['ct']=pd.DatetimeIndex(s.index+dur-pd.Timedelta('15min')).as_unit('ns')
     s=s.sort_values('ct').reset_index(drop=True)
     left=pd.DataFrame({'t':pd.DatetimeIndex(base_index).as_unit('ns')}).sort_values('t').reset_index(drop=True)
     m=pd.merge_asof(left,s,left_on='t',right_on='ct',direction='backward').set_index('t').reindex(base_index)
+    if 'h' in d:
+        return m['o'].values, m['c'].values, m['h'].values, m['l'].values
     return m['o'].values, m['c'].values
 
 def gap_block_flags(base_index, daily_df, thresh):
@@ -49,8 +57,8 @@ def precompute(base_df, cfg, htf1_df, htf2_df, daily_df):
     bO,bH,bL,bC=sha_ohlc(base_df,*cfg['base_sha'])
     s1o,s1h,s1l,s1c=sha_ohlc(htf1_df,*cfg['htf1_sha'])
     s2o,s2h,s2l,s2c=sha_ohlc(htf2_df,*cfg['htf2_sha'])
-    h1O,h1C=align_htf(idx,s1o,s1c,htf1_df.index,cfg['htf1_dur'])
-    h2O,h2C=align_htf(idx,s2o,s2c,htf2_df.index,cfg['htf2_dur'])
+    h1O,h1C,h1H,h1L=align_htf(idx,s1o,s1c,htf1_df.index,cfg['htf1_dur'],s1h,s1l)
+    h2O,h2C,h2H,h2L=align_htf(idx,s2o,s2c,htf2_df.index,cfg['htf2_dur'],s2h,s2l)
     bd=np.where(bC>=bO,1,-1); h1=np.where(h1C>=h1O,1,-1); h2=np.where(h2C>=h2O,1,-1)
     allb=(bd==1)&(h1==1)&(h2==1); alls=(bd==-1)&(h1==-1)&(h2==-1)
     # Confirmed (1-bar): all_bull[1] and not all_bull[2]
@@ -59,7 +67,37 @@ def precompute(base_df, cfg, htf1_df, htf2_df, daily_df):
     body_low=np.minimum(o,c); body_high=np.maximum(o,c)
     def roll_min(a,n): return pd.Series(a).rolling(n,min_periods=1).min().to_numpy()
     def roll_max(a,n): return pd.Series(a).rolling(n,min_periods=1).max().to_numpy()
-    P=dict(idx=idx,o=o,h=h,l=l,c=c,bd=bd,h1=h1,h2=h2,allb=allb,alls=alls,fb=fb,fs=fs,
+    # ---- Last-bar-beyond anchors -------------------------------------------
+    # Most recent bar with ANY part past the SHA: below its lower edge (long) or
+    # above its upper edge (short). Covers bars wholly beyond AND bars straddling
+    # the edge. Forward-filled, so there is no lookback limit.
+    sha_bot1_=np.minimum(h1O,h1C); sha_top1_=np.maximum(h1O,h1C)
+    sha_bot2_=np.minimum(h2O,h2C); sha_top2_=np.maximum(h2O,h2C)
+    ha_lo_b=np.minimum(bO,bC); ha_hi_b=np.maximum(bO,bC)
+    def _ff(mask,vals):
+        a=np.where(mask,vals,np.nan)
+        return pd.Series(a).ffill().to_numpy()
+    beyond={}
+    for basis in ('Body','Wick'):
+        p_lo = body_low  if basis=='Body' else l
+        p_hi = body_high if basis=='Body' else h
+        a_lo = ha_lo_b   if basis=='Body' else bL
+        a_hi = ha_hi_b   if basis=='Body' else bH
+        e1b  = sha_bot1_ if basis=='Body' else h1L
+        e1t  = sha_top1_ if basis=='Body' else h1H
+        e2b  = sha_bot2_ if basis=='Body' else h2L
+        e2t  = sha_top2_ if basis=='Body' else h2H
+        beyond[(basis,'px','h1','lo')]=_ff(p_lo<e1b,p_lo)
+        beyond[(basis,'px','h2','lo')]=_ff(p_lo<e2b,p_lo)
+        beyond[(basis,'ha','h1','lo')]=_ff(a_lo<e1b,a_lo)
+        beyond[(basis,'ha','h2','lo')]=_ff(a_lo<e2b,a_lo)
+        beyond[(basis,'px','h1','hi')]=_ff(p_hi>e1t,p_hi)
+        beyond[(basis,'px','h2','hi')]=_ff(p_hi>e2t,p_hi)
+        beyond[(basis,'ha','h1','hi')]=_ff(a_hi>e1t,a_hi)
+        beyond[(basis,'ha','h2','hi')]=_ff(a_hi>e2t,a_hi)
+        beyond[(basis,'near','lo')]=np.abs(c-e1b)<=np.abs(c-e2b)
+        beyond[(basis,'near','hi')]=np.abs(c-e1t)<=np.abs(c-e2t)
+    P=dict(idx=idx,o=o,h=h,l=l,c=c,beyond=beyond,bd=bd,h1=h1,h2=h2,allb=allb,alls=alls,fb=fb,fs=fs,
         base_bull=bd==1, htf1_bull=h1==1, htf2_bull=h2==1,
         body_low=body_low, body_high=body_high,
         sha_bot1=np.minimum(h1O,h1C), sha_top1=np.maximum(h1O,h1C),
@@ -208,7 +246,8 @@ def default_cfg():
         use_be=True, be_trig_r=1.0, be_offset=0.0,
         use_trail=True, trail_mode='Swing', trail_basis='Body', trail_start_r=1.0,
         trail_lookback=6, trail_buffer=2.0,
-        use_align_exit=True, align_level='HTF1')
+        use_align_exit=True, align_level='HTF1',
+        reverse_on_stop=False)
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +267,7 @@ except ImportError:
 
 @njit(cache=True)
 def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
+          allb, alls, use_rev,
           minstop, risk_pct, maxeq_pct, equity0,
           use_be, be_trig, be_off, use_trail, trail_start,
           use_align, use_hard, use_tp1, tp1_r, tp1_pct, cost):
@@ -240,6 +280,7 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
     entry = 0.0; stop = 0.0; risk = 0.0; qty = 0.0
     be = False; tptaken = False
     for i in range(n):
+        stopped = 0          # +1 a long was stopped this bar, -1 a short was
         if pos == 1:
             rr = (c[i] - entry) / risk if risk > 0 else 0.0
             if use_tp1 and (not tptaken) and rr >= tp1_r:
@@ -263,6 +304,8 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
             if hit or align_out:
                 equity += qty * (px - entry) - cost * qty * (entry + px) * 0.5
                 tr_ret[ntr] = px / entry - 1.0 - cost; ntr += 1
+                if hit:
+                    stopped = 1
                 pos = 0; be = False; tptaken = False
         elif pos == -1:
             rr = (entry - c[i]) / risk if risk > 0 else 0.0
@@ -287,9 +330,14 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
             if hit or align_out:
                 equity += qty * (entry - px) - cost * qty * (entry + px) * 0.5
                 tr_ret[ntr] = entry / px - 1.0 - cost; ntr += 1
+                if hit:
+                    stopped = -1
                 pos = 0; be = False; tptaken = False
         if pos == 0:
-            if fb[i]:
+            # Reverse on stop: flip only if the opposite side is fully aligned now.
+            rev_l = use_rev and stopped == -1 and allb[i]
+            rev_s = use_rev and stopped == 1 and alls[i]
+            if fb[i] or rev_l:
                 st = alow[i]
                 if minstop > 0 and c[i] - minstop < st: st = c[i] - minstop
                 if st < c[i]:
@@ -300,7 +348,7 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                     if q > 0:
                         entry = c[i]; stop = st; risk = dist; qty = q
                         be = False; tptaken = False; pos = 1
-            elif fs[i]:
+            elif fs[i] or rev_s:
                 st = ahigh[i]
                 if minstop > 0 and c[i] + minstop > st: st = c[i] + minstop
                 if st > c[i]:
@@ -315,8 +363,28 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
     return eq, tr_ret[:ntr]
 
 
+_BEYOND = {'Last Bar Beyond Nearest SHA':      ('px', 'near'),
+           'Last Bar Beyond Furthest SHA':     ('px', 'far'),
+           'Last SHA Bar Beyond Nearest SHA':  ('ha', 'near'),
+           'Last SHA Bar Beyond Furthest SHA': ('ha', 'far')}
+
+
 def _anchor_arrays(P, mode, basis, lookback, buf, sign):
     """Return the stop/trail reference line for every bar, buffer already applied."""
+    if mode in _BEYOND:
+        src, which = _BEYOND[mode]
+        side = 'hi' if sign > 0 else 'lo'
+        B = P['beyond']
+        near_h1 = B[(basis, 'near', side)]
+        a1 = B[(basis, src, 'h1', side)]
+        a2 = B[(basis, src, 'h2', side)]
+        pick = np.where(near_h1, a1, a2) if which == 'near' else np.where(near_h1, a2, a1)
+        # fall back to the swing anchor wherever no such bar exists yet
+        src_sw = (P['body_high'] if basis == 'Body' else P['h']) if sign > 0 else \
+                 (P['body_low'] if basis == 'Body' else P['l'])
+        sw = P['roll_max'](src_sw, lookback) if sign > 0 else P['roll_min'](src_sw, lookback)
+        pick = np.where(np.isnan(pick), sw, pick)
+        return pick + buf if sign > 0 else pick - buf
     if mode == 'Trigger':
         base = P['body_low'] if basis == 'Body' else P['l']
         if sign > 0:
@@ -353,6 +421,8 @@ def backtest_fast(P, cfg, cost=0.001):
         np.ascontiguousarray(abl), np.ascontiguousarray(abshort),
         np.ascontiguousarray(alow), np.ascontiguousarray(ahigh),
         np.ascontiguousarray(tlow), np.ascontiguousarray(thigh),
+        np.ascontiguousarray(P['allb']), np.ascontiguousarray(P['alls']),
+        bool(cfg.get('reverse_on_stop', False)),
         float(cfg['min_stop']), float(cfg['risk_pct']), float(cfg['max_equity_pct']),
         float(cfg['equity0']), bool(cfg['use_be']), float(cfg['be_trig_r']), float(cfg['be_offset']),
         bool(cfg['use_trail']), float(cfg['trail_start_r']), bool(cfg['use_align_exit']),

@@ -30,8 +30,10 @@ PLAN = {
     },
     "anchor": {
         "label": "Initial stop anchor",
-        "plain": "What the stop is placed behind -- recent structure, or the mid/high timeframe trend body.",
-        "values": ["Swing", "HTF1 Body", "HTF2 Body"],
+        "plain": "What the stop is placed behind. Swing and the SHA bodies are fixed references. The Last Bar Beyond anchors sit at the most recent bar with any part past the SHA -- the last place price was genuinely on the wrong side of the trend.",
+        "values": ["Swing", "HTF1 Body", "HTF2 Body",
+                   "Last Bar Beyond Nearest SHA", "Last Bar Beyond Furthest SHA",
+                   "Last SHA Bar Beyond Nearest SHA", "Last SHA Bar Beyond Furthest SHA"],
         "fmt": str,
     },
     "basis": {
