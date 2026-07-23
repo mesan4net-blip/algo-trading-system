@@ -32,7 +32,7 @@ def cfg_from(combo, buf):
              align_level=combo['exit'], sl_mode=combo['anchor'],
              sl_basis=combo['basis'], trail_basis=combo['basis'],
              use_hard_stop=(combo['stop_style'] == 'hard'),
-             risk_pct=combo['risk'], max_equity_pct=100.0,
+             risk_pct=combo['risk'], max_equity_pct=400.0,
              sl_buffer=buf, trail_buffer=buf)
     return c
 

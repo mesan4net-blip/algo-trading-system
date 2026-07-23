@@ -356,18 +356,6 @@ def build(results, manifest):
 {run}
 </section>
 
-<section class="sec">
-<div class="sh"><h2>Known problems</h2><span class="tag">read before trusting a number</span></div>
-<p class="sub">Open faults in the current run, kept here on purpose so nothing on this page reads better than it deserves.</p>
-<div class="card">
-<div style="padding:0 0 16px;border-bottom:1px solid var(--line)">
-<h4 style="margin:0 0 4px;font-size:15.5px">Position sizing does not honour the risk setting</h4>
-<p style="margin:0;color:var(--soft);font-size:14px;line-height:1.55">Sizes are rounded down to whole units, so on a high-priced market like Bitcoin every trade becomes one whole coin — roughly 60% of the account — no matter which risk figure is chosen. On the cheaper markets the 100% ceiling binds instead and every trade uses the whole account. Either way the risk column is currently inert, and returns reflect maximum-size positions rather than a measured 1% risk. Fix: allow fractional sizes and re-run.</p></div>
-<div style="padding:16px 0 0">
-<h4 style="margin:0 0 4px;font-size:15.5px">Bitcoin has only 1.4 years of history</h4>
-<p style="margin:0;color:var(--soft);font-size:14px;line-height:1.55">Its five test periods are about three months each, against roughly five years each for the index markets. The same &ldquo;5 of 5&rdquo; therefore means far less on Bitcoin, and its strong yearly figure should be read as promising rather than proven.</p></div>
-</div></section>
-
 <footer class="foot">
 <p class="line">Built slowly, on purpose. Every number here is a backtest — a careful record of the past, never a promise about what comes next.</p>
 <p>Engine reconciled to TradingView to the penny: entries, position state and stop levels all match. Generated {now}.</p>

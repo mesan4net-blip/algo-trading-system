@@ -140,23 +140,34 @@ def backtest(P, cfg):
                 st=_anchor_low(P,i,cfg['sl_mode'],cfg['sl_basis'],cfg['sl_lookback'],swings)-buf
                 if minstop>0: st=min(st, c[i]-minstop)
                 if st<c[i]:
-                    entry=c[i]; init=st; stop=st; risk=entry-st
-                    qty=_qty(equity,entry,st,cfg); be=False; tptaken=False; ebar=i; pos=1
+                    _q=_qty(equity,c[i],st,cfg)
+                    if _q>0:
+                        entry=c[i]; init=st; stop=st; risk=entry-st
+                        qty=_q; be=False; tptaken=False; ebar=i; pos=1
             elif fs[i] and cfg['allow_shorts'] and not blocked:
                 st=_anchor_high(P,i,cfg['sl_mode'],cfg['sl_basis'],cfg['sl_lookback'],swings)+buf
                 if minstop>0: st=max(st, c[i]+minstop)
                 if st>c[i]:
-                    entry=c[i]; init=st; stop=st; risk=st-entry
-                    qty=_qty(equity,entry,st,cfg); be=False; tptaken=False; ebar=i; pos=-1
+                    _q=_qty(equity,c[i],st,cfg)
+                    if _q>0:
+                        entry=c[i]; init=st; stop=st; risk=st-entry
+                        qty=_q; be=False; tptaken=False; ebar=i; pos=-1
         posarr[i]=pos; stoparr[i]=stop if pos!=0 else np.nan; eq_curve.append(equity)
     return dict(trades=trades, equity=np.array(eq_curve), pos=posarr, stop=stoparr,
                 fb=fb, fs=fs)
 
 def _qty(equity,entry,stop,cfg):
-    riskD=equity*cfg['risk_pct']/100.0; dist=abs(entry-stop)
-    qr=riskD/dist if dist>0 else 1
+    """Fractional sizing: risk% of equity divided by the distance to the stop.
+
+    No whole-unit rounding -- rounding down forced high-priced markets (Bitcoin)
+    into one whole unit regardless of the risk setting, which both ignored the
+    setting and massively oversized the position. Position value is capped by
+    max_equity_pct, expressed as a percent of equity (400 = up to 4x)."""
+    dist=abs(entry-stop)
+    if dist<=0 or entry<=0: return 0.0
+    q=(equity*cfg['risk_pct']/100.0)/dist
     qmax=(equity*cfg['max_equity_pct']/100.0)/entry
-    return max(1.0, np.floor(min(qr,qmax)))
+    return min(q,qmax)
 
 def _align_broken(P,i,level,direction):
     bb=P['base_bull'][i]; h1=P['htf1_bull'][i]; h2=P['htf2_bull'][i]
