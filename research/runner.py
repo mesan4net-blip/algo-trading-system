@@ -57,6 +57,7 @@ def cfg_from(combo, buf):
              use_hard_stop=(combo['stop_style'] == 'hard'),
              risk_pct=1.0, max_equity_pct=400.0,
              sl_buffer=buf, trail_buffer=buf)
+    c['use_reentry'] = combo.get('reentry', 'off') == 'on'
     c.update(EXIT_MAP[combo['exit']])
     t = combo['trail']
     if t == 'off':
@@ -78,7 +79,8 @@ def verdict(blocks_pos, retdd, trades):
     return "fails"
 
 
-def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True, chunk=None, nchunks=None):
+def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True, chunk=None, nchunks=None,
+                   strategy='FullAlignment', pa_layers='All three'):
     cost = COST.get(inst, DEFAULT_COST)
     folder = os.path.join(DATA, inst)
     base = load(os.path.join(folder, f"{base_tf}.csv"))
@@ -112,6 +114,9 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True,
         combos = combos[chunk::nchunks]        # stride, so each chunk spans the whole grid
     for j, combo in enumerate(combos):
         c = cfg_from(combo, buf)
+        if strategy == 'PriceAboveAll':
+            c.update(entry_mode='price_above', pa_layers=pa_layers)
+        # (entry mode injected below)
         c['htf1_dur'] = TF_DUR[htf1_tf]
         c['htf2_dur'] = TF_DUR[htf2_tf]
         key = (combo['sha'], combo['htf2'])
@@ -126,7 +131,7 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True,
             sha=f"{combo['sha'][0]},{combo['sha'][1]}",
             htf2=f"{combo['htf2'][0]},{combo['htf2'][1]}", exit=combo['exit'],
             anchor=combo['anchor'], basis=combo['basis'],
-            stop=combo['stop_style'], trail=combo['trail'],
+            stop=combo['stop_style'], trail=combo['trail'], reentry=combo.get('reentry','off'),
             trades=m['trades'], win=m['win'], ret=m['ret'], maxdd=m['maxdd'],
             retdd=m['retdd'], blocks=bp, nblocks=TP.BLOCKS,
             block_detail=[round(x, 2) for x in bl],
@@ -140,7 +145,7 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True,
     rows.sort(key=lambda r: (r['blocks'], r['retdd']), reverse=True)
     ranked = [r for r in rows if r['trades'] >= TP.MIN_TRADES]
     span = f"{base.index[0].date()} → {base.index[-1].date()}"
-    return dict(instrument=inst, cost_pct=round(cost*100, 3), base_tf=base_tf, htf1_tf=htf1_tf, htf2_tf=htf2_tf,
+    return dict(instrument=inst, strategy=strategy, cost_pct=round(cost*100, 3), base_tf=base_tf, htf1_tf=htf1_tf, htf2_tf=htf2_tf,
                 span=span, bars=n, buffer=round(buf, 6),
                 top=ranked[:3], all_runs=rows,
                 n_holds=sum(1 for r in rows if r['verdict'] == 'holds'))

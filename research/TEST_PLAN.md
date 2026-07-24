@@ -34,6 +34,7 @@ consistency. Never raw return, never a bare ratio.
 | 4 | Confirmation mode | Confirmed (1-bar) · Immediate |
 | 5 | Direction | both · long only · short only |
 | 6 | Skip gap entries | off · 0.25% · 0.5% · 1.0% |
+| 6b | Re-enter after an exit | off · on — fires when price closes beyond the exit candle's high (long) or low (short) |
 | 7 | Exit — how a trade ends | chart flips · mid flips · slow flips · opposite full alignment · chart flips held 2 bars · price back through mid SHA · profit target 2R · profit target 3R · gives back 40% of peak · time stop 30 bars |
 | 8 | **BUILD:** base SHA body as stop and trail anchor | does not exist yet — needed for steps 9 and 15 |
 | 9 | Initial stop anchor | trigger candle · swing · base body · HTF1 body · HTF2 body |
@@ -189,10 +190,11 @@ should be kept as a cross-check.
 | Strategy | State |
 |----------|-------|
 | Full alignment | tested — 25,920 runs across 4 markets |
-| Partial alignment (2 of 3) | next |
+| Price above all | **built, not yet tested** — see `PRICE_ABOVE_ALL_SPEC.md` |
+| Partial alignment (2 of 3) | spec locked, not built |
 | Full cluster cross | not built |
 | Pullback resume | not built |
 | Early trend | not built |
 | Trend continuation | not built |
-| High-timeframe price cross | not built |
-| Mid-timeframe price cross | not built |
+| ~~High-timeframe price cross~~ | folded into Price Above All as `HTF2 only` |
+| ~~Mid-timeframe price cross~~ | folded into Price Above All as `HTF1 only` |

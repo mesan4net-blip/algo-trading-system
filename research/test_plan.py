@@ -22,6 +22,12 @@ PLAN = {
         "values": [(2, 2), (3, 6), (4, 8), (6, 11), (8, 16), (10, 20)],
         "fmt": lambda v: f"{v[0]},{v[1]}",
     },
+    "reentry": {
+        "label": "Re-enter after an exit",
+        "plain": "After a trade closes, arm the setup again and fire when price closes beyond the exit candle. Targets the move left untaken when a trade is stopped out mid-trend.",
+        "values": ["off", "on"],
+        "fmt": str,
+    },
     "exit": {
         "label": "Exit trigger (alignment break)",
         "plain": "How a trade ends. The first four watch the trend layers; the rest are independent ideas -- a target, giving back profit, or simply running out of time.",
@@ -88,8 +94,10 @@ def expand():
                     for ba in PLAN["basis"]["values"]:
                         for st in PLAN["stop_style"]["values"]:
                             for tr in PLAN["trail"]["values"]:
-                                yield dict(sha=sha, htf2=h2, exit=ex, anchor=an,
-                                           basis=ba, stop_style=st, trail=tr)
+                                for re in PLAN["reentry"]["values"]:
+                                    yield dict(sha=sha, htf2=h2, exit=ex, anchor=an,
+                                               basis=ba, stop_style=st, trail=tr,
+                                               reentry=re)
 
 
 def count():
