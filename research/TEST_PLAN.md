@@ -34,7 +34,7 @@ consistency. Never raw return, never a bare ratio.
 | 4 | Confirmation mode | Confirmed (1-bar) · Immediate |
 | 5 | Direction | both · long only · short only |
 | 6 | Skip gap entries | off · 0.25% · 0.5% · 1.0% |
-| 7 | Exit trigger | base flip · HTF1 flip · HTF2 flip · any layer flips · all layers flip |
+| 7 | Exit — how a trade ends | chart flips · mid flips · slow flips · opposite full alignment · chart flips held 2 bars · price back through mid SHA · profit target 2R · profit target 3R · gives back 40% of peak · time stop 30 bars |
 | 8 | **BUILD:** base SHA body as stop and trail anchor | does not exist yet — needed for steps 9 and 15 |
 | 9 | Initial stop anchor | trigger candle · swing · base body · HTF1 body · HTF2 body |
 | 10 | Anchor basis | body · wick |
@@ -53,6 +53,12 @@ consistency. Never raw return, never a bare ratio.
 | 23 | Risk per trade | 0.5% · 1% · 2% · 3% |
 | 24 | Max equity per trade | 100% · 200% |
 | 25 | **Timeframes + exit mode — run last, together** | every valid trio × (align-exit on · hold until stopped) |
+
+Step 7 covers seven distinct exit ideas, not just which layer flips. On QQQ's
+15-minute chart — the worst case for churn — a **profit target at 3R** turned
+-3.0%/yr into **+3.9%/yr** and cut the drawdown from -18% to -6.6%; **giving back
+40% of peak profit** was almost as good. Requiring the break to hold longer barely
+helped, and the SHA cross was worse than doing nothing.
 
 Step 9 also carries four newer anchors: **Last Bar Beyond Nearest SHA · Last Bar
 Beyond Furthest SHA · Last SHA Bar Beyond Nearest SHA · Last SHA Bar Beyond

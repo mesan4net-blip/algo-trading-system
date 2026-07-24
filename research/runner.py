@@ -35,14 +35,29 @@ def load(path):
     return d.set_index('t')[['open', 'high', 'low', 'close']]
 
 
+EXIT_MAP = {
+ 'Base':          dict(align_level='Base'),
+ 'HTF1':          dict(align_level='HTF1'),
+ 'HTF2':          dict(align_level='HTF2'),
+ 'All':           dict(align_level='All'),
+ 'Base x2':       dict(align_level='Base', align_confirm_bars=2),
+ 'SHA break':     dict(use_align_exit=False, use_sha_break=True, sha_break_layer='HTF1'),
+ 'Target 2R':     dict(use_align_exit=False, use_target=True, target_r=2.0),
+ 'Target 3R':     dict(use_align_exit=False, use_target=True, target_r=3.0),
+ 'Give-back 40%': dict(use_align_exit=False, use_giveback=True, giveback_pct=40.0),
+ 'Time 30':       dict(use_align_exit=False, use_time_stop=True, time_stop_bars=30),
+}
+
+
 def cfg_from(combo, buf):
     c = default_cfg()
     c.update(base_sha=combo['sha'], htf1_sha=combo['sha'], htf2_sha=combo['htf2'],
-             align_level=combo['exit'], sl_mode=combo['anchor'],
+             sl_mode=combo['anchor'],
              sl_basis=combo['basis'], trail_basis=combo['basis'],
              use_hard_stop=(combo['stop_style'] == 'hard'),
              risk_pct=1.0, max_equity_pct=400.0,
              sl_buffer=buf, trail_buffer=buf)
+    c.update(EXIT_MAP[combo['exit']])
     t = combo['trail']
     if t == 'off':
         c['use_trail'] = False
@@ -63,7 +78,7 @@ def verdict(blocks_pos, retdd, trades):
     return "fails"
 
 
-def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True):
+def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True, chunk=None, nchunks=None):
     cost = COST.get(inst, DEFAULT_COST)
     folder = os.path.join(DATA, inst)
     base = load(os.path.join(folder, f"{base_tf}.csv"))
@@ -93,6 +108,8 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True)
 
     rows = []
     combos = list(TP.expand())
+    if chunk is not None:
+        combos = combos[chunk::nchunks]        # stride, so each chunk spans the whole grid
     for j, combo in enumerate(combos):
         c = cfg_from(combo, buf)
         c['htf1_dur'] = TF_DUR[htf1_tf]
@@ -118,6 +135,8 @@ def run_instrument(inst, base_tf='4h', htf1_tf='1D', htf2_tf='1W', verbose=True)
             print(f"    {j+1}/{len(combos)}")
 
     # rank: block consistency first, then profit-to-pain
+    if chunk is not None:
+        return dict(instrument=inst, partial=True, rows=rows)
     rows.sort(key=lambda r: (r['blocks'], r['retdd']), reverse=True)
     ranked = [r for r in rows if r['trades'] >= TP.MIN_TRADES]
     span = f"{base.index[0].date()} → {base.index[-1].date()}"

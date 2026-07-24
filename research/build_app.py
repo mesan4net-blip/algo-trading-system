@@ -49,6 +49,9 @@ HISTORY = [
  dict(n=10, change="Fixed a look-ahead on fast charts",
       detail="The higher-timeframe offset was hardcoded at 15 minutes, leaking the daily value early on any faster chart.",
       effect="Made 5-minute testing honest. Also showed hold-until-stopped turns QQQ and SPY from losing to winning on a 15-minute base."),
+ dict(n=11, change="Gave the strategy more ways to end a trade",
+      detail="Seven exits instead of one: hold the break for N bars, price falling back through a trend line, a profit target, giving back a share of peak profit, a time stop, the chart line crossing the mid line, and opposite full alignment.",
+      effect="On QQQ's 15-minute chart a 3R profit target turned -3.0% a year into +3.9%, with the drop cut from 18% to 6.6%. Contradicted the expectation that a target would hurt a trend system."),
 ]
 
 
@@ -165,6 +168,12 @@ def enrich(res):
 HOLD = {}   # buy-and-hold benchmark, filled at build time
 
 
+# With 5 test periods, a pure coin-flip passes "profitable in at least 4" about
+# 18.75% of the time. On a grid this size that is thousands of settings passing by
+# luck alone, so a raw survivor count means nothing without the chance baseline.
+CHANCE = 6 / 32
+
+
 def band(v, good, ok):
     return '' if v >= good else (' warn' if v >= ok else ' bad')
 
@@ -185,6 +194,23 @@ def market_card(res):
         vs = (f"<div class='vs'>Simply buying and holding {res['instrument']} over the same years made "
               f"<b>{hold:.1f}% a year</b>. This strategy made <b>{per_yr:.1f}%</b> — "
               + ("<b>better</b>." if beats else "<b>less</b>, though with a far smaller drop along the way.") + "</div>")
+
+    n_all = len(res['all_runs'])
+    held = res['n_holds']
+    expect = CHANCE * n_all
+    ratio = held / expect if expect else 0
+    if ratio >= 1.5:
+        luck = (f"<b>{held:,}</b> of {n_all:,} settings stayed profitable across all "
+                f"{t['nblocks']} test periods. Pure chance would produce about "
+                f"{expect:,.0f}, so this is <b>{ratio:.1f}x</b> what luck alone explains.")
+    elif ratio >= 0.9:
+        luck = (f"<b>{held:,}</b> of {n_all:,} settings held across the {t['nblocks']} test "
+                f"periods — roughly the {expect:,.0f} that pure chance would produce anyway. "
+                f"Treat any single result here with caution.")
+    else:
+        luck = (f"Only <b>{held:,}</b> of {n_all:,} settings held across the {t['nblocks']} "
+                f"test periods — <b>fewer</b> than the {expect:,.0f} chance alone would give. "
+                f"That is evidence against a real edge on this market.")
 
     rows = ''.join(
         f"<tr><td class='l'>{r['sha']} / {r.get('htf2','2,2')} · {r['exit']} · {r['anchor']} · {r['basis']} · {r['stop']} · {r.get('trail','')}</td>"
@@ -217,6 +243,7 @@ def market_card(res):
 <div class="rb{band(t['blocks'], 4, 3)}"><span class="v">{t['blocks']} of {t['nblocks']}</span><span class="k">separate test periods it made money in</span></div>
 </div>
 {vs}
+<div class="vs">{luck}</div>
 <details><summary>Show the other {len(res['all_runs'])-1:,} combinations tested</summary>
 <div class="scroll"><table>
 <thead><tr><th class="l">Settings</th><th>Trades</th><th>Per year%</th><th>Worst drop%</th><th>Periods</th></tr></thead>
@@ -274,13 +301,42 @@ if __name__ == "__main__":
     cache = os.path.join(out, "runs"); os.makedirs(cache, exist_ok=True)
     manifest = json.load(open(os.path.join(DATA, "manifest.json")))
     arg = sys.argv[1] if len(sys.argv) > 1 else "build"
-    if arg != "build":
+    if arg == "merge":
+        # stitch chunk files back into one result for a market
+        inst = sys.argv[2]
+        parts = sorted(f for f in os.listdir(cache) if f.startswith(f"{inst}.part"))
+        rows = []
+        for f in parts:
+            rows += json.load(open(os.path.join(cache, f)))['rows']
+        meta = json.load(open(os.path.join(cache, f"{inst}.meta.json")))
+        rows.sort(key=lambda r: (r['blocks'], r['retdd']), reverse=True)
+        meta['all_runs'] = rows
+        meta['top'] = [r for r in rows if r['trades'] >= 20][:3]
+        meta['n_holds'] = sum(1 for r in rows if r['verdict'] == 'holds')
+        json.dump(meta, open(os.path.join(cache, f"{inst}.json"), "w"))
+        for f in parts: os.remove(os.path.join(cache, f))
+        print(f"{inst}: merged {len(parts)} chunks -> {len(rows):,} runs, {meta['n_holds']} held")
+    elif arg != "build":
         t0 = time.time()
-        res = run_instrument(arg, verbose=False)
-        json.dump(res, open(os.path.join(cache, f"{arg}.json"), "w"))
-        print(f"{arg}: {len(res['all_runs'])} runs in {time.time()-t0:.0f}s · {res['n_holds']} held")
+        if len(sys.argv) > 3:
+            ch, nch = int(sys.argv[2]), int(sys.argv[3])
+            res = run_instrument(arg, verbose=False, chunk=ch, nchunks=nch)
+            json.dump(res, open(os.path.join(cache, f"{arg}.part{ch}.json"), "w"))
+            if ch == 0:
+                from runner import load as _load, COST as _C, DEFAULT_COST as _D
+                base = _load(os.path.join(DATA, arg, '4h.csv'))
+                json.dump(dict(instrument=arg, cost_pct=round(_C.get(arg, _D)*100,3),
+                               base_tf='4h', htf1_tf='1D', htf2_tf='1W',
+                               span=f"{base.index[0].date()} \u2192 {base.index[-1].date()}",
+                               bars=len(base), all_runs=[], top=[], n_holds=0),
+                          open(os.path.join(cache, f"{arg}.meta.json"), "w"))
+            print(f"{arg} chunk {ch}/{nch}: {len(res['rows'])} runs in {time.time()-t0:.0f}s")
+        else:
+            res = run_instrument(arg, verbose=False)
+            json.dump(res, open(os.path.join(cache, f"{arg}.json"), "w"))
+            print(f"{arg}: {len(res['all_runs'])} runs in {time.time()-t0:.0f}s · {res['n_holds']} held")
     else:
-        from runner import load
+        from runner import load, COST, DEFAULT_COST
         results = []
         for inst in manifest['instruments']:
             f = os.path.join(cache, f"{inst}.json")

@@ -24,9 +24,14 @@ PLAN = {
     },
     "exit": {
         "label": "Exit trigger (alignment break)",
-        "plain": "Which timeframe turning against the trade closes it. Base is tightest, HTF2 loosest.",
-        "values": ["Base", "HTF1", "HTF2"],
-        "fmt": {"Base": "base flip", "HTF1": "HTF1 flip", "HTF2": "HTF2 flip"}.get,
+        "plain": "How a trade ends. The first four watch the trend layers; the rest are independent ideas -- a target, giving back profit, or simply running out of time.",
+        "values": ["Base", "HTF1", "HTF2", "All", "Base x2", "SHA break",
+                   "Target 2R", "Target 3R", "Give-back 40%", "Time 30"],
+        "fmt": {"Base": "chart flips", "HTF1": "mid flips", "HTF2": "slow flips",
+                "All": "opposite full alignment", "Base x2": "chart flips, held 2 bars",
+                "SHA break": "price back through mid SHA", "Target 2R": "profit target 2R",
+                "Target 3R": "profit target 3R", "Give-back 40%": "gives back 40% of peak",
+                "Time 30": "time stop, 30 bars"}.get,
     },
     "anchor": {
         "label": "Initial stop anchor",
