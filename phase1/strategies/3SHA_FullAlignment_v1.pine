@@ -119,6 +119,8 @@ all_bull = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
 all_bear = all_ready and (bC < bO) and (h1C < h1O) and (h2C < h2O)
 
 // SHA body extremes — used for the SHA-body stop option
+sha_bot_0 = math.min(bO, bC)      // chart-layer SHA body — the layer the entry fires on
+sha_top_0 = math.max(bO, bC)
 sha_top_1 = math.max(h1O, h1C)
 sha_bot_1 = math.min(h1O, h1C)
 sha_top_2 = math.max(h2O, h2C)
@@ -142,7 +144,7 @@ fa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bea
 // ④ INITIAL STOP LOSS  (hard invalidation + sizing anchor)
 // ============================================================================
 grp_sl = "④ ━━━ INITIAL STOP ━━━"
-sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA"], tooltip="Last Bar Beyond ... : the most recent bar that sat entirely past the SHA's far edge (below it for a long, above it for a short) — the last place price was genuinely on the wrong side of the trend. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher SHA layer is closer to price. No lookback limit.\n\nTrigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
+sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA"], tooltip="Last Bar Beyond ... : the most recent bar that sat entirely past the SHA's far edge (below it for a long, above it for a short) — the last place price was genuinely on the wrong side of the trend. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher SHA layer is closer to price. No lookback limit.\n\nTrigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
 sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
 sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($). Stop is CLOSE-based.", group=grp_sl)
@@ -227,6 +229,7 @@ f_long_stop() =>
     _lchF = _near ? xl_ha_h2 : xl_ha_h1
     _lvl = sl_mode == "Trigger Candle"                  ? trig_low_lvl
       :    sl_mode == "Swing (Prev N Bars)"             ? sw_low_lvl
+      :    sl_mode == "Base SHA Body"                   ? sha_bot_0
       :    sl_mode == "HTF1 SHA Body"                   ? sha_bot_1
       :    sl_mode == "HTF2 SHA Body"                   ? sha_bot_2
       :    sl_mode == "Last Bar Beyond Nearest SHA"  ? (na(_lcp)  ? sw_low_lvl : _lcp)
@@ -245,6 +248,7 @@ f_short_stop() =>
     _hchF = _near ? xh_ha_h2 : xh_ha_h1
     _lvl = sl_mode == "Trigger Candle"                  ? trig_high_lvl
       :    sl_mode == "Swing (Prev N Bars)"             ? sw_high_lvl
+      :    sl_mode == "Base SHA Body"                   ? sha_top_0
       :    sl_mode == "HTF1 SHA Body"                   ? sha_top_1
       :    sl_mode == "HTF2 SHA Body"                   ? sha_top_2
       :    sl_mode == "Last Bar Beyond Nearest SHA"  ? (na(_hcp)  ? sw_high_lvl : _hcp)
@@ -290,7 +294,7 @@ be_trig_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, g
 be_offset_units = input.float(0.0, "  Break-Even Offset", minval=0, step=0.5, tooltip="Extra distance above/below entry when moving to BE, in price points ($). Covers spread/commission.", group=grp_mgmt)
 
 use_trail = input.bool(true, "Trailing Stop", tooltip="Once in profit, ratchet the stop toward the chosen anchor. Never loosens. Close-based — only triggers when a candle CLOSES beyond it.", group=grp_mgmt)
-trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","HTF1 SHA Body","HTF2 SHA Body"], tooltip="Same anchor choices as the initial stop, except Trigger Candle (a fixed entry bar can't trail).\nSwing: recent swing low/high.\nHTF1 SHA Body: trail the mid-TF trend body.\nHTF2 SHA Body: trail the high-TF trend body (loosest, rides longest).", group=grp_mgmt)
+trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body"], tooltip="Same anchor choices as the initial stop, except Trigger Candle (a fixed entry bar can't trail).\nSwing: recent swing low/high.\nHTF1 SHA Body: trail the mid-TF trend body.\nHTF2 SHA Body: trail the high-TF trend body (loosest, rides longest).", group=grp_mgmt)
 trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="For the Swing trail anchor: Body = body edge (tighter), Wick = full extreme (wider).", group=grp_mgmt)
 trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
@@ -334,8 +338,8 @@ trail_use_body = trail_price_basis == "Body (open/close)"
 trail_sw_low  = trail_use_body ? trail_sw_low_body  : trail_sw_low_wick
 trail_sw_high = trail_use_body ? trail_sw_high_body : trail_sw_high_wick
 
-trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "HTF1 SHA Body" ? sha_bot_1 : sha_bot_2
-trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "HTF1 SHA Body" ? sha_top_1 : sha_top_2
+trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "Base SHA Body" ? sha_bot_0 : trail_mode == "HTF1 SHA Body" ? sha_bot_1 : sha_bot_2
+trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "Base SHA Body" ? sha_top_0 : trail_mode == "HTF1 SHA Body" ? sha_top_1 : sha_top_2
 trail_low_ref  = trail_low_anchor  - trail_buffer_raw
 trail_high_ref = trail_high_anchor + trail_buffer_raw
 

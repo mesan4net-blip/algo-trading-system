@@ -112,6 +112,7 @@ def precompute(base_df, cfg, htf1_df, htf2_df, daily_df):
     P=dict(idx=idx,o=o,h=h,l=l,c=c,beyond=beyond,cross_dn=cross_dn,cross_up=cross_up,shab=shab,bd=bd,h1=h1,h2=h2,allb=allb,alls=alls,fb=fb,fs=fs,
         base_bull=bd==1, htf1_bull=h1==1, htf2_bull=h2==1,
         body_low=body_low, body_high=body_high,
+        sha_bot0=np.minimum(bO,bC), sha_top0=np.maximum(bO,bC),
         sha_bot1=np.minimum(h1O,h1C), sha_top1=np.maximum(h1O,h1C),
         sha_bot2=np.minimum(h2O,h2C), sha_top2=np.maximum(h2O,h2C),
         roll_min=roll_min, roll_max=roll_max,
@@ -432,6 +433,8 @@ def _anchor_arrays(P, mode, basis, lookback, buf, sign):
         src = (P['body_high'] if basis == 'Body' else P['h']) if sign > 0 else \
               (P['body_low'] if basis == 'Body' else P['l'])
         base = P['roll_max'](src, lookback) if sign > 0 else P['roll_min'](src, lookback)
+    elif mode == 'Base Body':
+        base = P['sha_top0'] if sign > 0 else P['sha_bot0']
     elif mode == 'HTF1 Body':
         base = P['sha_top1'] if sign > 0 else P['sha_bot1']
     else:

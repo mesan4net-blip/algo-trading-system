@@ -36,7 +36,7 @@ PLAN = {
     "anchor": {
         "label": "Initial stop anchor",
         "plain": "What the stop is placed behind. Swing and the SHA bodies are fixed references. The Last Bar Beyond anchors sit at the most recent bar with any part past the SHA -- the last place price was genuinely on the wrong side of the trend.",
-        "values": ["Swing", "HTF1 Body", "HTF2 Body",
+        "values": ["Trigger", "Swing", "Base Body", "HTF1 Body", "HTF2 Body",
                    "Last Bar Beyond Nearest SHA", "Last Bar Beyond Furthest SHA",
                    "Last SHA Bar Beyond Nearest SHA", "Last SHA Bar Beyond Furthest SHA"],
         "fmt": str,
@@ -56,7 +56,7 @@ PLAN = {
     "trail": {
         "label": "Trailing stop",
         "plain": "What the stop follows once the trade is ahead, or off entirely. Only bites when the exit trigger is loose enough to let a trade run.",
-        "values": ["off", "Swing 3", "Swing 6", "HTF1 Body", "HTF2 Body"],
+        "values": ["off", "Swing 3", "Swing 6", "Base Body", "HTF1 Body", "HTF2 Body"],
         "fmt": str,
     },
 }
