@@ -132,11 +132,7 @@ allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
 use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, fire again when a later candle CLOSES above the exit candle's HIGH (long) or below its LOW (short). No fresh transition needed.", group=grp_entry)
 reentry_needs_base = input.bool(true, "  Setup Must Still Hold", group=grp_entry)
 reentry_expires = input.bool(true, "  Cancel If Setup Breaks", group=grp_entry)
-gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped.
-
-Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked — a later, non-gap re-alignment enters normally.
-
-One control, not two: a threshold of 0 previously meant 'skip every day', which read like 'off' and behaved like the opposite.", group=grp_entry)
+gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
 
 pa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
 pa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
