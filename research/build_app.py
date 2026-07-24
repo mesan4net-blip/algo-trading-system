@@ -7,7 +7,7 @@ from runner import run_instrument, REPO, DATA
 
 STRATEGIES = [
     ("Full alignment", "live", "All three timeframes agree for the first time."),
-    ("Partial alignment", "planned", "Two of the three agree."),
+    ("Partial alignment", "next", "Exactly two of the three agree — the third is against."),
     ("Full cluster cross", "planned", "All three bodies cross together."),
     ("Pullback resume", "planned", "Re-entry after a dip inside a live trend."),
     ("Early trend", "planned", "The first turn, before full agreement."),
@@ -152,6 +152,14 @@ th.l,td.l{text-align:left}
 td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid #F1F4EF}
 tbody tr:hover td{background:#F8FAF6}
 .pos{color:var(--grow)}.neg{color:var(--clay)}
+.sig{display:flex;gap:14px;align-items:baseline;padding:14px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.sig:first-child{border-top:none}
+.sig .sn{font-weight:600;font-size:15.5px;min-width:170px}
+.sig .sd{color:var(--soft);font-size:14px;flex:1;min-width:220px}
+.sig .ss{font:500 10.5px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--faint);padding:5px 10px;border-radius:20px;background:#F0F3EE}
+.sig.live .sn{color:var(--grow)}
+.sig.live .ss{background:var(--grow-lt);color:var(--grow)}
+.sig.next .ss{background:var(--honey-lt);color:var(--honey)}
 .hrow{display:flex;gap:16px;padding:16px 0;border-top:1px solid var(--line)}
 .hrow:first-child{border-top:none}
 .hn{font:600 15px/1 var(--dsp);color:var(--grow);width:24px;flex:none;padding-top:3px}
@@ -285,6 +293,12 @@ def build(results, manifest):
     hist = ''.join(f'<div class="hrow"><span class="hn">{h["n"]}</span><div class="hb">'
                    f'<h4>{h["change"]}</h4><p class="d">{h["detail"]}</p>'
                    f'<p class="e">{h["effect"]}</p></div></div>' for h in HISTORY)
+    done = sum(1 for x in STRATEGIES if x[1] == 'live')
+    sig = ''.join(
+        f'<div class="sig {st}"><span class="sn">{n}</span>'
+        f'<span class="sd">{d}</span><span class="ss">{st}</span></div>'
+        for n, st, d in STRATEGIES)
+
     plan = ''.join(f'<dt>{v["label"]}</dt><dd class="num">{" · ".join(str(v["fmt"](x)) for x in v["values"])}</dd>'
                    for v in TP.PLAN.values())
 
@@ -295,11 +309,17 @@ def build(results, manifest):
 <header class="hero">
 <p class="eyebrow">3SHA · full alignment</p>
 <h1>What to set, and how well it did.</h1>
-<p class="updated">Last updated <b>{now}</b> · {total:,} backtests</p>
+<p class="updated">Last updated <b>{now}</b> · {total:,} backtests · signal {done} of {len(STRATEGIES)}</p>
 <p class="lede">Every market below was put through the same {TP.count():,} combinations of settings. What you see first is the one that held up best — written out so you can type it straight into a chart.</p>
 </header>
 
 <section class="sec">{cards}</section>
+
+<section class="sec">
+<h2>The eight signals</h2>
+<p class="sub">Each way into a trade is built and proven on its own before any of them are combined. Only the first has been tested so far — everything above is Full Alignment alone.</p>
+<div class="card" style="padding:6px 28px 20px">{sig}</div>
+</section>
 
 <section class="sec">
 <h2>What changed along the way</h2>

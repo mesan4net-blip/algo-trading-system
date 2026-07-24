@@ -46,6 +46,14 @@ th.l,td.l{text-align:left}
 td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid #F1F4EF}
 tbody tr:hover td{background:#F8FAF6}
 .pos{color:var(--grow)}.neg{color:var(--clay)}
+.sig{display:flex;gap:14px;align-items:baseline;padding:14px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.sig:first-child{border-top:none}
+.sig .sn{font-weight:600;font-size:15.5px;min-width:170px}
+.sig .sd{color:var(--soft);font-size:14px;flex:1;min-width:220px}
+.sig .ss{font:500 10.5px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--faint);padding:5px 10px;border-radius:20px;background:#F0F3EE}
+.sig.live .sn{color:var(--grow)}
+.sig.live .ss{background:var(--grow-lt);color:var(--grow)}
+.sig.next .ss{background:var(--honey-lt);color:var(--honey)}
 .hrow{display:flex;gap:16px;padding:16px 0;border-top:1px solid var(--line)}
 .hrow:first-child{border-top:none}
 .hn{font:600 15px/1 var(--dsp);color:var(--grow);width:24px;flex:none;padding-top:3px}
@@ -62,8 +70,8 @@ tbody tr:hover td{background:#F8FAF6}
 <header class="hero">
 <p class="eyebrow">3SHA · full alignment</p>
 <h1>What to set, and how well it did.</h1>
-<p class="updated">Last updated <b>23 Jul 2026, 7:04 PM PDT</b> · 201,600 backtests</p>
-<p class="lede">Every market below was put through the same 50,400 combinations of settings. What you see first is the one that held up best — written out so you can type it straight into a chart.</p>
+<p class="updated">Last updated <b>24 Jul 2026, 7:52 AM PDT</b> · 201,600 backtests · signal 1 of 8</p>
+<p class="lede">Every market below was put through the same 77,760 combinations of settings. What you see first is the one that held up best — written out so you can type it straight into a chart.</p>
 </header>
 
 <section class="sec"><div class="mk">
@@ -201,6 +209,12 @@ tbody tr:hover td{background:#F8FAF6}
 </div></section>
 
 <section class="sec">
+<h2>The eight signals</h2>
+<p class="sub">Each way into a trade is built and proven on its own before any of them are combined. Only the first has been tested so far — everything above is Full Alignment alone.</p>
+<div class="card" style="padding:6px 28px 20px"><div class="sig live"><span class="sn">Full alignment</span><span class="sd">All three timeframes agree for the first time.</span><span class="ss">live</span></div><div class="sig next"><span class="sn">Partial alignment</span><span class="sd">Exactly two of the three agree — the third is against.</span><span class="ss">next</span></div><div class="sig planned"><span class="sn">Full cluster cross</span><span class="sd">All three bodies cross together.</span><span class="ss">planned</span></div><div class="sig planned"><span class="sn">Pullback resume</span><span class="sd">Re-entry after a dip inside a live trend.</span><span class="ss">planned</span></div><div class="sig planned"><span class="sn">Early trend</span><span class="sd">The first turn, before full agreement.</span><span class="ss">planned</span></div><div class="sig planned"><span class="sn">Trend continuation</span><span class="sd">Adds while a trend is already running.</span><span class="ss">planned</span></div><div class="sig planned"><span class="sn">High-timeframe cross</span><span class="sd">Price crosses the slow trend body.</span><span class="ss">planned</span></div><div class="sig planned"><span class="sn">Mid-timeframe cross</span><span class="sd">Price crosses the mid trend body.</span><span class="ss">planned</span></div></div>
+</section>
+
+<section class="sec">
 <h2>What changed along the way</h2>
 <p class="sub">Every correction made to the method, in order. Most made the results worse — which is the point. A number is only worth having once you know what was wrong with the one before it.</p>
 <div class="card"><div class="hrow"><span class="hn">1</span><div class="hb"><h4>First cross-market run</h4><p class="d">4h base, 20% equity cap, fixed 2-point stop buffer.</p><p class="e">QQQ negative, SPY flat, EUR/USD weak. Strong BTC figures were in-sample.</p></div></div><div class="hrow"><span class="hn">2</span><div class="hb"><h4>Made the settings scale-invariant</h4><p class="d">Equity cap lifted and the buffer expressed as a percent of price, so one setting means the same on Bitcoin and on EUR/USD.</p><p class="e">Comparable at last: BTC +41% over 1.4yr, QQQ -24%, SPY +13%, EUR/USD +10.6%.</p></div></div><div class="hrow"><span class="hn">3</span><div class="hb"><h4>Swept the smoothing</h4><p class="d">Every moving-average pair, across all four markets.</p><p class="e">No pair generalised. Slower settings flattered BTC and did nothing elsewhere — a clear overfitting trap.</p></div></div><div class="hrow"><span class="hn">4</span><div class="hb"><h4>Dropped the 1,1 result</h4><p class="d">A length of 1 disables that smoothing pass, so 1,1 is a plain Heikin-Ashi, not a smoothed one.</p><p class="e">BTC's best result was measuring a different indicator. Disqualified; floor set at length 2.</p></div></div><div class="hrow"><span class="hn">5</span><div class="hb"><h4>Unfroze the slow layer</h4><p class="d">It had been pinned at 2,2 in every run because that was the chart setting, never because it was tested.</p><p class="e">Swung results three to six fold. Grid went from 648 to 3,888 per market.</p></div></div><div class="hrow"><span class="hn">6</span><div class="hb"><h4>Made the ranking time-aware</h4><p class="d">Return per year against the worst dip, instead of a bare ratio.</p><p class="e">Collapsed an illusion: QQQ's top setting scored 11.5 while earning 0.8% a year over 26 years. Settings that held fell from 468 to 10.</p></div></div><div class="hrow"><span class="hn">7</span><div class="hb"><h4>Fixed position sizing</h4><p class="d">Sizes had been rounded down to whole units, forcing one whole Bitcoin per trade and ignoring the risk setting entirely.</p><p class="e">BTC halved, from 32% a year to 15.7% — the earlier figure came from positions six times too large.</p></div></div><div class="hrow"><span class="hn">8</span><div class="hb"><h4>Unfroze the trailing stop</h4><p class="d">It had been on but pinned to one anchor in all 25,920 runs.</p><p class="e">Preference splits by market: trending markets want it on, stock indices want it off. QQQ's surviving settings went from 45 to 258.</p></div></div><div class="hrow"><span class="hn">9</span><div class="hb"><h4>Charged trading costs</h4><p class="d">The engine had never applied a spread, while the plan claimed 0.1% per round trip.</p><p class="e">The worst finding of the project. EUR/USD fell from 2.4% a year to 1.5% and its surviving settings from 637 to 54. BTC fell from 15.7% to 7.8%.</p></div></div><div class="hrow"><span class="hn">10</span><div class="hb"><h4>Fixed a look-ahead on fast charts</h4><p class="d">The higher-timeframe offset was hardcoded at 15 minutes, leaking the daily value early on any faster chart.</p><p class="e">Made 5-minute testing honest. Also showed hold-until-stopped turns QQQ and SPY from losing to winning on a 15-minute base.</p></div></div><div class="hrow"><span class="hn">11</span><div class="hb"><h4>Gave the strategy more ways to end a trade</h4><p class="d">Seven exits instead of one: hold the break for N bars, price falling back through a trend line, a profit target, giving back a share of peak profit, a time stop, the chart line crossing the mid line, and opposite full alignment.</p><p class="e">On QQQ's 15-minute chart a 3R profit target turned -3.0% a year into +3.9%, with the drop cut from 18% to 6.6%. Contradicted the expectation that a target would hurt a trend system.</p></div></div></div>
@@ -208,12 +222,12 @@ tbody tr:hover td{background:#F8FAF6}
 
 <section class="sec">
 <h2>What gets tested</h2>
-<p class="sub">Each market goes through this identical grid — 50,400 combinations — so the results can be compared instead of each market being quietly tuned to flatter itself. Every setting is then re-checked across 5 separate stretches of history.</p>
-<div class="card"><dl class="set plan" style="padding-top:18px"><dt>Smoothing — chart + mid layer</dt><dd class="num">2,4 · 3,6 · 4,8 · 6,11 · 8,16 · 10,20</dd><dt>Smoothing — slow layer</dt><dd class="num">2,2 · 3,6 · 4,8 · 6,11 · 8,16 · 10,20</dd><dt>Exit trigger (alignment break)</dt><dd class="num">chart flips · mid flips · slow flips · opposite full alignment · chart flips, held 2 bars · price back through mid SHA · profit target 2R · profit target 3R · gives back 40% of peak · time stop, 30 bars</dd><dt>Initial stop anchor</dt><dd class="num">Swing · HTF1 Body · HTF2 Body · Last Bar Beyond Nearest SHA · Last Bar Beyond Furthest SHA · Last SHA Bar Beyond Nearest SHA · Last SHA Bar Beyond Furthest SHA</dd><dt>Anchor basis</dt><dd class="num">Body · Wick</dd><dt>Stop style</dt><dd class="num">mental · hard</dd><dt>Trailing stop</dt><dd class="num">off · Swing 3 · Swing 6 · HTF1 Body · HTF2 Body</dd></dl></div>
+<p class="sub">Each market goes through this identical grid — 77,760 combinations — so the results can be compared instead of each market being quietly tuned to flatter itself. Every setting is then re-checked across 5 separate stretches of history.</p>
+<div class="card"><dl class="set plan" style="padding-top:18px"><dt>Smoothing — chart + mid layer</dt><dd class="num">2,4 · 3,6 · 4,8 · 6,11 · 8,16 · 10,20</dd><dt>Smoothing — slow layer</dt><dd class="num">2,2 · 3,6 · 4,8 · 6,11 · 8,16 · 10,20</dd><dt>Exit trigger (alignment break)</dt><dd class="num">chart flips · mid flips · slow flips · opposite full alignment · chart flips, held 2 bars · price back through mid SHA · profit target 2R · profit target 3R · gives back 40% of peak · time stop, 30 bars</dd><dt>Initial stop anchor</dt><dd class="num">Trigger · Swing · Base Body · HTF1 Body · HTF2 Body · Last Bar Beyond Nearest SHA · Last Bar Beyond Furthest SHA · Last SHA Bar Beyond Nearest SHA · Last SHA Bar Beyond Furthest SHA</dd><dt>Anchor basis</dt><dd class="num">Body · Wick</dd><dt>Stop style</dt><dd class="num">mental · hard</dd><dt>Trailing stop</dt><dd class="num">off · Swing 3 · Swing 6 · Base Body · HTF1 Body · HTF2 Body</dd></dl></div>
 </section>
 
 <footer class="foot">
 <p class="l">Built slowly, on purpose. Every figure here is a backtest — a careful record of the past, never a promise about what comes next.</p>
-<p>201,600 backtests · engine matched to TradingView to the penny · page generated 23 Jul 2026, 7:04 PM PDT</p>
+<p>201,600 backtests · engine matched to TradingView to the penny · page generated 24 Jul 2026, 7:52 AM PDT</p>
 </footer>
 </div></body></html>
