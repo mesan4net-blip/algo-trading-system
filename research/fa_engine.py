@@ -67,7 +67,24 @@ def precompute(base_df, cfg, htf1_df, htf2_df, daily_df):
     h1O,h1C,h1H,h1L=align_htf(idx,s1o,s1c,htf1_df.index,cfg['htf1_dur'],s1h,s1l,base_dur)
     h2O,h2C,h2H,h2L=align_htf(idx,s2o,s2c,htf2_df.index,cfg['htf2_dur'],s2h,s2l,base_dur)
     bd=np.where(bC>=bO,1,-1); h1=np.where(h1C>=h1O,1,-1); h2=np.where(h2C>=h2O,1,-1)
-    allb=(bd==1)&(h1==1)&(h2==1); alls=(bd==-1)&(h1==-1)&(h2==-1)
+    mode=cfg.get('entry_mode','alignment')
+    if mode=='price_above':
+        # Where PRICE sits relative to the lines, not which way each layer points.
+        body = cfg.get('sl_basis','Body')=='Body'
+        c_=base_df['close'].to_numpy()
+        bt=np.maximum(bO,bC) if body else bH; bb_=np.minimum(bO,bC) if body else bL
+        t1=np.maximum(h1O,h1C) if body else h1H; l1_=np.minimum(h1O,h1C) if body else h1L
+        t2=np.maximum(h2O,h2C) if body else h2H; l2_=np.minimum(h2O,h2C) if body else h2L
+        ab,a1,a2=c_>bt,c_>t1,c_>t2
+        bl,b1,b2=c_<bb_,c_<l1_,c_<l2_
+        which=cfg.get('pa_layers','All three')
+        if which=='All three':          allb, alls = ab&a1&a2, bl&b1&b2
+        elif which=='Both higher layers': allb, alls = a1&a2, b1&b2
+        elif which=='HTF2 only':        allb, alls = a2, b2
+        elif which=='HTF1 only':        allb, alls = a1, b1
+        else:                           allb, alls = (ab.astype(int)+a1+a2)>=2, (bl.astype(int)+b1+b2)>=2
+    else:
+        allb=(bd==1)&(h1==1)&(h2==1); alls=(bd==-1)&(h1==-1)&(h2==-1)
     # Confirmed (1-bar): all_bull[1] and not all_bull[2]
     fb=np.r_[False,False,allb[1:-1]&~allb[:-2]]; fs=np.r_[False,False,alls[1:-1]&~alls[:-2]]
     o,h,l,c=(base_df[x].to_numpy() for x in ['open','high','low','close'])
@@ -265,7 +282,9 @@ def default_cfg():
         use_target=False, target_r=3.0,
         use_giveback=False, giveback_pct=40.0, giveback_min_r=1.0,
         use_time_stop=False, time_stop_bars=30, time_stop_min_r=0.5,
-        use_cross_exit=False)
+        use_cross_exit=False,
+        entry_mode='alignment', pa_layers='All three',
+        use_reentry=False, reentry_needs_base=True, reentry_expires=True)
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +305,8 @@ except ImportError:
 @njit(cache=True)
 def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
           allb, alls, use_rev,
-          shab_bot, shab_top, cross_dn, cross_up,
+          shab_bot, shab_top, cross_dn, cross_up, allb_s, alls_s,
+          use_re, re_needs_base, re_expires,
           confirm_bars, use_shab, use_tgt, tgt_r, use_give, give_pct, give_min,
           use_time, time_bars, time_min_r, use_cross,
           minstop, risk_pct, maxeq_pct, equity0,
@@ -301,6 +321,7 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
     entry = 0.0; stop = 0.0; risk = 0.0; qty = 0.0
     be = False; tptaken = False
     bad = 0; peak = 0.0; ebar = 0
+    rearm_h = np.nan; rearm_l = np.nan
     for i in range(n):
         stopped = 0          # +1 a long was stopped this bar, -1 a short was
         if pos == 1:
@@ -336,6 +357,7 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                 tr_ret[ntr] = px / entry - 1.0 - cost; ntr += 1
                 if hit:
                     stopped = 1
+                rearm_h = h[i]; rearm_l = np.nan
                 pos = 0; be = False; tptaken = False; bad = 0; peak = 0.0
         elif pos == -1:
             rr = (entry - c[i]) / risk if risk > 0 else 0.0
@@ -370,12 +392,19 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                 tr_ret[ntr] = entry / px - 1.0 - cost; ntr += 1
                 if hit:
                     stopped = -1
+                rearm_l = l[i]; rearm_h = np.nan
                 pos = 0; be = False; tptaken = False; bad = 0; peak = 0.0
         if pos == 0:
             # Reverse on stop: flip only if the opposite side is fully aligned now.
-            rev_l = use_rev and stopped == -1 and allb[i]
-            rev_s = use_rev and stopped == 1 and alls[i]
-            if fb[i] or rev_l:
+            rev_l = use_rev and stopped == -1 and allb_s[i]
+            rev_s = use_rev and stopped == 1 and alls_s[i]
+            # Re-entry: price must CLOSE beyond the exit candle to prove it resumed.
+            if re_expires:
+                if rearm_h == rearm_h and not allb_s[i]: rearm_h = np.nan
+                if rearm_l == rearm_l and not alls_s[i]: rearm_l = np.nan
+            re_l = use_re and rearm_h == rearm_h and c[i] > rearm_h and ((not re_needs_base) or allb_s[i])
+            re_s = use_re and rearm_l == rearm_l and c[i] < rearm_l and ((not re_needs_base) or alls_s[i])
+            if fb[i] or rev_l or re_l:
                 st = alow[i]
                 if minstop > 0 and c[i] - minstop < st: st = c[i] - minstop
                 if st < c[i]:
@@ -387,7 +416,8 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                         entry = c[i]; stop = st; risk = dist; qty = q
                         be = False; tptaken = False; pos = 1
                         bad = 0; peak = 0.0; ebar = i
-            elif fs[i] or rev_s:
+                        rearm_h = np.nan; rearm_l = np.nan
+            elif fs[i] or rev_s or re_s:
                 st = ahigh[i]
                 if minstop > 0 and c[i] + minstop > st: st = c[i] + minstop
                 if st > c[i]:
@@ -399,6 +429,7 @@ def _core(o, h, l, c, fb, fs, abl, abshort, alow, ahigh, tlow, thigh,
                         entry = c[i]; stop = st; risk = dist; qty = q
                         be = False; tptaken = False; pos = -1
                         bad = 0; peak = 0.0; ebar = i
+                        rearm_h = np.nan; rearm_l = np.nan
         eq[i] = equity
     return eq, tr_ret[:ntr]
 
@@ -468,6 +499,9 @@ def backtest_fast(P, cfg, cost=0.001):
         np.ascontiguousarray(P['shab'][cfg.get('sha_break_layer','HTF1')][0]),
         np.ascontiguousarray(P['shab'][cfg.get('sha_break_layer','HTF1')][1]),
         np.ascontiguousarray(P['cross_dn']), np.ascontiguousarray(P['cross_up']),
+        np.ascontiguousarray(P['allb']), np.ascontiguousarray(P['alls']),
+        bool(cfg.get('use_reentry', False)), bool(cfg.get('reentry_needs_base', True)),
+        bool(cfg.get('reentry_expires', True)),
         int(cfg.get('align_confirm_bars', 1)),
         bool(cfg.get('use_sha_break', False)),
         bool(cfg.get('use_target', False)), float(cfg.get('target_r', 3.0)),

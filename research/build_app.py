@@ -7,13 +7,12 @@ from runner import run_instrument, REPO, DATA
 
 STRATEGIES = [
     ("Full alignment", "live", "All three timeframes agree for the first time."),
+    ("Price above all", "built", "Price closes beyond all three trend lines — where price sits, not which way each layer points."),
     ("Partial alignment", "next", "Exactly two of the three agree — the third is against."),
     ("Full cluster cross", "planned", "All three bodies cross together."),
     ("Pullback resume", "planned", "Re-entry after a dip inside a live trend."),
     ("Early trend", "planned", "The first turn, before full agreement."),
     ("Trend continuation", "planned", "Adds while a trend is already running."),
-    ("High-timeframe cross", "planned", "Price crosses the slow trend body."),
-    ("Mid-timeframe cross", "planned", "Price crosses the mid trend body."),
 ]
 
 
@@ -160,6 +159,7 @@ tbody tr:hover td{background:#F8FAF6}
 .sig.live .sn{color:var(--grow)}
 .sig.live .ss{background:var(--grow-lt);color:var(--grow)}
 .sig.next .ss{background:var(--honey-lt);color:var(--honey)}
+.sig.built .ss{background:#E7EEF6;color:#3A6491}
 .hrow{display:flex;gap:16px;padding:16px 0;border-top:1px solid var(--line)}
 .hrow:first-child{border-top:none}
 .hn{font:600 15px/1 var(--dsp);color:var(--grow);width:24px;flex:none;padding-top:3px}

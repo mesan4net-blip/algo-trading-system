@@ -1,6 +1,6 @@
 //@version=6
 // ============================================================================
-// 3SHA — FULL ALIGNMENT STRATEGY  (v1)
+// 3SHA — PRICE ABOVE ALL STRATEGY  (v1)
 // ============================================================================
 // PART OF: the per-entry-type rebuild of 3SHA_Strategy_v6.
 //   v6 clubbed all 8 entry types into one script with a shared SL/sizing/exit
@@ -23,7 +23,7 @@
 //   and — unlike v6 — every exit path actually closes the strategy position.
 // ============================================================================
 
-strategy("3SHA Full Alignment", shorttitle="3SHA-FA", overlay=true,
+strategy("3SHA Price Above All", shorttitle="3SHA-PA", overlay=true,
      initial_capital=100000, currency=currency.USD,
      default_qty_type=strategy.percent_of_equity, default_qty_value=10,
      calc_on_every_tick=false, process_orders_on_close=true, pyramiding=0,
@@ -115,8 +115,42 @@ base_bull_bar = bC  >= bO
 htf1_bull_bar = h1C >= h1O
 htf2_bull_bar = h2C >= h2O
 
-all_bull = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
-all_bear = all_ready and (bC < bO) and (h1C < h1O) and (h2C < h2O)
+// ── ENTRY CONDITION: WHERE PRICE SITS, NOT WHICH WAY EACH LAYER POINTS ─────
+// Full Alignment asks whether each layer is internally bullish (its smoothed
+// close above its smoothed open). This asks something different: is PRICE above
+// the lines? A layer can point down while price sits above it, and the reverse,
+// so the two fire at quite different moments.
+// Which edge counts follows the Anchor Uses setting, so Body ignores wicks on
+// both sides — the same convention the stop anchors use.
+pa_layers = input.string("All three", "Price Must Clear", options=["All three","Both higher layers","HTF2 only","HTF1 only","Any two"], tooltip="Which SHA layers price has to close beyond. 'All three' is the strictest. The single-layer options are the price-cross signals from the plan, folded in here.", group="④ ━━━ ENTRY ━━━")
+
+_pa_body = sl_price_basis == "Body (open/close)"
+pa_b_top = _pa_body ? math.max(bO, bC)  : bH
+pa_b_bot = _pa_body ? math.min(bO, bC)  : bL
+pa_1_top = _pa_body ? math.max(h1O,h1C) : h1H
+pa_1_bot = _pa_body ? math.min(h1O,h1C) : h1L
+pa_2_top = _pa_body ? math.max(h2O,h2C) : h2H
+pa_2_bot = _pa_body ? math.min(h2O,h2C) : h2L
+
+_ab = close > pa_b_top
+_a1 = close > pa_1_top
+_a2 = close > pa_2_top
+_bb = close < pa_b_bot
+_b1 = close < pa_1_bot
+_b2 = close < pa_2_bot
+_n_above = (_ab ? 1 : 0) + (_a1 ? 1 : 0) + (_a2 ? 1 : 0)
+_n_below = (_bb ? 1 : 0) + (_b1 ? 1 : 0) + (_b2 ? 1 : 0)
+
+all_bull = all_ready and (pa_layers == "All three"          ? (_ab and _a1 and _a2)
+   : pa_layers == "Both higher layers" ? (_a1 and _a2)
+   : pa_layers == "HTF2 only"          ? _a2
+   : pa_layers == "HTF1 only"          ? _a1
+   :                                     _n_above >= 2)
+all_bear = all_ready and (pa_layers == "All three"          ? (_bb and _b1 and _b2)
+   : pa_layers == "Both higher layers" ? (_b1 and _b2)
+   : pa_layers == "HTF2 only"          ? _b2
+   : pa_layers == "HTF1 only"          ? _b1
+   :                                     _n_below >= 2)
 
 // SHA body extremes — used for the SHA-body stop option
 sha_bot_0 = math.min(bO, bC)      // chart-layer SHA body — the layer the entry fires on
@@ -145,8 +179,8 @@ skip_gaps    = input.bool(false, "Skip Gap Entries", tooltip="When ON, a Full Al
 gap_thresh   = input.float(0.5, "  Gap Threshold (%)", minval=0.0, step=0.1, tooltip="Daily open vs prior daily close. A gap larger than this invalidates an entry that fires on the gapped day's open.", group=grp_entry)
 
 // Full Alignment definition — v6-faithful ("Confirmed") or one-bar-earlier ("Immediate")
-fa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
-fa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
+pa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
+pa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
 
 // ============================================================================
 // ④ INITIAL STOP LOSS  (hard invalidation + sizing anchor)
@@ -395,12 +429,12 @@ if reentry_expires and not na(rearm_low) and not all_bear
 re_long  = use_reentry and not na(rearm_high) and close > rearm_high and (not reentry_needs_base or all_bull)
 re_short = use_reentry and not na(rearm_low)  and close < rearm_low  and (not reentry_needs_base or all_bear)
 
-// Gate: only a fresh Full Alignment enters, only when flat, within the date range.
+// Gate: only a fresh breakout enters, only when flat, within the date range.
 // Gap skip: block only the entry that fires on a gapped daily open (not the whole day).
 is_new_day = ta.change(time("1D")) != 0
 gap_block  = skip_gaps and is_new_day and gap_pct > gap_thresh
-long_signal  = allow_longs  and (fa_bull_raw or re_long)  and in_date and not gap_block
-short_signal = allow_shorts and (fa_bear_raw or re_short) and in_date and not gap_block
+long_signal  = allow_longs  and (pa_bull_raw or re_long)  and in_date and not gap_block
+short_signal = allow_shorts and (pa_bear_raw or re_short) and in_date and not gap_block
 
 // Per-bar event flags (for markers)
 did_exit  = false
@@ -451,7 +485,7 @@ if pos_dir == "long" and not na(stop_level)
 
     // 1. Partial take-profit
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("FA", qty_percent=tp1_pct, comment="TP1")
+        strategy.close("PA", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.max(stop_level, entry_price + be_offset_raw)
@@ -479,7 +513,7 @@ if pos_dir == "long" and not na(stop_level)
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
     _stop_hit  = (not use_hard_stop) and (close <= stop_level)
     if use_hard_stop and not _other_out
-        strategy.exit("FA-stop", from_entry="FA", stop=stop_level)   // real intra-bar, gap-safe
+        strategy.exit("FA-stop", from_entry="PA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
         _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
         strategy.close_all(comment = _why)
@@ -503,7 +537,7 @@ else if pos_dir == "short" and not na(stop_level)
     _rr = risk_unit > 0 ? (entry_price - close) / risk_unit : 0.0
 
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("FA", qty_percent=tp1_pct, comment="TP1")
+        strategy.close("PA", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.min(stop_level, entry_price - be_offset_raw)
@@ -528,7 +562,7 @@ else if pos_dir == "short" and not na(stop_level)
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
     _stop_hit  = (not use_hard_stop) and (close >= stop_level)
     if use_hard_stop and not _other_out
-        strategy.exit("FA-stop", from_entry="FA", stop=stop_level)   // real intra-bar, gap-safe
+        strategy.exit("FA-stop", from_entry="PA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
         _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
         strategy.close_all(comment = _why)
@@ -571,7 +605,7 @@ if pos_dir == "flat" and (long_signal or rev_long)
         rearm_low   := na
         tp1_taken   := false
         pos_dir     := "long"
-        strategy.entry("FA", strategy.long, qty=f_qty(close, _stop))
+        strategy.entry("PA", strategy.long, qty=f_qty(close, _stop))
         did_enter := true
 
 if pos_dir == "flat" and (short_signal or rev_short)
@@ -589,7 +623,7 @@ if pos_dir == "flat" and (short_signal or rev_short)
         rearm_low   := na
         tp1_taken   := false
         pos_dir     := "short"
-        strategy.entry("FA", strategy.short, qty=f_qty(close, _stop))
+        strategy.entry("PA", strategy.short, qty=f_qty(close, _stop))
         did_enter := true
 
 // ============================================================================
@@ -658,7 +692,7 @@ if show_hud and barstate.islast
     hud := table.new(_hp, 2, 8, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
     _hd = color.new(#0077BB, 0)
-    table.cell(hud, 0, 0, "3SHA FULL ALIGN", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(hud, 0, 0, "3SHA PRICE ABOVE", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(hud, 1, 0, confirm_mode == "Immediate" ? "IMMEDIATE" : "CONFIRMED", text_color=color.white, bgcolor=_hd, text_size=size.small)
 
     _align_txt = all_bull ? "▲ ALL BULL" : all_bear ? "▼ ALL BEAR" : "◇ MIXED"
