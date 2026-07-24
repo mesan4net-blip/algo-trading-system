@@ -1,6 +1,6 @@
 //@version=6
 // ============================================================================
-// 3SHA — FULL ALIGNMENT ALERTS  (companion indicator to 3SHA-FA strategy)
+// 3SHA — PRICE ABOVE ALL ALERTS  (companion indicator to 3SHA-PA strategy)
 // ============================================================================
 // WHY A SEPARATE SCRIPT:
 //   TradingView does not allow alertcondition() inside a strategy, and a
@@ -9,18 +9,18 @@
 //   This indicator fires on EVERY occurrence, and gives one alert per event
 //   type so sound/popup can be set separately for each.
 //
-// THE CALCULATION BLOCK BELOW MIRRORS 3SHA_FullAlignment_v1.pine VERBATIM.
+// THE CALCULATION BLOCK BELOW MIRRORS 3SHA_PriceAboveAll_v1.pine VERBATIM.
 //   Do not edit it here independently. If the strategy changes, copy the
 //   change across and re-verify that the alignment output matches.
 //
 // ALERT SETUP (in TradingView, not in this code):
-//   Right-click chart -> Add alert -> Condition = "3SHA-FA Alerts" -> pick the
+//   Right-click chart -> Add alert -> Condition = "3SHA-PA Alerts" -> pick the
 //   event. Notifications tab: tick "Show popup" and "Play sound".
 //   SET TRIGGER TO "Once Per Bar Close". The signal is close-based; firing
 //   intrabar produces phantom alerts that vanish when the candle closes.
 // ============================================================================
 
-indicator("3SHA Full Alignment Alerts", shorttitle="3SHA-FA Alerts", overlay=true,
+indicator("3SHA Price Above All Alerts", shorttitle="3SHA-PA Alerts", overlay=true,
      max_labels_count=500, max_lines_count=500)
 
 // ============================================================================
@@ -77,8 +77,38 @@ base_bull_bar = bC  >= bO
 htf1_bull_bar = h1C >= h1O
 htf2_bull_bar = h2C >= h2O
 
-all_bull = all_ready and base_bull_bar and htf1_bull_bar and htf2_bull_bar
-all_bear = all_ready and (bC < bO) and (h1C < h1O) and (h2C < h2O)
+// ── ENTRY CONDITION: WHERE PRICE SITS, NOT WHICH WAY EACH LAYER POINTS ─────
+// Which edge counts follows the Anchor Uses setting, so Body ignores wicks on
+// both sides — the same convention the stop anchors use.
+pa_layers = input.string("All three", "Price Must Clear", options=["All three","Both higher layers","HTF2 only","HTF1 only","Any two"], group="④ ━━━ ENTRY ━━━")
+
+_pa_body = sl_price_basis == "Body (open/close)"
+pa_b_top = _pa_body ? math.max(bO, bC)  : bH
+pa_b_bot = _pa_body ? math.min(bO, bC)  : bL
+pa_1_top = _pa_body ? math.max(h1O,h1C) : h1H
+pa_1_bot = _pa_body ? math.min(h1O,h1C) : h1L
+pa_2_top = _pa_body ? math.max(h2O,h2C) : h2H
+pa_2_bot = _pa_body ? math.min(h2O,h2C) : h2L
+
+_ab = close > pa_b_top
+_a1 = close > pa_1_top
+_a2 = close > pa_2_top
+_bb = close < pa_b_bot
+_b1 = close < pa_1_bot
+_b2 = close < pa_2_bot
+_n_above = (_ab ? 1 : 0) + (_a1 ? 1 : 0) + (_a2 ? 1 : 0)
+_n_below = (_bb ? 1 : 0) + (_b1 ? 1 : 0) + (_b2 ? 1 : 0)
+
+all_bull = all_ready and (pa_layers == "All three"          ? (_ab and _a1 and _a2)
+   : pa_layers == "Both higher layers" ? (_a1 and _a2)
+   : pa_layers == "HTF2 only"          ? _a2
+   : pa_layers == "HTF1 only"          ? _a1
+   :                                     _n_above >= 2)
+all_bear = all_ready and (pa_layers == "All three"          ? (_bb and _b1 and _b2)
+   : pa_layers == "Both higher layers" ? (_b1 and _b2)
+   : pa_layers == "HTF2 only"          ? _b2
+   : pa_layers == "HTF1 only"          ? _b1
+   :                                     _n_below >= 2)
 
 sha_bot_0 = math.min(bO, bC)
 sha_top_0 = math.max(bO, bC)
@@ -105,8 +135,8 @@ reentry_expires = input.bool(true, "  Cancel If Setup Breaks", group=grp_entry)
 skip_gaps    = input.bool(false, "Skip Gap Entries", tooltip="Skip an entry that fires on a day whose open gapped more than the threshold from the prior day's close.", group=grp_entry)
 gap_thresh   = input.float(0.5, "  Gap Threshold (%)", minval=0.0, step=0.1, group=grp_entry)
 
-fa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
-fa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
+pa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
+pa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
 
 is_new_day = ta.change(time("1D")) != 0
 gap_block  = skip_gaps and is_new_day and gap_pct > gap_thresh
@@ -358,8 +388,8 @@ if reentry_expires and not na(rearm_low) and not all_bear
 re_long  = use_reentry and not na(rearm_high) and close > rearm_high and (not reentry_needs_base or all_bull)
 re_short = use_reentry and not na(rearm_low)  and close < rearm_low  and (not reentry_needs_base or all_bear)
 
-long_signal  = allow_longs  and (fa_bull_raw or re_long)  and not gap_block
-short_signal = allow_shorts and (fa_bear_raw or re_short) and not gap_block
+long_signal  = allow_longs  and (pa_bull_raw or re_long)  and not gap_block
+short_signal = allow_shorts and (pa_bear_raw or re_short) and not gap_block
 rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and not gap_block
 rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and not gap_block
 
@@ -402,8 +432,8 @@ al_exit   = input.bool(true, "Exit-signal alerts (any enabled exit)", group=grp_
 al_stop   = input.bool(true, "Stop-hit alerts", group=grp_al)
 al_signal_only = input.bool(false, "Signal-only mode (ignore position state)", tooltip="OFF: entry alerts fire only when flat, matching the strategy.\nON: every Full Alignment fires, even while a hypothetical trade is already open.", group=grp_al)
 
-raw_long  = allow_longs  and (fa_bull_raw or re_long)  and not gap_block
-raw_short = allow_shorts and (fa_bear_raw or re_short) and not gap_block
+raw_long  = allow_longs  and (pa_bull_raw or re_long)  and not gap_block
+raw_short = allow_shorts and (pa_bear_raw or re_short) and not gap_block
 
 fire_entry_long  = al_entry and (al_signal_only ? raw_long  : ev_entry_long)
 fire_entry_short = al_entry and (al_signal_only ? raw_short : ev_entry_short)
@@ -412,12 +442,12 @@ fire_stop_hit    = al_stop and ev_stop_hit
 fire_any_entry   = fire_entry_long or fire_entry_short
 fire_any_exit    = fire_align_break or fire_stop_hit
 
-alertcondition(fire_entry_long,  "Entry LONG",  "3SHA-FA LONG entry on {{ticker}} {{interval}} at {{close}}")
-alertcondition(fire_entry_short, "Entry SHORT", "3SHA-FA SHORT entry on {{ticker}} {{interval}} at {{close}}")
-alertcondition(fire_align_break, "Exit — signal", "3SHA-FA exit signal on {{ticker}} {{interval}} at {{close}} (alignment break, target, give-back, time or SHA break — whichever is enabled)")
-alertcondition(fire_stop_hit,    "Exit — stop hit", "3SHA-FA stop hit on {{ticker}} {{interval}} at {{close}} — exit")
-alertcondition(fire_any_entry,   "Any entry", "3SHA-FA entry on {{ticker}} {{interval}} at {{close}}")
-alertcondition(fire_any_exit,    "Any exit",  "3SHA-FA exit on {{ticker}} {{interval}} at {{close}}")
+alertcondition(fire_entry_long,  "Entry LONG",  "3SHA-PA LONG entry on {{ticker}} {{interval}} at {{close}}")
+alertcondition(fire_entry_short, "Entry SHORT", "3SHA-PA SHORT entry on {{ticker}} {{interval}} at {{close}}")
+alertcondition(fire_align_break, "Exit — signal", "3SHA-PA exit signal on {{ticker}} {{interval}} at {{close}} (alignment break, target, give-back, time or SHA break — whichever is enabled)")
+alertcondition(fire_stop_hit,    "Exit — stop hit", "3SHA-PA stop hit on {{ticker}} {{interval}} at {{close}} — exit")
+alertcondition(fire_any_entry,   "Any entry", "3SHA-PA entry on {{ticker}} {{interval}} at {{close}}")
+alertcondition(fire_any_exit,    "Any exit",  "3SHA-PA exit on {{ticker}} {{interval}} at {{close}}")
 
 // ============================================================================
 // ⑨ DISPLAY
@@ -441,7 +471,7 @@ if show_panel and barstate.islast
     var table tb = table.new(position.top_right, 2, 5, border_width=1)
     _dir = pos_dir == "flat" ? "—" : str.upper(pos_dir)
     _col = pos_dir == "long" ? col_long : pos_dir == "short" ? col_short : color.gray
-    table.cell(tb, 0, 0, "3SHA-FA", text_color=color.white, bgcolor=color.new(color.black, 20), text_size=size.small)
+    table.cell(tb, 0, 0, "3SHA-PA", text_color=color.white, bgcolor=color.new(color.black, 20), text_size=size.small)
     table.cell(tb, 1, 0, _dir, text_color=color.white, bgcolor=_col, text_size=size.small)
     table.cell(tb, 0, 1, "Base",  text_size=size.small, text_color=color.gray)
     table.cell(tb, 1, 1, base_bull_bar ? "bull" : "bear", text_size=size.small, text_color=base_bull_bar ? col_long : col_short)
