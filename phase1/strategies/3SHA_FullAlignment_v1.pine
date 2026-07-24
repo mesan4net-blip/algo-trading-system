@@ -272,15 +272,19 @@ f_short_stop() =>
 // ============================================================================
 grp_size = "⑤ ━━━ POSITION SIZING ━━━"
 risk_pct = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, tooltip="% of equity risked from entry to initial stop. Full Alignment is the highest-conviction signal, so this defaults to the top of the normal band. Risk$ ÷ stop distance = size.", group=grp_size)
-max_equity_pct = input.float(20.0, "Max Equity Per Trade (%)", minval=1.0, maxval=100.0, step=1.0, tooltip="Hard cap on capital deployed, even if the risk calc allows more.", group=grp_size)
+max_equity_pct = input.float(100.0, "Max Equity Per Trade (%)", minval=1.0, maxval=100.0, step=1.0, tooltip="Hard cap on capital deployed, even if the risk calc allows more.", group=grp_size)
 
 f_qty(_entry, _stop) =>
+    // Fractional sizing. Rounding down to whole units and then forcing a minimum
+    // of 1 made the risk setting meaningless: on a high-priced instrument the
+    // floor cut the size hard, and the minimum could force a position far larger
+    // than the risk allowed. Crypto is fractional anyway; brokers handle
+    // fractional shares. TradingView rounds where the instrument requires it.
     _eq   = strategy.equity
-    _riskD = _eq * risk_pct / 100.0
-    _dist  = math.abs(_entry - _stop)
-    _qtyR  = _dist > 0 ? _riskD / _dist : 1
+    _dist = math.abs(_entry - _stop)
+    _qtyR = _dist > 0 ? (_eq * risk_pct / 100.0) / _dist : 0.0
     _qtyMax = (_eq * max_equity_pct / 100.0) / _entry
-    math.max(1, math.floor(math.min(_qtyR, _qtyMax)))
+    math.max(0.0, math.min(_qtyR, _qtyMax))
 
 // ============================================================================
 // ⑥ TRADE MANAGEMENT  (the Full-Alignment-specific engine)
@@ -592,6 +596,31 @@ if pos_dir == "flat" and (short_signal or rev_short)
         strategy.entry("FA", strategy.short, qty=f_qty(close, _stop))
         did_enter := true
 
+// ── WHY NO ENTRY? ──────────────────────────────────────────────────────────
+// Shown in the HUD and the Data Window so a skipped signal can be explained on
+// the chart itself, without exporting anything.
+_sig_long  = allow_longs  and (fa_bull_raw or re_long)
+_sig_short = allow_shorts and (fa_bear_raw or re_short)
+_raw_long  = fa_bull_raw or re_long
+_raw_short = fa_bear_raw or re_short
+_stop_pre  = _raw_long ? f_long_stop() : _raw_short ? f_short_stop() : na
+_stop_bad  = (_raw_long and (na(_stop_pre) or _stop_pre >= close)) or (_raw_short and (na(_stop_pre) or _stop_pre <= close))
+
+why_no_entry = pos_dir != "flat"                    ? "already in a trade"
+   : not (_raw_long or _raw_short)                  ? "no signal this bar"
+   : _raw_long and not allow_longs                  ? "LONGS NOT ALLOWED"
+   : _raw_short and not allow_shorts                ? "SHORTS NOT ALLOWED"
+   : gap_block                                      ? "blocked: gap day"
+   : not in_date                                    ? "blocked: outside date range"
+   : _stop_bad                                      ? "blocked: stop not valid"
+   : did_enter                                      ? "ENTERED"
+   :                                                  "-"
+
+plot(_raw_long ? 1 : _raw_short ? -1 : 0, "Raw signal (1=long -1=short)", display=display.data_window)
+plot(pos_dir == "flat" ? 0 : 1, "In a trade", display=display.data_window)
+plot(gap_block ? 1 : 0, "Gap blocked", display=display.data_window)
+plot(_stop_bad ? 1 : 0, "Stop invalid", display=display.data_window)
+
 // ============================================================================
 // VISUALS
 // ============================================================================
@@ -655,7 +684,7 @@ plot(pos_dir == "long" ? 1 : pos_dir == "short" ? -1 : 0, "Position", display=di
 var table hud = na
 if show_hud and barstate.islast
     _hp = hud_pos == "Top Left" ? position.top_left : hud_pos == "Top Right" ? position.top_right : hud_pos == "Bottom Left" ? position.bottom_left : position.bottom_right
-    hud := table.new(_hp, 2, 8, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
+    hud := table.new(_hp, 2, 9, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
     _hd = color.new(#0077BB, 0)
     table.cell(hud, 0, 0, "3SHA FULL ALIGN", text_color=color.white, bgcolor=_hd, text_size=size.small)
@@ -686,6 +715,8 @@ if show_hud and barstate.islast
 
     table.cell(hud, 0, 7, "Instrument", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 7, instrument_type, text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 0, 8, "Why no entry", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 8, why_no_entry, text_color=color.white, bgcolor=why_no_entry == "ENTERED" ? color.new(#1B5E20,0) : str.startswith(why_no_entry, "blocked") or str.contains(why_no_entry, "NOT ALLOWED") ? color.new(#8B0000,0) : color.new(#444444,0), text_size=size.small)
 
 // ============================================================================
 // ALERTS

@@ -306,15 +306,15 @@ f_short_stop() =>
 // ============================================================================
 grp_size = "⑤ ━━━ POSITION SIZING ━━━"
 risk_pct = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, tooltip="% of equity risked from entry to initial stop. Full Alignment is the highest-conviction signal, so this defaults to the top of the normal band. Risk$ ÷ stop distance = size.", group=grp_size)
-max_equity_pct = input.float(20.0, "Max Equity Per Trade (%)", minval=1.0, maxval=100.0, step=1.0, tooltip="Hard cap on capital deployed, even if the risk calc allows more.", group=grp_size)
+max_equity_pct = input.float(100.0, "Max Equity Per Trade (%)", minval=1.0, maxval=100.0, step=1.0, tooltip="Hard cap on capital deployed, even if the risk calc allows more.", group=grp_size)
 
 f_qty(_entry, _stop) =>
     _eq   = strategy.equity
     _riskD = _eq * risk_pct / 100.0
     _dist  = math.abs(_entry - _stop)
-    _qtyR  = _dist > 0 ? _riskD / _dist : 1
+    _qtyR  = _dist > 0 ? _riskD / _dist : 0.0
     _qtyMax = (_eq * max_equity_pct / 100.0) / _entry
-    math.max(1, math.floor(math.min(_qtyR, _qtyMax)))
+    math.max(0.0, math.min(_qtyR, _qtyMax))
 
 // ============================================================================
 // ⑥ TRADE MANAGEMENT  (the Full-Alignment-specific engine)
