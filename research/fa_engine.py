@@ -46,7 +46,12 @@ def align_htf(base_index, sha_o,sha_c, sha_index, dur, sha_h=None, sha_l=None, b
     return m['o'].values, m['c'].values
 
 def gap_block_flags(base_index, daily_df, thresh):
-    """Mark base bars that are the first bar of a NEW day whose open gapped > thresh%."""
+    """First bar of a new day whose open gapped more than thresh%.
+
+    A threshold of 0 means OFF. Previously 0 meant 'any gap at all', which read
+    like 'disabled' and behaved like the opposite -- it blocked every day."""
+    if not thresh or thresh <= 0:
+        return np.zeros(len(base_index), dtype=bool)
     d=daily_df.copy()
     pclose=d['close'].shift(1)
     d['gap']=(d['open']-pclose).abs()/pclose*100.0
@@ -133,7 +138,7 @@ def precompute(base_df, cfg, htf1_df, htf2_df, daily_df):
         sha_bot1=np.minimum(h1O,h1C), sha_top1=np.maximum(h1O,h1C),
         sha_bot2=np.minimum(h2O,h2C), sha_top2=np.maximum(h2O,h2C),
         roll_min=roll_min, roll_max=roll_max,
-        gap_block=gap_block_flags(idx,daily_df,cfg.get('gap_thresh',0.5)))
+        gap_block=gap_block_flags(idx,daily_df,cfg.get('gap_thresh',0.0)))
     return P
 
 def _anchor_low(P,i,mode,basis,lookback,swings):
@@ -268,7 +273,7 @@ def default_cfg():
         base_sha=(4,8), htf1_sha=(4,8), htf2_sha=(2,2),
         htf1_dur=pd.Timedelta('1D'), htf2_dur=pd.Timedelta('7D'),
         allow_longs=True, allow_shorts=True,
-        skip_gaps=False, gap_thresh=0.5,
+        gap_thresh=0.0,
         sl_mode='Swing', sl_basis='Body', sl_lookback=10, sl_buffer=2.0, min_stop=0.0,
         use_hard_stop=False,
         risk_pct=1.0, max_equity_pct=20.0, equity0=100000.0,

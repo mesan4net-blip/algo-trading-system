@@ -72,7 +72,7 @@ FIXED = [
     ("Break-even", "on -- stop moves to entry at +1R"),
     ("Trailing stop", "on -- swing/6 bars, same basis, starts at +1R, close-based"),
     ("Partial take-profit", "off"),
-    ("Gap skip", "off"),
+    ("Gap skip", "off (threshold 0)"),
     ("Risk per trade", "1% of equity, every trade"),
     ("Position sizing", "fractional, risk divided by the stop distance"),
     ("Leverage limit", "4x equity -- a position is never larger than that"),
