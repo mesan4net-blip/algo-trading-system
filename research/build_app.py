@@ -1,5 +1,6 @@
 """build_app.py — run the plan on every stored instrument and generate the bench page."""
 import os, json, datetime, warnings
+from zoneinfo import ZoneInfo
 warnings.filterwarnings('ignore')
 import test_plan as TP
 from runner import run_instrument, REPO, DATA
@@ -53,6 +54,26 @@ HISTORY = [
       detail="Seven exits instead of one: hold the break for N bars, price falling back through a trend line, a profit target, giving back a share of peak profit, a time stop, the chart line crossing the mid line, and opposite full alignment.",
       effect="On QQQ's 15-minute chart a 3R profit target turned -3.0% a year into +3.9%, with the drop cut from 18% to 6.6%. Contradicted the expectation that a target would hurt a trend system."),
 ]
+
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+def pacific_now():
+    """Local time. Uses the America/Los_Angeles zone rather than a fixed offset,
+    so it reads PDT in summer and PST in winter without anyone remembering to
+    change it."""
+    return datetime.datetime.now(PACIFIC).strftime('%d %b %Y, %-I:%M %p %Z')
+
+
+def to_pacific(utc_str):
+    """Convert a stored 'YYYY-MM-DD HH:MM UTC' stamp to local time."""
+    try:
+        d = datetime.datetime.strptime(utc_str.replace(' UTC', ''), '%Y-%m-%d %H:%M')
+        d = d.replace(tzinfo=datetime.timezone.utc).astimezone(PACIFIC)
+        return d.strftime('%d %b %Y, %-I:%M %p %Z')
+    except Exception:
+        return utc_str
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +245,7 @@ def market_card(res):
     return f"""<div class="mk">
 <div class="mkh"><span class="nm">{res['instrument']}</span>
 <span class="meta">{res['base_tf']} chart · {res['years']} years of history · {res['cost_pct']}% cost per trade</span>
-<span class="stamp">tested {res.get('run_at','—')}</span></div>
+<span class="stamp">tested {to_pacific(res.get('run_at','—'))}</span></div>
 
 <p class="lab">Settings to use</p>
 <dl class="set">
@@ -258,7 +279,7 @@ def market_card(res):
 
 
 def build(results, manifest):
-    now = datetime.datetime.utcnow().strftime('%d %B %Y, %H:%M UTC')
+    now = pacific_now()
     total = sum(len(r['all_runs']) for r in results)
     cards = ''.join(market_card(r) for r in results)
     hist = ''.join(f'<div class="hrow"><span class="hn">{h["n"]}</span><div class="hb">'
