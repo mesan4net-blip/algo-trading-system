@@ -95,6 +95,9 @@ CSS = """
 .hero{padding:64px 0 30px}
 .eyebrow{font:500 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--grow);margin:0 0 20px}
 h1{font:600 clamp(34px,5.5vw,54px)/1.05 var(--dsp);font-variation-settings:'SOFT' 40,'WONK' 1;letter-spacing:-.02em;margin:0 0 16px;max-width:18ch}
+.updated{font:500 12.5px/1 var(--mono);color:var(--soft);background:var(--grow-lt);display:inline-block;padding:8px 14px;border-radius:20px;margin:0 0 18px}
+.updated b{color:var(--grow)}
+.stamp{font:400 12px/1 var(--mono);color:var(--faint);margin-left:auto}
 .lede{font-size:17px;color:var(--soft);max-width:60ch;margin:0}
 .sec{margin-top:60px}
 h2{font:600 27px/1.15 var(--dsp);font-variation-settings:'SOFT' 40;margin:0 0 6px}
@@ -220,7 +223,8 @@ def market_card(res):
 
     return f"""<div class="mk">
 <div class="mkh"><span class="nm">{res['instrument']}</span>
-<span class="meta">{res['base_tf']} chart · {res['years']} years of history · {res['cost_pct']}% cost per trade</span></div>
+<span class="meta">{res['base_tf']} chart · {res['years']} years of history · {res['cost_pct']}% cost per trade</span>
+<span class="stamp">tested {res.get('run_at','—')}</span></div>
 
 <p class="lab">Settings to use</p>
 <dl class="set">
@@ -254,7 +258,7 @@ def market_card(res):
 
 
 def build(results, manifest):
-    now = datetime.datetime.utcnow().strftime('%d %B %Y')
+    now = datetime.datetime.utcnow().strftime('%d %B %Y, %H:%M UTC')
     total = sum(len(r['all_runs']) for r in results)
     cards = ''.join(market_card(r) for r in results)
     hist = ''.join(f'<div class="hrow"><span class="hn">{h["n"]}</span><div class="hb">'
@@ -270,6 +274,7 @@ def build(results, manifest):
 <header class="hero">
 <p class="eyebrow">3SHA · full alignment</p>
 <h1>What to set, and how well it did.</h1>
+<p class="updated">Last updated <b>{now}</b> · {total:,} backtests</p>
 <p class="lede">Every market below was put through the same {TP.count():,} combinations of settings. What you see first is the one that held up best — written out so you can type it straight into a chart.</p>
 </header>
 
@@ -289,7 +294,7 @@ def build(results, manifest):
 
 <footer class="foot">
 <p class="l">Built slowly, on purpose. Every figure here is a backtest — a careful record of the past, never a promise about what comes next.</p>
-<p>{total:,} backtests · engine matched to TradingView to the penny · generated {now}</p>
+<p>{total:,} backtests · engine matched to TradingView to the penny · page generated {now}</p>
 </footer>
 </div></body></html>"""
 
@@ -313,6 +318,7 @@ if __name__ == "__main__":
         meta['all_runs'] = rows
         meta['top'] = [r for r in rows if r['trades'] >= 20][:3]
         meta['n_holds'] = sum(1 for r in rows if r['verdict'] == 'holds')
+        meta['run_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
         json.dump(meta, open(os.path.join(cache, f"{inst}.json"), "w"))
         for f in parts: os.remove(os.path.join(cache, f))
         print(f"{inst}: merged {len(parts)} chunks -> {len(rows):,} runs, {meta['n_holds']} held")
@@ -333,6 +339,7 @@ if __name__ == "__main__":
             print(f"{arg} chunk {ch}/{nch}: {len(res['rows'])} runs in {time.time()-t0:.0f}s")
         else:
             res = run_instrument(arg, verbose=False)
+            res['run_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
             json.dump(res, open(os.path.join(cache, f"{arg}.json"), "w"))
             print(f"{arg}: {len(res['all_runs'])} runs in {time.time()-t0:.0f}s · {res['n_holds']} held")
     else:
@@ -342,6 +349,9 @@ if __name__ == "__main__":
             f = os.path.join(cache, f"{inst}.json")
             if os.path.exists(f):
                 r = enrich(json.load(open(f)))
+                if not r.get('run_at'):
+                    r['run_at'] = datetime.datetime.utcfromtimestamp(
+                        os.path.getmtime(f)).strftime('%Y-%m-%d %H:%M UTC')
                 b = load(os.path.join(DATA, inst, r['base_tf'] + '.csv'))
                 yrs = (b.index[-1] - b.index[0]).days / 365.25
                 tot = b['close'].iloc[-1] / b['close'].iloc[0]
