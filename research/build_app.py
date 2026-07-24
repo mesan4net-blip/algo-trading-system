@@ -313,13 +313,13 @@ def build(results, manifest):
 <p class="lede">Every market below was put through the same {TP.count():,} combinations of settings. What you see first is the one that held up best — written out so you can type it straight into a chart.</p>
 </header>
 
-<section class="sec">{cards}</section>
-
 <section class="sec">
 <h2>The eight signals</h2>
-<p class="sub">Each way into a trade is built and proven on its own before any of them are combined. Only the first has been tested so far — everything above is Full Alignment alone.</p>
+<p class="sub">Each way into a trade is built and proven on its own before any of them are combined. Only the first has been tested so far — every result below is Full Alignment alone.</p>
 <div class="card" style="padding:6px 28px 20px">{sig}</div>
 </section>
+
+<section class="sec">{cards}</section>
 
 <section class="sec">
 <h2>What changed along the way</h2>
