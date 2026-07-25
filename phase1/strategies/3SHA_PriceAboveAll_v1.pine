@@ -88,8 +88,8 @@ grp_base = "② ━━━ BASE SHA  [Chart TF] ━━━"
 base_len1 = input.int(4, "Base Stage-1 EMA", minval=1, group=grp_base)
 base_len2 = input.int(8, "Base Stage-2 EMA", minval=1, group=grp_base)
 base_show = input.bool(true, "Show Base SHA Candles", group=grp_base)
-base_bull = input.color(color.new(#0077BB, 0), "Bull Color", group=grp_base)
-base_bear = input.color(color.new(#EE7733, 0), "Bear Color", group=grp_base)
+base_bull = input.color(color.new(#2962FF, 0), "Bull Color", group=grp_base)
+base_bear = input.color(color.new(#FF9800, 0), "Bear Color", group=grp_base)
 base_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_base)
 base_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_base)
 base_opacity = input.int(0, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_base)
@@ -99,8 +99,8 @@ htf1_tf   = input.timeframe("60", "HTF1 Timeframe", group=grp_htf1)
 htf1_len1 = input.int(4, "HTF1 Stage-1 EMA", minval=1, group=grp_htf1)
 htf1_len2 = input.int(8, "HTF1 Stage-2 EMA", minval=1, group=grp_htf1)
 htf1_show = input.bool(true, "Show HTF1 SHA Candles", group=grp_htf1)
-htf1_bull = input.color(color.new(#0077BB, 0), "Bull Color", group=grp_htf1)
-htf1_bear = input.color(color.new(#CC3311, 0), "Bear Color", group=grp_htf1)
+htf1_bull = input.color(color.new(#2962FF, 0), "Bull Color", group=grp_htf1)
+htf1_bear = input.color(color.new(#F23645, 0), "Bear Color", group=grp_htf1)
 htf1_border_bull = input.color(color.new(#000000, 0), "Bull Border Color", group=grp_htf1)
 htf1_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group=grp_htf1)
 htf1_wick = input.color(color.new(#555555, 0), "Wick Color", group=grp_htf1)
@@ -111,8 +111,8 @@ htf2_tf   = input.timeframe("240", "HTF2 Timeframe", group=grp_htf2)
 htf2_len1 = input.int(4, "HTF2 Stage-1 EMA", minval=1, group=grp_htf2)
 htf2_len2 = input.int(8, "HTF2 Stage-2 EMA", minval=1, group=grp_htf2)
 htf2_show = input.bool(true, "Show HTF2 SHA Candles", group=grp_htf2)
-htf2_bull = input.color(color.new(#0077BB, 0), "Bull Color", group=grp_htf2)
-htf2_bear = input.color(color.new(#CC3311, 0), "Bear Color", group=grp_htf2)
+htf2_bull = input.color(color.new(#2962FF, 0), "Bull Color", group=grp_htf2)
+htf2_bear = input.color(color.new(#F23645, 0), "Bear Color", group=grp_htf2)
 htf2_border_bull = input.color(color.new(#000000, 0), "Bull Border Color", group=grp_htf2)
 htf2_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group=grp_htf2)
 htf2_wick = input.color(color.new(#555555, 0), "Wick Color", group=grp_htf2)
@@ -806,8 +806,8 @@ plotcandle(base_ready and base_show ? bO : na, base_ready and base_show ? base_p
            bordercolor=base_ready and base_show ? base_brdr_col : na)
 
 // Entry markers — filled arrows (▲▼), carried over from v6
-plotshape(show_markers and did_enter and pos_dir == "long"  ? low  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=color.new(#0077BB, 0), size=size.small, text="▲")
-plotshape(show_markers and did_enter and pos_dir == "short" ? high : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=color.new(#EE3322, 0), size=size.small, text="▼")
+plotshape(show_markers and did_enter and pos_dir == "long"  ? low  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=color.new(#2962FF, 0), size=size.small, text="▲")
+plotshape(show_markers and did_enter and pos_dir == "short" ? high : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=color.new(#F23645, 0), size=size.small, text="▼")
 
 // Exit markers — ✕ at the exit, colored by reason (stop vs alignment break)
 plotshape(show_markers and did_exit ? close : na, title="Exit", style=shape.xcross, location=location.absolute,
@@ -831,12 +831,12 @@ if show_hud and barstate.islast
     _hp = hud_pos == "Top Left" ? position.top_left : hud_pos == "Top Right" ? position.top_right : hud_pos == "Bottom Left" ? position.bottom_left : position.bottom_right
     hud := table.new(_hp, 2, 9, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
-    _hd = color.new(#0077BB, 0)
+    _hd = color.new(#2962FF, 0)
     table.cell(hud, 0, 0, "3SHA PRICE ABOVE", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(hud, 1, 0, confirm_mode == "Immediate" ? "IMMEDIATE" : "CONFIRMED", text_color=color.white, bgcolor=_hd, text_size=size.small)
 
     _align_txt = all_bull ? "▲ ABOVE ALL" : all_bear ? "▼ BELOW ALL" : "◇ MIXED"
-    _align_col = all_bull ? color.new(#0077BB, 0) : all_bear ? color.new(#EE3322, 0) : color.new(#888888, 0)
+    _align_col = all_bull ? color.new(#2962FF, 0) : all_bear ? color.new(#F23645, 0) : color.new(#888888, 0)
     table.cell(hud, 0, 1, "Price vs SHA", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 1, _align_txt, text_color=color.white, bgcolor=_align_col, text_size=size.small)
 
