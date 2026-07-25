@@ -2,32 +2,55 @@
 // ============================================================================
 // 3SHA — PRICE ABOVE ALL STRATEGY  (v1)
 // ============================================================================
-// PART OF: the per-entry-type rebuild of 3SHA_Strategy_v6.
-//   v6 clubbed all 8 entry types into one script with a shared SL/sizing/exit
-//   engine. This is the FIRST standalone script: it trades ONLY Full Alignment
-//   (▲▼) and owns its stop, sizing, and trade-management logic end to end.
+// PART OF: the per-entry-type rebuild of 3SHA_Strategy_v6. Each entry type gets
+//   its own script, owning its stop, sizing and trade management end to end.
+//   This one trades PRICE ABOVE ALL.
 //
-// SIGNAL (unchanged from v6 so it matches your charts exactly):
-//   All three SHA layers (Base, HTF1, HTF2) agree in direction. Fires on the
-//   bar the third layer completes the agreement. Highest conviction, slowest
-//   to fire. Definition preserved verbatim: all_bull[1] and not all_bull[2].
+// SIGNAL:
+//   Not "which way is each layer pointing" — that is Full Alignment. This asks
+//   WHERE PRICE IS SITTING relative to the three SHA layers. A layer can point
+//   down while price sits above it, and the reverse, so the two fire at quite
+//   different moments. "Price Must Clear" chooses how many layers price has to
+//   close beyond; the single-layer options are the HTF price-cross signals from
+//   the plan, folded in here.
 //
-// WHY A DEDICATED DESIGN:
-//   Full Alignment is a multi-timeframe TREND signal. Its natural risk unit is
-//   structural (swing / SHA body), its natural invalidation is the alignment
-//   BREAKING, and its natural edge is riding a confirmed trend. So the stop,
-//   sizing, and management here are built around "stay in while the three
-//   timeframes agree; leave when they stop agreeing or structure breaks."
+// ELIGIBILITY — the rule that keeps the exits honest:
+//   A SHA layer cannot end a trade until price has CLOSED beyond it during that
+//   trade. Whatever the entry required is eligible from the entry bar; any other
+//   layer joins the moment price closes past it, and stays for the rest of the
+//   trade. Without this, a layer price never cleared could close the position on
+//   the very next bar — a layer the setup never asked about.
 //
-// EXIT PHILOSOPHY: all exits are CLOSE-BASED (mental-stop style, same as v6),
-//   and — unlike v6 — every exit path actually closes the strategy position.
+// EXIT ANCHORS — the stop IS the exit:
+//   Alongside the fixed layer anchors, three anchors rank the ELIGIBLE layers by
+//   distance from price: Closest, Middle, Furthest. The ranking is recomputed
+//   every bar, so "closest" always means the line price would reach first. Both
+//   the initial stop and the trail can use them. Which edge of the SHA body the
+//   level sits on follows the existing convention: the far edge, i.e. the body
+//   bottom for a long and the body top for a short.
+//
+// LAYER-FLIP EXIT (optional, off by default):
+//   A layer only counts as flipped if it was pointing WITH the trade at some
+//   point during it and then turned. A layer already pointing against the trade
+//   at entry is dormant — it never flipped, it was just sitting there. A flip
+//   INTO the trade's direction arms a layer; it never exits one.
+//
+// EXIT PHILOSOPHY: all exits are CLOSE-BASED (mental-stop style) by default,
+//   with an optional hard stop, and every exit path closes the position.
+//
+// TRADING COSTS: Pine requires these to be constants in the strategy() call, so
+//   they cannot be script inputs. Set them below or override in the Properties
+//   tab. They ship at zero — a zero-cost backtest is fine for reconciliation
+//   against TradingView, but is not a tradeable result.
 // ============================================================================
 
-strategy("3SHA Price Above All", shorttitle="3SHA-PA", overlay=true,
+strategy("3SHA Price Above All", shorttitle="3SHA-PAA", overlay=true,
      initial_capital=100000, currency=currency.USD,
      default_qty_type=strategy.percent_of_equity, default_qty_value=10,
      calc_on_every_tick=false, process_orders_on_close=true, pyramiding=0,
-     max_bars_back=5000, max_labels_count=500, max_lines_count=500)
+     max_bars_back=5000, max_labels_count=500, max_lines_count=500,
+     commission_type=strategy.commission.percent, commission_value=0.0,
+     slippage=0)
 
 // ============================================================================
 // SHA FUNCTION — Two-pass: EMA → HA → EMA   (identical to v6)
@@ -115,15 +138,51 @@ base_bull_bar = bC  >= bO
 htf1_bull_bar = h1C >= h1O
 htf2_bull_bar = h2C >= h2O
 
-// ── ENTRY CONDITION: WHERE PRICE SITS, NOT WHICH WAY EACH LAYER POINTS ─────
-// Full Alignment asks whether each layer is internally bullish (its smoothed
-// close above its smoothed open). This asks something different: is PRICE above
-// the lines? A layer can point down while price sits above it, and the reverse,
-// so the two fire at quite different moments.
-// Which edge counts follows the Anchor Uses setting, so Body ignores wicks on
-// both sides — the same convention the stop anchors use.
-pa_layers = input.string("All three", "Price Must Clear", options=["All three","Both higher layers","HTF2 only","HTF1 only","Any two"], tooltip="Which SHA layers price has to close beyond. 'All three' is the strictest. The single-layer options are the price-cross signals from the plan, folded in here.", group="④ ━━━ ENTRY ━━━")
+// SHA body extremes — used for the SHA-body stop option
+sha_bot_0 = math.min(bO, bC)      // chart-layer SHA body — the layer the entry fires on
+sha_top_0 = math.max(bO, bC)
+sha_top_1 = math.max(h1O, h1C)
+sha_bot_1 = math.min(h1O, h1C)
+sha_top_2 = math.max(h2O, h2C)
+sha_bot_2 = math.min(h2O, h2C)
 
+// ============================================================================
+// ③ ENTRY — PRICE ABOVE ALL
+// ============================================================================
+grp_entry = "③ ━━━ ENTRY: PRICE ABOVE ALL ━━━"
+pa_layers = input.string("All three", "Price Must Clear", options=["All three","Both higher layers","HTF2 only","HTF1 only","Any two"], tooltip="Which SHA layers price has to close beyond. 'All three' is the strictest. The single-layer options are the HTF price-cross signals from the plan, folded in here.", group=grp_entry)
+confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): fires the bar AFTER price completes the condition. One bar of confirmation lag.\nImmediate: fires on the bar price completes it. Earlier, slightly noisier.", group=grp_entry)
+allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
+allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
+// ── RE-ENTRY AFTER AN EXIT ─────────────────────────────────────────────────
+// The entry signal fires once, on the FIRST breakout into the condition, and
+// never again while it stays true. So a trade stopped out mid-trend leaves the
+// rest of the move untaken. This arms the setup again after an exit: price has
+// to prove it is resuming by CLOSING beyond the exit candle itself.
+use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when a later candle CLOSES above the exit candle's HIGH (for longs) or below its LOW (for shorts). No fresh transition needed — price simply has to clear the bar you were knocked out on.", group=grp_entry)
+reentry_needs_base = input.bool(true, "  Setup Must Still Hold", tooltip="Only re-enter while the entry condition is still true. Off means price clearing the exit candle is enough on its own, even if the layers have since fallen out of agreement.", group=grp_entry)
+reentry_expires = input.bool(true, "  Cancel If Setup Breaks", tooltip="If the condition fails before price clears the exit candle, drop the armed re-entry rather than waiting indefinitely. It re-arms only after another exit.", group=grp_entry)
+gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
+
+// ============================================================================
+// ④ INITIAL STOP  (invalidation level + sizing anchor)
+// ============================================================================
+grp_sl = "④ ━━━ INITIAL STOP ━━━"
+sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], tooltip="Closest / Middle / Furthest Eligible SHA: rank the SHA layers that price has CLOSED beyond during this trade, by distance from price, and anchor on the chosen rung. Recomputed every bar. With two eligible layers Middle resolves to Furthest; with one, all three rungs resolve to it; with none, the anchor falls back to Swing.\n\nLast Bar Beyond ... : the most recent bar that sat entirely past the SHA's far edge (below it for a long, above it for a short) — the last place price was genuinely on the wrong side of the trend. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher SHA layer is closer to price. No lookback limit.\n\nTrigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
+sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
+sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
+sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($). Stop is CLOSE-based.", group=grp_sl)
+min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, tooltip="Floor on stop distance in price points ($). 0 = disabled. Guards against too-tight stops that oversize the position.", group=grp_sl)
+use_hard_stop = input.bool(false, "Hard Stop (intra-bar + gap protection)", tooltip="OFF (default): the stop is CLOSE-based (mental) — it fires only when a candle CLOSES beyond the stop. ON: the stop is a REAL order that fires the instant price TOUCHES it intra-bar, and protects against overnight/weekend gaps (important for stocks like QQQ). Break-even and trailing still ratchet the stop; this only changes how it is enforced. The alignment-break exit stays close-based either way.", group=grp_sl)
+
+sl_buffer_raw = sl_buffer_units
+min_stop_raw  = min_stop_units
+
+// ── ENTRY CONDITION: WHERE PRICE SITS, NOT WHICH WAY EACH LAYER POINTS ─────
+// Which edge counts follows the Anchor Uses setting, so Body ignores wicks on
+// both sides — the same convention the stop anchors use. This block sits below
+// the stop inputs because it reads sl_price_basis, and Pine requires an input
+// to be declared before it is used.
 _pa_body = sl_price_basis == "Body (open/close)"
 pa_b_top = _pa_body ? math.max(bO, bC)  : bH
 pa_b_bot = _pa_body ? math.min(bO, bC)  : bL
@@ -152,48 +211,9 @@ all_bear = all_ready and (pa_layers == "All three"          ? (_bb and _b1 and _
    : pa_layers == "HTF1 only"          ? _b1
    :                                     _n_below >= 2)
 
-// SHA body extremes — used for the SHA-body stop option
-sha_bot_0 = math.min(bO, bC)      // chart-layer SHA body — the layer the entry fires on
-sha_top_0 = math.max(bO, bC)
-sha_top_1 = math.max(h1O, h1C)
-sha_bot_1 = math.min(h1O, h1C)
-sha_top_2 = math.max(h2O, h2C)
-sha_bot_2 = math.min(h2O, h2C)
-
-// ============================================================================
-// ③ ENTRY — FULL ALIGNMENT
-// ============================================================================
-grp_entry = "③ ━━━ ENTRY: FULL ALIGNMENT ━━━"
-confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): matches v6 exactly — fires the bar AFTER all three layers complete agreement (all_bull[1] and not all_bull[2]). One bar of confirmation lag.\nImmediate: fires on the bar the third layer joins (all_bull and not all_bull[1]). Earlier, slightly noisier.", group=grp_entry)
-allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
-allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
-// ── RE-ENTRY AFTER AN EXIT ─────────────────────────────────────────────────
-// The entry signal fires once, on the FIRST breakout into the condition, and
-// never again while it stays true. So a trade stopped out mid-trend leaves the
-// rest of the move untaken. This arms the setup again after an exit: price has
-// to prove it is resuming by CLOSING beyond the exit candle itself.
-use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when a later candle CLOSES above the exit candle's HIGH (for longs) or below its LOW (for shorts). No fresh transition needed — price simply has to clear the bar you were knocked out on.", group=grp_entry)
-reentry_needs_base = input.bool(true, "  Setup Must Still Hold", tooltip="Only re-enter while the entry condition is still true. Off means price clearing the exit candle is enough on its own, even if the layers have since fallen out of agreement.", group=grp_entry)
-reentry_expires = input.bool(true, "  Cancel If Setup Breaks", tooltip="If the condition fails before price clears the exit candle, drop the armed re-entry rather than waiting indefinitely. It re-arms only after another exit.", group=grp_entry)
-gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
-
-// Full Alignment definition — v6-faithful ("Confirmed") or one-bar-earlier ("Immediate")
+// Entry fires on the transition INTO the condition, not while it persists.
 pa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bull[2]) : (all_bull and not all_bull[1])
 pa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
-
-// ============================================================================
-// ④ INITIAL STOP LOSS  (hard invalidation + sizing anchor)
-// ============================================================================
-grp_sl = "④ ━━━ INITIAL STOP ━━━"
-sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA"], tooltip="Last Bar Beyond ... : the most recent bar that sat entirely past the SHA's far edge (below it for a long, above it for a short) — the last place price was genuinely on the wrong side of the trend. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher SHA layer is closer to price. No lookback limit.\n\nTrigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
-sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
-sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
-sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($). Stop is CLOSE-based.", group=grp_sl)
-min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, tooltip="Floor on stop distance in price points ($). 0 = disabled. Guards against too-tight stops that oversize the position.", group=grp_sl)
-use_hard_stop = input.bool(false, "Hard Stop (intra-bar + gap protection)", tooltip="OFF (default): the stop is CLOSE-based (mental) — it fires only when a candle CLOSES beyond the stop. ON: the stop is a REAL order that fires the instant price TOUCHES it intra-bar, and protects against overnight/weekend gaps (important for stocks like QQQ). Break-even and trailing still ratchet the stop; this only changes how it is enforced. The alignment-break exit stays close-based either way.", group=grp_sl)
-
-sl_buffer_raw = sl_buffer_units
-min_stop_raw  = min_stop_units
 
 // Body extremes for the current bar
 body_low  = math.min(open, close)
@@ -262,7 +282,96 @@ d_h2_top = na(h2_top_edge) ? 1e18 : math.abs(close - h2_top_edge)
 near_is_h1_long  = d_h1_bot <= d_h2_bot
 near_is_h1_short = d_h1_top <= d_h2_top
 
-f_long_stop() =>
+// ============================================================================
+// TRADE STATE  (declared here because eligibility, ranking and the trail all
+// read pos_dir before the management block runs)
+// ============================================================================
+var string pos_dir     = "flat"
+var float  entry_price = na
+var float  init_stop   = na
+var float  stop_level  = na
+var float  risk_unit   = na    // |entry - init_stop|, the R denominator
+var int    entry_bar   = na
+var bool   be_moved    = false
+var bool   tp1_taken   = false
+var int    bad_bars    = 0     // consecutive bars the flip condition has held
+var float  peak_r      = 0.0   // best R reached, for the give-back exit
+var float  rearm_high  = na    // exit candle's high — long re-entry trigger
+var float  rearm_low   = na    // exit candle's low  — short re-entry trigger
+
+// ── ELIGIBILITY AND ARMING ─────────────────────────────────────────────────
+// elig_*  : price has CLOSED beyond this layer at some point during the trade.
+//           Only an eligible layer may end the trade.
+// arm_*   : this layer has pointed WITH the trade at some point during it.
+//           Only an armed layer can be said to have flipped against it.
+var bool elig_b = false
+var bool elig_1 = false
+var bool elig_2 = false
+var bool arm_b  = false
+var bool arm_1  = false
+var bool arm_2  = false
+
+// Instantaneous test — also what seeds the flags on the entry bar.
+inst_el_b_long  = close > pa_b_top
+inst_el_1_long  = close > pa_1_top
+inst_el_2_long  = close > pa_2_top
+inst_el_b_short = close < pa_b_bot
+inst_el_1_short = close < pa_1_bot
+inst_el_2_short = close < pa_2_bot
+
+// Running update, before anything downstream reads the flags. Once set, a flag
+// holds for the rest of the trade; both sets are cleared on entry and on exit.
+if pos_dir == "long"
+    elig_b := elig_b or inst_el_b_long
+    elig_1 := elig_1 or inst_el_1_long
+    elig_2 := elig_2 or inst_el_2_long
+    arm_b  := arm_b  or base_bull_bar
+    arm_1  := arm_1  or htf1_bull_bar
+    arm_2  := arm_2  or htf2_bull_bar
+else if pos_dir == "short"
+    elig_b := elig_b or inst_el_b_short
+    elig_1 := elig_1 or inst_el_1_short
+    elig_2 := elig_2 or inst_el_2_short
+    arm_b  := arm_b  or not base_bull_bar
+    arm_1  := arm_1  or not htf1_bull_bar
+    arm_2  := arm_2  or not htf2_bull_bar
+
+// ── DISTANCE RANKING OF THE ELIGIBLE LAYERS ────────────────────────────────
+// Returns [closest, middle, furthest] by absolute distance from the close.
+// Collapse: two eligible → middle resolves to furthest; one → all three resolve
+// to it; none → all na, and the caller falls back to Swing.
+// Everything is passed in; the function reads no outer-scope series.
+f_rank(_e0, _l0, _e1, _l1, _e2, _l2) =>
+    _lv = array.new_float()
+    _ds = array.new_float()
+    if _e0 and not na(_l0)
+        array.push(_lv, _l0)
+        array.push(_ds, math.abs(close - _l0))
+    if _e1 and not na(_l1)
+        array.push(_lv, _l1)
+        array.push(_ds, math.abs(close - _l1))
+    if _e2 and not na(_l2)
+        array.push(_lv, _l2)
+        array.push(_ds, math.abs(close - _l2))
+    _n = array.size(_lv)
+    float _near = na
+    float _mid  = na
+    float _far  = na
+    if _n > 0
+        _ix = array.sort_indices(_ds, order.ascending)
+        _near := array.get(_lv, array.get(_ix, 0))
+        _far  := array.get(_lv, array.get(_ix, _n - 1))
+        _mid  := _n >= 3 ? array.get(_lv, array.get(_ix, 1)) : _far
+    [_near, _mid, _far]
+
+// Entry-bar ranking, from the instantaneous test — used by the initial stop.
+[ik_near_L, ik_mid_L, ik_far_L] = f_rank(inst_el_b_long,  sha_bot_0, inst_el_1_long,  sha_bot_1, inst_el_2_long,  sha_bot_2)
+[ik_near_S, ik_mid_S, ik_far_S] = f_rank(inst_el_b_short, sha_top_0, inst_el_1_short, sha_top_1, inst_el_2_short, sha_top_2)
+// In-trade ranking, from the running flags — used by the trail.
+[rk_near_L, rk_mid_L, rk_far_L] = f_rank(elig_b, sha_bot_0, elig_1, sha_bot_1, elig_2, sha_bot_2)
+[rk_near_S, rk_mid_S, rk_far_S] = f_rank(elig_b, sha_top_0, elig_1, sha_top_1, elig_2, sha_top_2)
+
+f_long_stop(_kn, _km, _kf) =>
     _near = near_is_h1_long
     _lcp  = _near ? xl_px_h1 : xl_px_h2
     _lcpF = _near ? xl_px_h2 : xl_px_h1
@@ -277,11 +386,14 @@ f_long_stop() =>
       :    sl_mode == "Last Bar Beyond Furthest SHA" ? (na(_lcpF) ? sw_low_lvl : _lcpF)
       :    sl_mode == "Last SHA Bar Beyond Nearest SHA"    ? (na(_lch)  ? sw_low_lvl : _lch)
       :    sl_mode == "Last SHA Bar Beyond Furthest SHA"   ? (na(_lchF) ? sw_low_lvl : _lchF)
+      :    sl_mode == "Closest Eligible SHA"          ? (na(_kn) ? sw_low_lvl : _kn)
+      :    sl_mode == "Middle Eligible SHA"           ? (na(_km) ? sw_low_lvl : _km)
+      :    sl_mode == "Furthest Eligible SHA"         ? (na(_kf) ? sw_low_lvl : _kf)
       :                                                   sw_low_lvl
     _s = _lvl - sl_buffer_raw
     min_stop_raw > 0 ? math.min(_s, close - min_stop_raw) : _s
 
-f_short_stop() =>
+f_short_stop(_kn, _km, _kf) =>
     _near = near_is_h1_short
     _hcp  = _near ? xh_px_h1 : xh_px_h2
     _hcpF = _near ? xh_px_h2 : xh_px_h1
@@ -296,6 +408,9 @@ f_short_stop() =>
       :    sl_mode == "Last Bar Beyond Furthest SHA" ? (na(_hcpF) ? sw_high_lvl : _hcpF)
       :    sl_mode == "Last SHA Bar Beyond Nearest SHA"    ? (na(_hch)  ? sw_high_lvl : _hch)
       :    sl_mode == "Last SHA Bar Beyond Furthest SHA"   ? (na(_hchF) ? sw_high_lvl : _hchF)
+      :    sl_mode == "Closest Eligible SHA"          ? (na(_kn) ? sw_high_lvl : _kn)
+      :    sl_mode == "Middle Eligible SHA"           ? (na(_km) ? sw_high_lvl : _km)
+      :    sl_mode == "Furthest Eligible SHA"         ? (na(_kf) ? sw_high_lvl : _kf)
       :                                                   sw_high_lvl
     _s = _lvl + sl_buffer_raw
     min_stop_raw > 0 ? math.max(_s, close + min_stop_raw) : _s
@@ -304,7 +419,7 @@ f_short_stop() =>
 // ⑤ POSITION SIZING  (risk-based; same math as v6, dedicated risk % here)
 // ============================================================================
 grp_size = "⑤ ━━━ POSITION SIZING ━━━"
-risk_pct = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, tooltip="% of equity risked from entry to initial stop. Full Alignment is the highest-conviction signal, so this defaults to the top of the normal band. Risk$ ÷ stop distance = size.", group=grp_size)
+risk_pct = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, tooltip="% of equity risked from entry to initial stop. Price Above All clears a structural level rather than waiting for three layers to agree, so this defaults to the middle of the normal band. Risk$ ÷ stop distance = size.", group=grp_size)
 max_equity_pct = input.float(100.0, "Max Equity Per Trade (%)", minval=1.0, maxval=100.0, step=1.0, tooltip="Hard cap on capital deployed, even if the risk calc allows more.", group=grp_size)
 
 f_qty(_entry, _stop) =>
@@ -330,12 +445,12 @@ use_tp1   = input.bool(false, "Partial Take-Profit", tooltip="Scale out a portio
 tp1_r     = input.float(2.0, "  TP1 at (R multiple)", minval=0.5, step=0.5, group=grp_mgmt)
 tp1_pct   = input.float(50, "  TP1 Size (% of position)", minval=1, maxval=99, step=5, group=grp_mgmt)
 
-use_be    = input.bool(true, "Move Stop To Break-Even", tooltip="After price closes +Xr in favor, move the stop to entry (plus offset). Locks the trade to no-loss once the trend proves itself.", group=grp_mgmt)
+use_be    = input.bool(true, "Move Stop To Break-Even", tooltip="After price closes +Xr in favor, move the stop to entry (plus offset). Locks the trade to break-even once the trend proves itself.", group=grp_mgmt)
 be_trig_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, group=grp_mgmt)
 be_offset_units = input.float(0.0, "  Break-Even Offset", minval=0, step=0.5, tooltip="Extra distance above/below entry when moving to BE, in price points ($). Covers spread/commission.", group=grp_mgmt)
 
 use_trail = input.bool(true, "Trailing Stop", tooltip="Once in profit, ratchet the stop toward the chosen anchor. Never loosens. Close-based — only triggers when a candle CLOSES beyond it.", group=grp_mgmt)
-trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body"], tooltip="Same anchor choices as the initial stop, except Trigger Candle (a fixed entry bar can't trail).\nSwing: recent swing low/high.\nHTF1 SHA Body: trail the mid-TF trend body.\nHTF2 SHA Body: trail the high-TF trend body (loosest, rides longest).", group=grp_mgmt)
+trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], tooltip="Same anchor choices as the initial stop, except Trigger Candle (a fixed entry bar can't trail).\nSwing: recent swing low/high.\nHTF1 SHA Body: trail the mid-TF trend body.\nHTF2 SHA Body: trail the high-TF trend body (loosest, rides longest).", group=grp_mgmt)
 trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="For the Swing trail anchor: Body = body edge (tighter), Wick = full extreme (wider).", group=grp_mgmt)
 trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
@@ -346,7 +461,7 @@ reverse_on_stop = input.bool(false, "Reverse On Stop", tooltip="When the stop is
 // Seven ways a trade can end, each independent and each off unless enabled.
 // Whichever triggers first closes the trade. All are close-based unless the
 // hard stop is on.
-align_confirm_bars = input.int(1, "  Break Must Hold (bars)", minval=1, maxval=20, tooltip="1 = exit the moment the layer flips (original behaviour). 2 or 3 requires the misalignment to persist, which is the same idea as the Confirmed entry mode applied to the way out. Directly targets exit churn on fast charts.", group=grp_mgmt)
+align_confirm_bars = input.int(1, "  Flip Must Hold (bars)", minval=1, maxval=20, tooltip="1 = exit the moment the layer flips (original behaviour). 2 or 3 requires the misalignment to persist, which is the same idea as the Confirmed entry mode applied to the way out. Directly targets exit churn on fast charts.", group=grp_mgmt)
 
 use_sha_break = input.bool(false, "Exit: Price Back Through SHA", tooltip="Close when price closes back through the chosen SHA body — for a long, below its lower edge. Different from that layer FLIPPING: the trend line can still point up while price collapses back through it, so this is an earlier warning.", group=grp_mgmt)
 sha_break_layer = input.string("HTF1", "  Which Layer", options=["Base","HTF1","HTF2"], group=grp_mgmt)
@@ -364,8 +479,8 @@ time_stop_min_r = input.float(0.5, "  Unless Ahead By (R)", minval=0.0, step=0.1
 
 use_cross_exit = input.bool(false, "Exit: Chart SHA Crosses Mid SHA", tooltip="Close when the chart-timeframe SHA crosses the mid-timeframe SHA against the trade — the two lines crossing rather than either one flipping.", group=grp_mgmt)
 
-use_align_exit = input.bool(true, "Alignment-Break Exit", tooltip="The signature Full-Alignment rule: the whole thesis is that all three timeframes agree, so exit when they stop agreeing. Close-based.", group=grp_mgmt)
-align_break_level = input.string("HTF1 Flips", "  Break Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], tooltip="Base Flips: tightest — exit the moment the chart-TF SHA turns against you.\nHTF1 Flips: exit when the MID-TF anchor turns (recommended balance).\nHTF2 Flips: loosest — only exit when the HIGH-TF turns.\nAny Layer Flips: exit if any single layer disagrees.\nAll Layers Flip: exit only on full opposite alignment.", group=grp_mgmt)
+use_align_exit = input.bool(false, "Exit: Layer Flips Direction", tooltip="Exit when a SHA layer turns against the trade. OFF by default: this strategy enters on where PRICE sits, so a layer can be pointing the wrong way at entry and this exit would fire immediately. Two gates prevent that — a layer must be ELIGIBLE (price closed beyond it during the trade) and ARMED (it pointed with the trade at some point). A layer that never came onside can never exit the trade, and a flip INTO the trade\x27s direction only arms a layer. Close-based.", group=grp_mgmt)
+align_break_level = input.string("HTF1 Flips", "  Flip Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], tooltip="Base Flips: tightest — exit the moment the chart-TF SHA turns against you.\nHTF1 Flips: exit when the MID-TF anchor turns (recommended balance).\nHTF2 Flips: loosest — only exit when the HIGH-TF turns.\nAny Layer Flips: exit if any single layer disagrees.\nAll Layers Flip: exit only on full opposite alignment.", group=grp_mgmt)
 
 be_offset_raw = be_offset_units
 trail_buffer_raw = trail_buffer_units
@@ -379,8 +494,8 @@ trail_use_body = trail_price_basis == "Body (open/close)"
 trail_sw_low  = trail_use_body ? trail_sw_low_body  : trail_sw_low_wick
 trail_sw_high = trail_use_body ? trail_sw_high_body : trail_sw_high_wick
 
-trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "Base SHA Body" ? sha_bot_0 : trail_mode == "HTF1 SHA Body" ? sha_bot_1 : sha_bot_2
-trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "Base SHA Body" ? sha_top_0 : trail_mode == "HTF1 SHA Body" ? sha_top_1 : sha_top_2
+trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "Base SHA Body" ? sha_bot_0 : trail_mode == "HTF1 SHA Body" ? sha_bot_1 : trail_mode == "HTF2 SHA Body" ? sha_bot_2 : trail_mode == "Closest Eligible SHA" ? rk_near_L : trail_mode == "Middle Eligible SHA" ? rk_mid_L : rk_far_L
+trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "Base SHA Body" ? sha_top_0 : trail_mode == "HTF1 SHA Body" ? sha_top_1 : trail_mode == "HTF2 SHA Body" ? sha_top_2 : trail_mode == "Closest Eligible SHA" ? rk_near_S : trail_mode == "Middle Eligible SHA" ? rk_mid_S : rk_far_S
 trail_low_ref  = trail_low_anchor  - trail_buffer_raw
 trail_high_ref = trail_high_anchor + trail_buffer_raw
 
@@ -402,22 +517,6 @@ show_stop_line = input.bool(true, "Active Stop Line", group=grp_disp)
 show_hud = input.bool(true, "State HUD", group=grp_disp)
 hud_pos = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_disp)
 
-// ============================================================================
-// TRADE STATE MACHINE  (single position; flat → long/short → flat)
-// ============================================================================
-var string pos_dir     = "flat"
-var float  entry_price = na
-var float  init_stop   = na
-var float  stop_level  = na
-var float  risk_unit   = na    // |entry - init_stop|, the R denominator
-var int    entry_bar   = na
-var bool   be_moved    = false
-var bool   tp1_taken   = false
-var int    bad_bars    = 0     // consecutive bars the alignment has been broken
-var float  peak_r      = 0.0   // best R reached, for the give-back exit
-var float  rearm_high  = na    // exit candle's high — long re-entry trigger
-var float  rearm_low   = na    // exit candle's low  — short re-entry trigger
-
 // Drop an armed re-entry once the setup itself has gone
 if reentry_expires and not na(rearm_high) and not all_bull
     rearm_high := na
@@ -438,7 +537,7 @@ short_signal = allow_shorts and (pa_bear_raw or re_short) and in_date and not ga
 // Per-bar event flags (for markers)
 did_exit  = false
 did_enter = false
-stopped_from = ""   // "long"/"short" when a STOP (not an align break) closed a trade this bar
+stopped_from = ""   // "long"/"short" when a STOP (not another exit) closed a trade this bar
 exit_reason = ""
 
 // ── ALIGNMENT-BREAK condition (direction-aware) ──────────────────────────
@@ -450,18 +549,30 @@ cross_up = ta.crossover(bC, h1C)
 shab_bot = sha_break_layer == "Base" ? math.min(bO, bC) : sha_break_layer == "HTF1" ? sha_bot_1 : sha_bot_2
 shab_top = sha_break_layer == "Base" ? math.max(bO, bC) : sha_break_layer == "HTF1" ? sha_top_1 : sha_top_2
 
-f_align_broken_long() =>
-    align_break_level == "Base Flips"      ? not base_bull_bar
-     : align_break_level == "HTF1 Flips"    ? not htf1_bull_bar
-     : align_break_level == "HTF2 Flips"    ? not htf2_bull_bar
-     : align_break_level == "Any Layer Flips" ? (not base_bull_bar or not htf1_bull_bar or not htf2_bull_bar)
-     :                                        all_bear
-f_align_broken_short() =>
-    align_break_level == "Base Flips"      ? base_bull_bar
-     : align_break_level == "HTF1 Flips"    ? htf1_bull_bar
-     : align_break_level == "HTF2 Flips"    ? htf2_bull_bar
-     : align_break_level == "Any Layer Flips" ? (base_bull_bar or htf1_bull_bar or htf2_bull_bar)
-     :                                        all_bull
+
+// ── LAYER-FLIP CONDITION (eligible AND armed AND now against the trade) ────
+// A layer that price never cleared cannot exit the trade. Neither can a layer
+// that never pointed with it — that layer never flipped, it was always offside.
+flip_b_long = elig_b and arm_b and not base_bull_bar
+flip_1_long = elig_1 and arm_1 and not htf1_bull_bar
+flip_2_long = elig_2 and arm_2 and not htf2_bull_bar
+flip_b_short = elig_b and arm_b and base_bull_bar
+flip_1_short = elig_1 and arm_1 and htf1_bull_bar
+flip_2_short = elig_2 and arm_2 and htf2_bull_bar
+n_elig      = (elig_b ? 1 : 0) + (elig_1 ? 1 : 0) + (elig_2 ? 1 : 0)
+n_flip_long = (flip_b_long ? 1 : 0) + (flip_1_long ? 1 : 0) + (flip_2_long ? 1 : 0)
+n_flip_shrt = (flip_b_short ? 1 : 0) + (flip_1_short ? 1 : 0) + (flip_2_short ? 1 : 0)
+
+align_broken_long = align_break_level == "Base Flips"      ? flip_b_long
+   : align_break_level == "HTF1 Flips"      ? flip_1_long
+   : align_break_level == "HTF2 Flips"      ? flip_2_long
+   : align_break_level == "Any Layer Flips" ? (n_flip_long > 0)
+   :                                          (n_elig > 0 and n_flip_long == n_elig)
+align_broken_short = align_break_level == "Base Flips"      ? flip_b_short
+   : align_break_level == "HTF1 Flips"      ? flip_1_short
+   : align_break_level == "HTF2 Flips"      ? flip_2_short
+   : align_break_level == "Any Layer Flips" ? (n_flip_shrt > 0)
+   :                                          (n_elig > 0 and n_flip_shrt == n_elig)
 
 // ───────────────────────────── MANAGE OPEN POSITION ────────────────────────
 // Runs before entries so a same-bar reversal (exit then opposite entry) works.
@@ -478,13 +589,19 @@ if pos_dir != "flat" and strategy.position_size == 0 and not na(entry_bar) and b
     risk_unit := na
     be_moved := false
     tp1_taken := false
+    elig_b := false
+    elig_1 := false
+    elig_2 := false
+    arm_b  := false
+    arm_1  := false
+    arm_2  := false
 
 if pos_dir == "long" and not na(stop_level)
     _rr = risk_unit > 0 ? (close - entry_price) / risk_unit : 0.0
 
     // 1. Partial take-profit
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("PA", qty_percent=tp1_pct, comment="TP1")
+        strategy.close("PAA", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.max(stop_level, entry_price + be_offset_raw)
@@ -502,7 +619,7 @@ if pos_dir == "long" and not na(stop_level)
 
     // 4 & 5. Exits — align-break is always close-based; the stop is hard or mental
     peak_r := math.max(peak_r, _rr)
-    bad_bars := f_align_broken_long() ? bad_bars + 1 : 0
+    bad_bars := align_broken_long ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
     _sha_out   = use_sha_break and close < shab_bot
     _tgt_out   = use_target and _rr >= target_r
@@ -512,9 +629,9 @@ if pos_dir == "long" and not na(stop_level)
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
     _stop_hit  = (not use_hard_stop) and (close <= stop_level)
     if use_hard_stop and not _other_out
-        strategy.exit("FA-stop", from_entry="PA", stop=stop_level)   // real intra-bar, gap-safe
+        strategy.exit("PAA-stop", from_entry="PAA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
-        _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
+        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
         strategy.close_all(comment = _why)
         did_exit := true
         exit_reason := _stop_hit ? "STOP" : "EXIT"
@@ -531,12 +648,18 @@ if pos_dir == "long" and not na(stop_level)
         risk_unit := na
         be_moved := false
         tp1_taken := false
+        elig_b := false
+        elig_1 := false
+        elig_2 := false
+        arm_b  := false
+        arm_1  := false
+        arm_2  := false
 
 else if pos_dir == "short" and not na(stop_level)
     _rr = risk_unit > 0 ? (entry_price - close) / risk_unit : 0.0
 
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("PA", qty_percent=tp1_pct, comment="TP1")
+        strategy.close("PAA", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.min(stop_level, entry_price - be_offset_raw)
@@ -551,7 +674,7 @@ else if pos_dir == "short" and not na(stop_level)
             stop_level := trail_high_ref
 
     peak_r := math.max(peak_r, _rr)
-    bad_bars := f_align_broken_short() ? bad_bars + 1 : 0
+    bad_bars := align_broken_short ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
     _sha_out   = use_sha_break and close > shab_top
     _tgt_out   = use_target and _rr >= target_r
@@ -561,9 +684,9 @@ else if pos_dir == "short" and not na(stop_level)
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
     _stop_hit  = (not use_hard_stop) and (close >= stop_level)
     if use_hard_stop and not _other_out
-        strategy.exit("FA-stop", from_entry="PA", stop=stop_level)   // real intra-bar, gap-safe
+        strategy.exit("PAA-stop", from_entry="PAA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
-        _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
+        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
         strategy.close_all(comment = _why)
         did_exit := true
         exit_reason := _stop_hit ? "STOP" : "EXIT"
@@ -580,6 +703,12 @@ else if pos_dir == "short" and not na(stop_level)
         risk_unit := na
         be_moved := false
         tp1_taken := false
+        elig_b := false
+        elig_1 := false
+        elig_2 := false
+        arm_b  := false
+        arm_1  := false
+        arm_2  := false
 
 // ── REVERSE ON STOP ────────────────────────────────────────────────────────
 // Flip only if the opposite side is FULLY ALIGNED at this moment, its direction
@@ -590,7 +719,7 @@ rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_s
 // ───────────────────────────────── ENTRIES ────────────────────────────────
 // Only when flat (possibly just made flat above → same-bar flip).
 if pos_dir == "flat" and (long_signal or rev_long)
-    _stop = f_long_stop()
+    _stop = f_long_stop(ik_near_L, ik_mid_L, ik_far_L)
     if not na(_stop) and _stop < close
         entry_price := close
         init_stop   := _stop
@@ -603,12 +732,18 @@ if pos_dir == "flat" and (long_signal or rev_long)
         rearm_high  := na
         rearm_low   := na
         tp1_taken   := false
+        elig_b      := inst_el_b_long
+        elig_1      := inst_el_1_long
+        elig_2      := inst_el_2_long
+        arm_b       := base_bull_bar
+        arm_1       := htf1_bull_bar
+        arm_2       := htf2_bull_bar
         pos_dir     := "long"
-        strategy.entry("PA", strategy.long, qty=f_qty(close, _stop))
+        strategy.entry("PAA", strategy.long, qty=f_qty(close, _stop))
         did_enter := true
 
 if pos_dir == "flat" and (short_signal or rev_short)
-    _stop = f_short_stop()
+    _stop = f_short_stop(ik_near_S, ik_mid_S, ik_far_S)
     if not na(_stop) and _stop > close
         entry_price := close
         init_stop   := _stop
@@ -621,8 +756,14 @@ if pos_dir == "flat" and (short_signal or rev_short)
         rearm_high  := na
         rearm_low   := na
         tp1_taken   := false
+        elig_b      := inst_el_b_short
+        elig_1      := inst_el_1_short
+        elig_2      := inst_el_2_short
+        arm_b       := not base_bull_bar
+        arm_1       := not htf1_bull_bar
+        arm_2       := not htf2_bull_bar
         pos_dir     := "short"
-        strategy.entry("PA", strategy.short, qty=f_qty(close, _stop))
+        strategy.entry("PAA", strategy.short, qty=f_qty(close, _stop))
         did_enter := true
 
 // ============================================================================
@@ -664,7 +805,7 @@ plotcandle(base_ready and base_show ? bO : na, base_ready and base_show ? base_p
            wickcolor=base_ready and base_show ? base_wick_col : na,
            bordercolor=base_ready and base_show ? base_brdr_col : na)
 
-// Entry markers — filled arrows (▲▼), matching v6's Full Alignment glyphs
+// Entry markers — filled arrows (▲▼), carried over from v6
 plotshape(show_markers and did_enter and pos_dir == "long"  ? low  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=color.new(#0077BB, 0), size=size.small, text="▲")
 plotshape(show_markers and did_enter and pos_dir == "short" ? high : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=color.new(#EE3322, 0), size=size.small, text="▼")
 
@@ -679,7 +820,7 @@ plot(show_stop_line and pos_dir != "flat" ? stop_level : na, title="Active Stop"
 plot(base_bull_bar ? 1 : -1, "Base Dir",  display=display.data_window)
 plot(htf1_bull_bar ? 1 : -1, "HTF1 Dir",  display=display.data_window)
 plot(htf2_bull_bar ? 1 : -1, "HTF2 Dir",  display=display.data_window)
-plot(all_bull ? 1 : all_bear ? -1 : 0, "Alignment", display=display.data_window)
+plot(all_bull ? 1 : all_bear ? -1 : 0, "Price Position", display=display.data_window)
 plot(pos_dir == "long" ? 1 : pos_dir == "short" ? -1 : 0, "Position", display=display.data_window)
 
 // ============================================================================
@@ -688,15 +829,15 @@ plot(pos_dir == "long" ? 1 : pos_dir == "short" ? -1 : 0, "Position", display=di
 var table hud = na
 if show_hud and barstate.islast
     _hp = hud_pos == "Top Left" ? position.top_left : hud_pos == "Top Right" ? position.top_right : hud_pos == "Bottom Left" ? position.bottom_left : position.bottom_right
-    hud := table.new(_hp, 2, 8, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
+    hud := table.new(_hp, 2, 9, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
     _hd = color.new(#0077BB, 0)
     table.cell(hud, 0, 0, "3SHA PRICE ABOVE", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(hud, 1, 0, confirm_mode == "Immediate" ? "IMMEDIATE" : "CONFIRMED", text_color=color.white, bgcolor=_hd, text_size=size.small)
 
-    _align_txt = all_bull ? "▲ ALL BULL" : all_bear ? "▼ ALL BEAR" : "◇ MIXED"
+    _align_txt = all_bull ? "▲ ABOVE ALL" : all_bear ? "▼ BELOW ALL" : "◇ MIXED"
     _align_col = all_bull ? color.new(#0077BB, 0) : all_bear ? color.new(#EE3322, 0) : color.new(#888888, 0)
-    table.cell(hud, 0, 1, "Alignment", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 0, 1, "Price vs SHA", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 1, _align_txt, text_color=color.white, bgcolor=_align_col, text_size=size.small)
 
     table.cell(hud, 0, 2, "Layers B/1/2", text_color=color.white, bgcolor=_bg, text_size=size.small)
@@ -717,12 +858,15 @@ if show_hud and barstate.islast
     table.cell(hud, 0, 6, "Stop"+(be_moved?" (BE+)":""), text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 6, na(stop_level) ? "—" : str.tostring(stop_level, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
 
-    table.cell(hud, 0, 7, "Instrument", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(hud, 1, 7, instrument_type, text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 0, 7, "Eligible B/1/2", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 7, (elig_b?"●":"○")+" "+(elig_1?"●":"○")+" "+(elig_2?"●":"○"), text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    table.cell(hud, 0, 8, "Instrument", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 8, instrument_type, text_color=color.white, bgcolor=_bg, text_size=size.small)
 
 // ============================================================================
 // ALERTS
 // ============================================================================
-alertcondition(did_enter and pos_dir == "long",  "FA Long Entry",  "3SHA Full Alignment — LONG entry")
-alertcondition(did_enter and pos_dir == "short", "FA Short Entry", "3SHA Full Alignment — SHORT entry")
-alertcondition(did_exit, "FA Exit", "3SHA Full Alignment — position closed")
+alertcondition(did_enter and pos_dir == "long",  "PAA Long Entry",  "3SHA Price Above All — LONG entry")
+alertcondition(did_enter and pos_dir == "short", "PAA Short Entry", "3SHA Price Above All — SHORT entry")
+alertcondition(did_exit, "PAA Exit", "3SHA Price Above All — position closed")
