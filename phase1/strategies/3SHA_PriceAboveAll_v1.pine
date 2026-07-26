@@ -150,7 +150,7 @@ sha_bot_2 = math.min(h2O, h2C)
 // ③ ENTRY — PRICE ABOVE ALL
 // ============================================================================
 grp_entry = "③ ━━━ ENTRY: PRICE ABOVE ALL ━━━"
-pa_layers = input.string("All three", "Price Must Clear", options=["All three","Both higher layers","HTF2 only","HTF1 only","Any two"], tooltip="Which SHA layers price has to close beyond. 'All three' is the strictest. The single-layer options are the HTF price-cross signals from the plan, folded in here.", group=grp_entry)
+pa_layers = input.string("All three", "Price Must Clear", options=["All three","HTF1 + HTF2","Base + HTF1","Base + HTF2","HTF2 only","HTF1 only","Base only","Any two"], tooltip="Which SHA layers price has to close beyond. 'All three' is the strictest. The single-layer options are the HTF price-cross signals from the plan, folded in here.", group=grp_entry)
 confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): fires the bar AFTER price completes the condition. One bar of confirmation lag.\nImmediate: fires on the bar price completes it. Earlier, slightly noisier.", group=grp_entry)
 allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
 allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
@@ -201,14 +201,20 @@ _n_above = (_ab ? 1 : 0) + (_a1 ? 1 : 0) + (_a2 ? 1 : 0)
 _n_below = (_bb ? 1 : 0) + (_b1 ? 1 : 0) + (_b2 ? 1 : 0)
 
 all_bull = all_ready and (pa_layers == "All three"          ? (_ab and _a1 and _a2)
-   : pa_layers == "Both higher layers" ? (_a1 and _a2)
+   : pa_layers == "HTF1 + HTF2"        ? (_a1 and _a2)
+   : pa_layers == "Base + HTF1"        ? (_ab and _a1)
+   : pa_layers == "Base + HTF2"        ? (_ab and _a2)
    : pa_layers == "HTF2 only"          ? _a2
    : pa_layers == "HTF1 only"          ? _a1
+   : pa_layers == "Base only"          ? _ab
    :                                     _n_above >= 2)
 all_bear = all_ready and (pa_layers == "All three"          ? (_bb and _b1 and _b2)
-   : pa_layers == "Both higher layers" ? (_b1 and _b2)
+   : pa_layers == "HTF1 + HTF2"        ? (_b1 and _b2)
+   : pa_layers == "Base + HTF1"        ? (_bb and _b1)
+   : pa_layers == "Base + HTF2"        ? (_bb and _b2)
    : pa_layers == "HTF2 only"          ? _b2
    : pa_layers == "HTF1 only"          ? _b1
+   : pa_layers == "Base only"          ? _bb
    :                                     _n_below >= 2)
 
 // Entry fires on the transition INTO the condition, not while it persists.
