@@ -87,7 +87,8 @@ RENKO_INPUTS = '''// ===========================================================
 // ============================================================================
 grp_renko = "⑨ ━━━ RENKO FILTER ━━━"
 renko_on       = input.bool(true, "Enable Renko Filter", tooltip="OFF = this script behaves identically to plain 3SHA-PAA, same trades, same numbers. That is the A/B test: run it off, run it on, compare.", group=grp_renko)
-renko_mult     = input.float(0.25, "Box Size = this × last month's average daily range", minval=0.01, maxval=5.0, step=0.01, tooltip="The brick size is worked out on the first bar of each calendar month from the month that just finished, then frozen for the whole month. Old bricks are never redrawn with the new size. 0.25 gives roughly a 15-20 pip brick on EUR/USD and roughly a 1.00-1.50 brick on QQQ - tune per market.", group=grp_renko)
+renko_lookback = input.int(21, "Days Of Daily Range To Average", minval=5, maxval=250, tooltip="How many DAILY bars are averaged to size the brick. 21 is about one month of trading days. This is read from the daily timeframe directly, so it is the same number whether you are looking at a 5-minute chart or a weekly one.", group=grp_renko)
+renko_mult     = input.float(0.25, "Box Size = this × average daily range", minval=0.01, maxval=5.0, step=0.01, tooltip="The brick size is worked out on the first bar of each calendar month from the month that just finished, then frozen for the whole month. Old bricks are never redrawn with the new size. 0.25 gives roughly a 15-20 pip brick on EUR/USD and roughly a 1.00-1.50 brick on QQQ - tune per market.", group=grp_renko)
 renko_round    = input.float(0.0001, "Round Box Size To Nearest", minval=0.0, step=0.0001, tooltip="Rounds the computed brick size to something clean, so the grid levels are readable. 0.0001 suits forex, 0.05 suits equities. 0 = no rounding.", group=grp_renko)
 renko_min      = input.float(0.0, "Minimum Box Size", minval=0.0, step=0.0001, tooltip="Floor, so a dead month cannot produce a silly-small brick. 0 = use the rounding step as the floor.", group=grp_renko)
 renko_rev      = input.int(2, "Boxes Needed To Reverse", minval=1, maxval=10, tooltip="How far price must travel against the current direction to turn the renko around. 2 is standard renko: one box to keep going, two to turn. 1 makes it flip on every crossing, which is far twitchier.", group=grp_renko)
@@ -108,49 +109,41 @@ edit(
 RENKO_ENGINE = '''// ============================================================================
 // RENKO ENGINE  (state only — nothing is drawn as a chart type)
 // ============================================================================
-// Daily ranges are built up from the CHART bars themselves. No request.security
-// on the daily timeframe: that is exactly where higher-timeframe values leak in
-// early on fast charts, and building it here sidesteps the problem rather than
-// patching around it.
-rk_new_day   = ta.change(time("1D")) != 0
-rk_new_month = ta.change(time("1M")) != 0
+// THE DAILY RANGE IS REQUESTED FROM THE DAILY TIMEFRAME, NEVER REBUILT FROM
+// CHART BARS. This is the whole reason the brick size does not move when you
+// change chart timeframe. Rebuilding each day's high and low from chart bars
+// looks equivalent but is not: once a chart bar is a day or longer, every bar
+// counts as its own "day", so on a weekly chart the "average daily range" is
+// really an average weekly range and the brick comes out roughly twice as wide.
+// Intraday, session gaps and extended hours pull it around the same way.
+//
+// [1] takes the last COMPLETED daily bar and lookahead_off blocks values from
+// arriving before they exist, so nothing leaks in early on a fast chart.
+// The monthly freeze happens INSIDE the daily context, not on the chart. That
+// matters: on a weekly chart no bar lands on the 1st, so sampling at a chart
+// month-change would read the average on a different date and hand back a
+// slightly different brick. Anchoring it to the daily series means the sample
+// is taken on the same calendar day no matter what the chart is showing.
+rk_adr = request.security(syminfo.tickerid, "D",
+             ta.valuewhen(ta.change(time("1M")) != 0,
+                          ta.sma(high - low, renko_lookback)[1], 0),
+             lookahead = barmerge.lookahead_off)
 
-var float rk_day_hi = na
-var float rk_day_lo = na
-rk_day_hi := rk_new_day or na(rk_day_hi) ? high : math.max(rk_day_hi, high)
-rk_day_lo := rk_new_day or na(rk_day_lo) ? low  : math.min(rk_day_lo, low)
-
-// Whichever month the chart happens to start in is almost always a PARTIAL one.
-// A box derived from a partial month is a different number to one derived from
-// the whole month, so the bricks would depend on how much history was loaded —
-// the exact repainting this design exists to avoid. So: bank nothing until a
-// month boundary has actually been crossed. Every month used for a box was
-// therefore entered at its first bar. Costs up to two months of warm-up.
-var bool rk_month_ok = false
-
-// Bank the day that just finished. Runs BEFORE the month rollover below, so the
-// last day of a month is counted into that month and not the next one.
-var float rk_sum  = 0.0
-var int   rk_days = 0
-if rk_new_day and bar_index > 0 and rk_month_ok and not na(rk_day_hi[1]) and not na(rk_day_lo[1])
-    rk_sum  := rk_sum + (rk_day_hi[1] - rk_day_lo[1])
-    rk_days := rk_days + 1
-
-if rk_new_month
-    rk_month_ok := true
-
-// First bar of a new calendar month: freeze a box size from what was banked.
-var float rk_box = na
-bool rk_box_new = false
-if rk_new_month and rk_days > 0
-    float _raw   = rk_sum / rk_days * renko_mult
+// Size the brick from that frozen monthly figure. Because rk_adr only moves
+// when the daily series crosses into a new month, this holds steady all month
+// and old bricks are never redrawn with a new size.
+float rk_box_calc = na
+if not na(rk_adr) and rk_adr > 0
+    float _raw   = rk_adr * renko_mult
     float _step  = renko_round > 0 ? renko_round : 0.0
     float _round = _step > 0 ? math.round(_raw / _step) * _step : _raw
     float _floor = renko_min > 0 ? renko_min : (_step > 0 ? _step : 0.0)
-    rk_box     := math.max(_round, _floor)
-    rk_box_new := true
-    rk_sum     := 0.0
-    rk_days    := 0
+    rk_box_calc := math.max(_round, _floor)
+
+var float rk_box = na
+bool rk_box_new = not na(rk_box_calc) and (na(rk_box) or rk_box != rk_box_calc)
+if rk_box_new
+    rk_box := rk_box_calc
 
 // Brick state. rk_dir: 1 up, -1 down, 0 not yet established.
 // rk_run: bricks in a row in the current direction.
