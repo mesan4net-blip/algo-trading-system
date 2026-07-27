@@ -118,15 +118,27 @@ htf2_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group
 htf2_wick = input.color(color.new(#555555, 0), "Wick Color", group=grp_htf2)
 htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_htf2)
 
+// ── RAW CANDLE SOURCE ─────────────────────────────────────────
+// Pine's open/high/low/close return whatever the CHART is showing. On a
+// Renko, Heikin-Ashi, Kagi or Line-Break chart those are synthetic values,
+// so the SHA layers would be built from bricks instead of from price and
+// would move every time the chart type changed. Everything below sources
+// from a standard ticker instead, so the layers are identical on any chart
+// type. NOTE: this fixes the SIGNALS only. Orders still fill at whatever
+// price the chart bar reports, so backtests must be run on standard
+// candles regardless — fills on Renko/HA are not real prices.
+tStd = ticker.standard(syminfo.tickerid)
+[rawO, rawH, rawL, rawC] = request.security(tStd, timeframe.period, [open, high, low, close], barmerge.gaps_off, barmerge.lookahead_off)
+
 // ── Compute layers (HTF layers smoothed NATIVELY inside request.security,
 //    exactly as v6 — do NOT recompute HTF SHA on the chart TF) ──────────────
-[bO, bH, bL, bC]  = f_sha(base_len1, base_len2, open, high, low, close)
-[h1O, h1H, h1L, h1C] = request.security(syminfo.tickerid, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
-[h2O, h2H, h2L, h2C] = request.security(syminfo.tickerid, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+[bO, bH, bL, bC]  = f_sha(base_len1, base_len2, rawO, rawH, rawL, rawC)
+[h1O, h1H, h1L, h1C] = request.security(tStd, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+[h2O, h2H, h2L, h2C] = request.security(tStd, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 
 // Daily open and PRIOR daily close, no look-ahead — for the gap-skip filter.
-day_open  = request.security(syminfo.tickerid, "1D", open,      barmerge.gaps_off, barmerge.lookahead_off)
-day_pclose= request.security(syminfo.tickerid, "1D", close[1],  barmerge.gaps_off, barmerge.lookahead_off)
+day_open  = request.security(tStd, "1D", open,      barmerge.gaps_off, barmerge.lookahead_off)
+day_pclose= request.security(tStd, "1D", close[1],  barmerge.gaps_off, barmerge.lookahead_off)
 gap_pct   = not na(day_open) and not na(day_pclose) and day_pclose != 0 ? math.abs(day_open - day_pclose) / day_pclose * 100.0 : 0.0
 
 base_ready = not na(bO)  and not na(bC)
@@ -191,12 +203,12 @@ pa_1_bot = _pa_body ? math.min(h1O,h1C) : h1L
 pa_2_top = _pa_body ? math.max(h2O,h2C) : h2H
 pa_2_bot = _pa_body ? math.min(h2O,h2C) : h2L
 
-_ab = close > pa_b_top
-_a1 = close > pa_1_top
-_a2 = close > pa_2_top
-_bb = close < pa_b_bot
-_b1 = close < pa_1_bot
-_b2 = close < pa_2_bot
+_ab = rawC > pa_b_top
+_a1 = rawC > pa_1_top
+_a2 = rawC > pa_2_top
+_bb = rawC < pa_b_bot
+_b1 = rawC < pa_1_bot
+_b2 = rawC < pa_2_bot
 _n_above = (_ab ? 1 : 0) + (_a1 ? 1 : 0) + (_a2 ? 1 : 0)
 _n_below = (_bb ? 1 : 0) + (_b1 ? 1 : 0) + (_b2 ? 1 : 0)
 
@@ -222,19 +234,19 @@ pa_bull_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bull[1] and not all_bul
 pa_bear_raw = confirm_mode == "Confirmed (1-bar)" ? (all_bear[1] and not all_bear[2]) : (all_bear and not all_bear[1])
 
 // Body extremes for the current bar
-body_low  = math.min(open, close)
-body_high = math.max(open, close)
+body_low  = math.min(rawO, rawC)
+body_high = math.max(rawO, rawC)
 
 // ta.lowest / ta.highest keep internal state and MUST run every bar, so all
 // four swing variants are computed here at global scope, then selected.
-swing_low_wick  = ta.lowest(low,  sl_lookback)
-swing_high_wick = ta.highest(high, sl_lookback)
+swing_low_wick  = ta.lowest(rawL,  sl_lookback)
+swing_high_wick = ta.highest(rawH, sl_lookback)
 swing_low_body  = ta.lowest(body_low,  sl_lookback)
 swing_high_body = ta.highest(body_high, sl_lookback)
 
 sl_use_body = sl_price_basis == "Body (open/close)"
-trig_low_lvl  = sl_use_body ? body_low  : low
-trig_high_lvl = sl_use_body ? body_high : high
+trig_low_lvl  = sl_use_body ? body_low  : rawL
+trig_high_lvl = sl_use_body ? body_high : rawH
 sw_low_lvl    = sl_use_body ? swing_low_body  : swing_low_wick
 sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
 
@@ -250,8 +262,8 @@ sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
 // ignores wicks on both the candle and the SHA; Wick compares full extremes.
 // "Nearest / furthest" is decided at ENTRY time, by which of the two higher
 // SHA layers is closer to price right then.
-px_low_test  = sl_use_body ? body_low  : low
-px_high_test = sl_use_body ? body_high : high
+px_low_test  = sl_use_body ? body_low  : rawL
+px_high_test = sl_use_body ? body_high : rawH
 ha_low_test  = sl_use_body ? math.min(bO, bC) : bL
 ha_high_test = sl_use_body ? math.max(bO, bC) : bH
 h1_bot_edge  = sl_use_body ? sha_bot_1 : h1L
@@ -281,10 +293,10 @@ if not na(h2_top_edge) and ha_high_test > h2_top_edge
     xh_ha_h2 := ha_high_test
 
 // Which higher layer is nearer to price right now
-d_h1_bot = na(h1_bot_edge) ? 1e18 : math.abs(close - h1_bot_edge)
-d_h2_bot = na(h2_bot_edge) ? 1e18 : math.abs(close - h2_bot_edge)
-d_h1_top = na(h1_top_edge) ? 1e18 : math.abs(close - h1_top_edge)
-d_h2_top = na(h2_top_edge) ? 1e18 : math.abs(close - h2_top_edge)
+d_h1_bot = na(h1_bot_edge) ? 1e18 : math.abs(rawC - h1_bot_edge)
+d_h2_bot = na(h2_bot_edge) ? 1e18 : math.abs(rawC - h2_bot_edge)
+d_h1_top = na(h1_top_edge) ? 1e18 : math.abs(rawC - h1_top_edge)
+d_h2_top = na(h2_top_edge) ? 1e18 : math.abs(rawC - h2_top_edge)
 near_is_h1_long  = d_h1_bot <= d_h2_bot
 near_is_h1_short = d_h1_top <= d_h2_top
 
@@ -318,12 +330,12 @@ var bool arm_1  = false
 var bool arm_2  = false
 
 // Instantaneous test — also what seeds the flags on the entry bar.
-inst_el_b_long  = close > pa_b_top
-inst_el_1_long  = close > pa_1_top
-inst_el_2_long  = close > pa_2_top
-inst_el_b_short = close < pa_b_bot
-inst_el_1_short = close < pa_1_bot
-inst_el_2_short = close < pa_2_bot
+inst_el_b_long  = rawC > pa_b_top
+inst_el_1_long  = rawC > pa_1_top
+inst_el_2_long  = rawC > pa_2_top
+inst_el_b_short = rawC < pa_b_bot
+inst_el_1_short = rawC < pa_1_bot
+inst_el_2_short = rawC < pa_2_bot
 
 // Running update, before anything downstream reads the flags. Once set, a flag
 // holds for the rest of the trade; both sets are cleared on entry and on exit.
@@ -352,13 +364,13 @@ f_rank(_e0, _l0, _e1, _l1, _e2, _l2) =>
     _ds = array.new_float()
     if _e0 and not na(_l0)
         array.push(_lv, _l0)
-        array.push(_ds, math.abs(close - _l0))
+        array.push(_ds, math.abs(rawC - _l0))
     if _e1 and not na(_l1)
         array.push(_lv, _l1)
-        array.push(_ds, math.abs(close - _l1))
+        array.push(_ds, math.abs(rawC - _l1))
     if _e2 and not na(_l2)
         array.push(_lv, _l2)
-        array.push(_ds, math.abs(close - _l2))
+        array.push(_ds, math.abs(rawC - _l2))
     _n = array.size(_lv)
     float _near = na
     float _mid  = na
@@ -397,7 +409,7 @@ f_long_stop(_kn, _km, _kf) =>
       :    sl_mode == "Furthest Eligible SHA"         ? (na(_kf) ? sw_low_lvl : _kf)
       :                                                   sw_low_lvl
     _s = _lvl - sl_buffer_raw
-    min_stop_raw > 0 ? math.min(_s, close - min_stop_raw) : _s
+    min_stop_raw > 0 ? math.min(_s, rawC - min_stop_raw) : _s
 
 f_short_stop(_kn, _km, _kf) =>
     _near = near_is_h1_short
@@ -419,7 +431,7 @@ f_short_stop(_kn, _km, _kf) =>
       :    sl_mode == "Furthest Eligible SHA"         ? (na(_kf) ? sw_high_lvl : _kf)
       :                                                   sw_high_lvl
     _s = _lvl + sl_buffer_raw
-    min_stop_raw > 0 ? math.max(_s, close + min_stop_raw) : _s
+    min_stop_raw > 0 ? math.max(_s, rawC + min_stop_raw) : _s
 
 // ============================================================================
 // ⑤ POSITION SIZING  (risk-based; same math as v6, dedicated risk % here)
@@ -492,9 +504,9 @@ be_offset_raw = be_offset_units
 trail_buffer_raw = trail_buffer_units
 
 // Trail references — all ta.* computed every bar at global scope, then selected.
-trail_sw_low_wick  = ta.lowest(low,  trail_lookback)
+trail_sw_low_wick  = ta.lowest(rawL,  trail_lookback)
 trail_sw_low_body  = ta.lowest(body_low,  trail_lookback)
-trail_sw_high_wick = ta.highest(high, trail_lookback)
+trail_sw_high_wick = ta.highest(rawH, trail_lookback)
 trail_sw_high_body = ta.highest(body_high, trail_lookback)
 trail_use_body = trail_price_basis == "Body (open/close)"
 trail_sw_low  = trail_use_body ? trail_sw_low_body  : trail_sw_low_wick
@@ -530,8 +542,8 @@ if reentry_expires and not na(rearm_low) and not all_bear
     rearm_low := na
 
 // Re-entry: price CLOSES beyond the exit candle, setup optionally still required
-re_long  = use_reentry and not na(rearm_high) and close > rearm_high and (not reentry_needs_base or all_bull)
-re_short = use_reentry and not na(rearm_low)  and close < rearm_low  and (not reentry_needs_base or all_bear)
+re_long  = use_reentry and not na(rearm_high) and rawC > rearm_high and (not reentry_needs_base or all_bull)
+re_short = use_reentry and not na(rearm_low)  and rawC < rearm_low  and (not reentry_needs_base or all_bear)
 
 // Gate: only a fresh breakout enters, only when flat, within the date range.
 // Gap skip: block only the entry that fires on a gapped daily open (not the whole day).
@@ -603,11 +615,11 @@ if pos_dir != "flat" and strategy.position_size == 0 and not na(entry_bar) and b
     arm_2  := false
 
 if pos_dir == "long" and not na(stop_level)
-    _rr = risk_unit > 0 ? (close - entry_price) / risk_unit : 0.0
+    _rr = risk_unit > 0 ? (rawC - entry_price) / risk_unit : 0.0
 
     // 1. Partial take-profit
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("PAA", qty_percent=tp1_pct, comment="TP1")
+        strategy.rawC("PAA", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.max(stop_level, entry_price + be_offset_raw)
@@ -627,13 +639,13 @@ if pos_dir == "long" and not na(stop_level)
     peak_r := math.max(peak_r, _rr)
     bad_bars := align_broken_long ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _sha_out   = use_sha_break and close < shab_bot
+    _sha_out   = use_sha_break and rawC < shab_bot
     _tgt_out   = use_target and _rr >= target_r
     _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
     _cross_out = use_cross_exit and cross_dn
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
-    _stop_hit  = (not use_hard_stop) and (close <= stop_level)
+    _stop_hit  = (not use_hard_stop) and (rawC <= stop_level)
     if use_hard_stop and not _other_out
         strategy.exit("PAA-stop", from_entry="PAA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
@@ -643,7 +655,7 @@ if pos_dir == "long" and not na(stop_level)
         exit_reason := _stop_hit ? "STOP" : "EXIT"
         if _stop_hit
             stopped_from := "long"
-        rearm_high := high
+        rearm_high := rawH
         rearm_low := na
         bad_bars := 0
         peak_r := 0.0
@@ -662,10 +674,10 @@ if pos_dir == "long" and not na(stop_level)
         arm_2  := false
 
 else if pos_dir == "short" and not na(stop_level)
-    _rr = risk_unit > 0 ? (entry_price - close) / risk_unit : 0.0
+    _rr = risk_unit > 0 ? (entry_price - rawC) / risk_unit : 0.0
 
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("PAA", qty_percent=tp1_pct, comment="TP1")
+        strategy.rawC("PAA", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.min(stop_level, entry_price - be_offset_raw)
@@ -682,13 +694,13 @@ else if pos_dir == "short" and not na(stop_level)
     peak_r := math.max(peak_r, _rr)
     bad_bars := align_broken_short ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _sha_out   = use_sha_break and close > shab_top
+    _sha_out   = use_sha_break and rawC > shab_top
     _tgt_out   = use_target and _rr >= target_r
     _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
     _cross_out = use_cross_exit and cross_up
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
-    _stop_hit  = (not use_hard_stop) and (close >= stop_level)
+    _stop_hit  = (not use_hard_stop) and (rawC >= stop_level)
     if use_hard_stop and not _other_out
         strategy.exit("PAA-stop", from_entry="PAA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
@@ -698,7 +710,7 @@ else if pos_dir == "short" and not na(stop_level)
         exit_reason := _stop_hit ? "STOP" : "EXIT"
         if _stop_hit
             stopped_from := "short"
-        rearm_low := low
+        rearm_low := rawL
         rearm_high := na
         bad_bars := 0
         peak_r := 0.0
@@ -726,11 +738,11 @@ rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_s
 // Only when flat (possibly just made flat above → same-bar flip).
 if pos_dir == "flat" and (long_signal or rev_long)
     _stop = f_long_stop(ik_near_L, ik_mid_L, ik_far_L)
-    if not na(_stop) and _stop < close
-        entry_price := close
+    if not na(_stop) and _stop < rawC
+        entry_price := rawC
         init_stop   := _stop
         stop_level  := _stop
-        risk_unit   := close - _stop
+        risk_unit   := rawC - _stop
         entry_bar   := bar_index
         be_moved    := false
         bad_bars    := 0
@@ -745,16 +757,16 @@ if pos_dir == "flat" and (long_signal or rev_long)
         arm_1       := htf1_bull_bar
         arm_2       := htf2_bull_bar
         pos_dir     := "long"
-        strategy.entry("PAA", strategy.long, qty=f_qty(close, _stop))
+        strategy.entry("PAA", strategy.long, qty=f_qty(rawC, _stop))
         did_enter := true
 
 if pos_dir == "flat" and (short_signal or rev_short)
     _stop = f_short_stop(ik_near_S, ik_mid_S, ik_far_S)
-    if not na(_stop) and _stop > close
-        entry_price := close
+    if not na(_stop) and _stop > rawC
+        entry_price := rawC
         init_stop   := _stop
         stop_level  := _stop
-        risk_unit   := _stop - close
+        risk_unit   := _stop - rawC
         entry_bar   := bar_index
         be_moved    := false
         bad_bars    := 0
@@ -769,7 +781,7 @@ if pos_dir == "flat" and (short_signal or rev_short)
         arm_1       := not htf1_bull_bar
         arm_2       := not htf2_bull_bar
         pos_dir     := "short"
-        strategy.entry("PAA", strategy.short, qty=f_qty(close, _stop))
+        strategy.entry("PAA", strategy.short, qty=f_qty(rawC, _stop))
         did_enter := true
 
 // ============================================================================
@@ -812,11 +824,11 @@ plotcandle(base_ready and base_show ? bO : na, base_ready and base_show ? base_p
            bordercolor=base_ready and base_show ? base_brdr_col : na)
 
 // Entry markers — filled arrows (▲▼), carried over from v6
-plotshape(show_markers and did_enter and pos_dir == "long"  ? low  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=color.new(#2962FF, 0), size=size.small, text="▲")
-plotshape(show_markers and did_enter and pos_dir == "short" ? high : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=color.new(#F23645, 0), size=size.small, text="▼")
+plotshape(show_markers and did_enter and pos_dir == "long"  ? rawL  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=color.new(#2962FF, 0), size=size.small, text="▲")
+plotshape(show_markers and did_enter and pos_dir == "short" ? rawH : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=color.new(#F23645, 0), size=size.small, text="▼")
 
 // Exit markers — ✕ at the exit, colored by reason (stop vs alignment break)
-plotshape(show_markers and did_exit ? close : na, title="Exit", style=shape.xcross, location=location.absolute,
+plotshape(show_markers and did_exit ? rawC : na, title="Exit", style=shape.xcross, location=location.absolute,
      color = exit_reason == "STOP" ? color.new(#8B0000, 0) : color.new(#000000, 0), size=size.tiny)
 
 // Active stop line
@@ -854,7 +866,7 @@ if show_hud and barstate.islast
     table.cell(hud, 0, 3, "Position", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 3, _pos_txt, text_color=color.white, bgcolor=_pos_col, text_size=size.small)
 
-    _rr_now = pos_dir == "long" and risk_unit > 0 ? (close - entry_price)/risk_unit : pos_dir == "short" and risk_unit > 0 ? (entry_price - close)/risk_unit : na
+    _rr_now = pos_dir == "long" and risk_unit > 0 ? (rawC - entry_price)/risk_unit : pos_dir == "short" and risk_unit > 0 ? (entry_price - rawC)/risk_unit : na
     table.cell(hud, 0, 4, "Open R", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 4, na(_rr_now) ? "—" : str.tostring(_rr_now, "0.00")+"R", text_color=color.white, bgcolor=_bg, text_size=size.small)
 
