@@ -31,19 +31,23 @@ This is what makes it non-repainting. The standard TradingView renko chart fails
 
 ---
 
-## 3. Brick size — from the daily timeframe, frozen monthly
+## 3. Brick size — three settings
 
-**The rule:** the brick size is the average daily range over the last `renko_lookback` daily bars (default 21, about a month of trading days), multiplied by `renko_box_multiplier`, then rounded. It is sampled once when the daily series crosses into a new calendar month and held for that whole month. Old bricks are never redrawn with a new size.
+**The rule:** average the range (high minus low) of every sizing bar in the period that just finished. That number, times the multiplier, is the brick size, and it holds for the whole of the next period.
 
-**Where the daily range comes from — this is the important part.** It is requested from the daily timeframe directly. It is **not** rebuilt from the bars on your chart.
+| Setting | Default | What it does |
+|---|---|---|
+| `renko_reset` | Monthly | How often the size is recalculated. Monthly, Weekly or Daily |
+| `renko_size_tf` | 30 min | Which bars are measured |
+| `renko_mult` | 1.0 | Brick size = average range × this |
 
-Rebuilding it from chart bars looks equivalent and is not. Once a chart bar is a day or longer, every bar counts as its own "day", so on a weekly chart the "average daily range" is really an average weekly range and the brick comes out roughly twice as wide. Intraday, session gaps and extended hours pull it around the same way. Measured on synthetic data, the old approach gave 0.0011 on a daily chart, 0.0016 on 2-day and 0.0021 on weekly — same market, same month.
+Monthly reset with 30-minute bars means: average every 30-minute candle in last month, that is this month's brick.
 
-**The monthly freeze also happens inside the daily context**, not on the chart. On a weekly chart no bar lands on the 1st, so sampling at a chart month-change would read the average on a different date and hand back a slightly different brick. Anchored to the daily series, the sample is taken on the same calendar day whatever the chart shows.
+**Why it does not move with the chart timeframe.** The averaging runs inside the sizing timeframe's own context, so period boundaries are found on those bars, not on your chart's. A 5-minute chart and a 4-hour chart read the identical 30-minute candles and arrive at the identical number.
 
-**Leak safety:** the request uses the last completed daily bar and `lookahead_off`, so no value arrives before it exists.
+**Ordering.** On the first bar of a new period the running total still holds the period that just ended, so it is banked first and only then cleared. Nothing is ever sized from a period still in progress, and the request uses `lookahead_off` so no value arrives before it exists.
 
-**Warm-up:** there are no entries until a box exists and a direction has been established and confirmed. Because the box now comes from daily data, which is usually loaded deeply, this is normally brief — but it is not zero, and no trades are taken during it.
+**The seam.** When the size changes at a reset, the grid changes with it. Painted bricks never move — but there is a visible seam where brick height shifts. Monthly gives twelve seams a year. Daily gives one every day, which also means "price moved three bricks" quietly means something different today than yesterday. Monthly or weekly recommended; daily is supported but harder to reason about.
 
 ## 4. Where the brick lines sit
 
@@ -120,8 +124,9 @@ When several bricks print inside one real bar, a renko-charted backtest treats e
 | Input | Default | Notes |
 |---|---|---|
 | `renko_filter_enabled` | on | Off = identical to plain PAA |
-| `renko_lookback` | 21 | Daily bars averaged to size the brick. Read from the daily timeframe, so identical on every chart |
-| `renko_box_multiplier` | 0.25 | Fraction of the average daily range |
+| `renko_reset` | Monthly | Daily / Weekly / Monthly |
+| `renko_size_tf` | 30 | Timeframe of the bars measured |
+| `renko_mult` | 1.0 | Brick size = average range × this |
 | `renko_box_round_step` | 0.0001 fx / 0.05 equity | Rounds the brick size to something clean |
 | `renko_box_min` | = round step | Floor, stops a dead month producing a silly brick |
 | `renko_reversal_boxes` | 2 | Bricks needed to turn around. 2 = standard renko |
@@ -182,5 +187,6 @@ Caveat worth stating plainly: this was tested on synthetic data. It proves the a
 | 2026-07-26 | Initial draft |
 | 2026-07-26 | §3 amended after testing: bank days only from fully-observed calendar months. A mid-month start previously produced a different box for the following month, which made bricks depend on history load. Warm-up cost rises from one month to two. |
 | 2026-07-26 | §13 added: repaint test results |
+| 2026-07-26 | §3 replaced with three settings: reset period, sizing bar timeframe, and multiplier. Brick size is now the average range of the sizing bars over the period that just finished. Averaging runs inside the sizing timeframe's context so it cannot vary with the chart. |
 | 2026-07-26 | §3 rewritten: brick size now requested from the daily timeframe instead of rebuilt from chart bars, and the monthly freeze anchored in the daily series. The old approach made the brick size depend on the chart timeframe — roughly twice as wide on weekly as on daily. Also replaces calendar-month averaging with a rolling 21-day average, which is what made the daily request possible; this is a departure from the original elicited choice and is flagged as such. |
 | 2026-07-26 | Companion indicator added. Its engine is the same text constant the strategy is built from, so the two cannot drift apart. It draws bricks against real time rather than as equal-width renko columns, so a burst of bricks inside one bar reads as one moment rather than several. |
