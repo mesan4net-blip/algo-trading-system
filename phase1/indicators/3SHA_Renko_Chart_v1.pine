@@ -103,7 +103,21 @@ f_rk_avg(_reset) =>
 
 rk_reset_tf = renko_reset == "Daily" ? "1D" : renko_reset == "Weekly" ? "1W" : "1M"
 
-rk_avg = request.security(syminfo.tickerid, renko_size_tf, f_rk_avg(rk_reset_tf),
+// CHART TYPE MUST NOT CHANGE THE NUMBERS EITHER.
+// On a Heikin Ashi, Renko, Kagi, Point & Figure, Line Break or Range chart, the
+// built-in close/high/low are the MODIFIED values, not real traded prices - and
+// syminfo.tickerid carries the chart-type modifier with it, so even a data
+// request inherits it. ticker.standard() strips that off and returns plain
+// candles from the real symbol. Everything below is sized and stepped off real
+// traded prices, so switching chart type leaves the bricks untouched.
+rk_sym = ticker.standard(syminfo.tickerid)
+
+rk_avg = request.security(rk_sym, renko_size_tf, f_rk_avg(rk_reset_tf),
+             lookahead = barmerge.lookahead_off)
+
+// The real traded close, for brick formation. Not the chart's close, which on a
+// Heikin Ashi chart is an average of averages and never traded anywhere.
+rk_close = request.security(rk_sym, timeframe.period, close,
              lookahead = barmerge.lookahead_off)
 
 // rk_avg only moves at a period boundary, so the brick size holds steady in
@@ -132,7 +146,7 @@ var int   rk_run = 0
 // over untouched and no brick prints on this bar. A change in the measuring
 // stick must never flip the signal by itself.
 if rk_box_new and not na(rk_box) and rk_box > 0
-    rk_bot := math.floor(close / rk_box) * rk_box
+    rk_bot := math.floor(rk_close / rk_box) * rk_box
     rk_top := rk_bot + rk_box
 
 // Brick formation — closed bar only, close only, highs and lows ignored.
@@ -142,37 +156,37 @@ if not rk_box_new and not na(rk_box) and rk_box > 0 and not na(rk_top)
     for _i = 0 to 199
         bool _printed = false
         if rk_dir == 1
-            if close >= rk_top + rk_box
+            if rk_close >= rk_top + rk_box
                 rk_bot := rk_top
                 rk_top := rk_top + rk_box
                 rk_run := rk_run + 1
                 _printed := true
-            else if close <= rk_top - renko_rev * rk_box
+            else if rk_close <= rk_top - renko_rev * rk_box
                 rk_top := rk_top - (renko_rev - 1) * rk_box
                 rk_bot := rk_top - rk_box
                 rk_dir := -1
                 rk_run := 1
                 _printed := true
         else if rk_dir == -1
-            if close <= rk_bot - rk_box
+            if rk_close <= rk_bot - rk_box
                 rk_top := rk_bot
                 rk_bot := rk_bot - rk_box
                 rk_run := rk_run + 1
                 _printed := true
-            else if close >= rk_bot + renko_rev * rk_box
+            else if rk_close >= rk_bot + renko_rev * rk_box
                 rk_bot := rk_bot + (renko_rev - 1) * rk_box
                 rk_top := rk_bot + rk_box
                 rk_dir := 1
                 rk_run := 1
                 _printed := true
         else
-            if close >= rk_top + rk_box
+            if rk_close >= rk_top + rk_box
                 rk_bot := rk_top
                 rk_top := rk_top + rk_box
                 rk_dir := 1
                 rk_run := 1
                 _printed := true
-            else if close <= rk_bot - rk_box
+            else if rk_close <= rk_bot - rk_box
                 rk_top := rk_bot
                 rk_bot := rk_bot - rk_box
                 rk_dir := -1
