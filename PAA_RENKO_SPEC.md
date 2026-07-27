@@ -31,26 +31,19 @@ This is what makes it non-repainting. The standard TradingView renko chart fails
 
 ---
 
-## 3. Brick size — set monthly, then frozen
+## 3. Brick size — from the daily timeframe, frozen monthly
 
-**The rule:** on the first bar of each calendar month, work out a brick size from the month that just finished. Use that same size for the whole of the new month. Never go back and redraw old bricks with it.
+**The rule:** the brick size is the average daily range over the last `renko_lookback` daily bars (default 21, about a month of trading days), multiplied by `renko_box_multiplier`, then rounded. It is sampled once when the daily series crosses into a new calendar month and held for that whole month. Old bricks are never redrawn with a new size.
 
-**How the size is worked out:**
+**Where the daily range comes from — this is the important part.** It is requested from the daily timeframe directly. It is **not** rebuilt from the bars on your chart.
 
-1. Take every completed calendar day inside the previous calendar month.
-2. For each day, take that day's high minus that day's low.
-3. Average those daily ranges.
-4. Multiply by `renko_box_multiplier`.
-5. Round the result to the nearest `renko_box_round_step`.
-6. If the result is below `renko_box_min`, use `renko_box_min` instead.
+Rebuilding it from chart bars looks equivalent and is not. Once a chart bar is a day or longer, every bar counts as its own "day", so on a weekly chart the "average daily range" is really an average weekly range and the brick comes out roughly twice as wide. Intraday, session gaps and extended hours pull it around the same way. Measured on synthetic data, the old approach gave 0.0011 on a daily chart, 0.0016 on 2-day and 0.0021 on weekly — same market, same month.
 
-**Where the daily ranges come from:** they are built up from the base timeframe bars themselves, by tracking each calendar day's running high and low on the chart. They are **not** pulled in from the daily timeframe with a data request. This is deliberate — pulling higher timeframe data is where values leak in early on fast charts, and this avoids the problem entirely rather than trying to patch around it.
+**The monthly freeze also happens inside the daily context**, not on the chart. On a weekly chart no bar lands on the 1st, so sampling at a chart month-change would read the average on a different date and hand back a slightly different brick. Anchored to the daily series, the sample is taken on the same calendar day whatever the chart shows.
 
-**Only fully-observed months count.** Whichever month the chart happens to start in is almost always a partial one, and a box derived from a partial month is a different number to one derived from the whole month. That would make the bricks depend on how much history was loaded — the exact repainting this design exists to avoid. So no days are banked until a month boundary has actually been crossed. Every month used to compute a box was therefore entered at its first bar.
+**Leak safety:** the request uses the last completed daily bar and `lookahead_off`, so no value arrives before it exists.
 
-**Warm-up:** the cost of the above is up to two calendar months at the start of the data with no brick size, no renko direction, and **no entries at all**. Set the backtest start at least two full calendar months after the data start or that period is wasted.
-
----
+**Warm-up:** there are no entries until a box exists and a direction has been established and confirmed. Because the box now comes from daily data, which is usually loaded deeply, this is normally brief — but it is not zero, and no trades are taken during it.
 
 ## 4. Where the brick lines sit
 
@@ -127,7 +120,8 @@ When several bricks print inside one real bar, a renko-charted backtest treats e
 | Input | Default | Notes |
 |---|---|---|
 | `renko_filter_enabled` | on | Off = identical to plain PAA |
-| `renko_box_multiplier` | 0.25 | Fraction of last month's average daily range |
+| `renko_lookback` | 21 | Daily bars averaged to size the brick. Read from the daily timeframe, so identical on every chart |
+| `renko_box_multiplier` | 0.25 | Fraction of the average daily range |
 | `renko_box_round_step` | 0.0001 fx / 0.05 equity | Rounds the brick size to something clean |
 | `renko_box_min` | = round step | Floor, stops a dead month producing a silly brick |
 | `renko_reversal_boxes` | 2 | Bricks needed to turn around. 2 = standard renko |
@@ -141,7 +135,6 @@ Everything inherited from PAA is unchanged and is not restated here.
 
 - **Bricks arrive in bursts.** In a fast move you get five at once, then nothing for hours. Anything that counts bricks or measures time between them behaves unevenly.
 - **No renko chart to look at.** It lives as a number the strategy reads. It can be drawn as boxes on top of the normal chart if you want to see it, but that is a separate indicator file and is not part of this spec.
-- **A month of data is lost to warm-up.**
 - **The filter cuts trade count.** Fewer trades means less statistical confidence in the result. Worth watching alongside the win rate.
 
 ---
@@ -157,6 +150,8 @@ The renko direction itself should be reconciled as its own column, not just impl
 ## 12. Test results — does it actually not repaint?
 
 The Pine engine was ported line-for-line to Python (`renko_repaint_test.py`) and run over 30,000 synthetic 15m bars with deliberately drifting volatility, so that monthly box sizes genuinely change (seven distinct sizes, 0.0006 to 0.0017).
+
+**Timeframe independence — PASS.** The same price series was rolled up to six timeframes from 15m to weekly and the engine run on each. Across 20 months, the brick size was identical on every timeframe in every month. Zero disagreements. Before the §3 fix, six of twenty months disagreed.
 
 **Frozen history — PASS.** The series was truncated at three different points and re-run. Every surviving bar had identical brick state. Later bars never reach back and change earlier ones.
 
@@ -187,4 +182,5 @@ Caveat worth stating plainly: this was tested on synthetic data. It proves the a
 | 2026-07-26 | Initial draft |
 | 2026-07-26 | §3 amended after testing: bank days only from fully-observed calendar months. A mid-month start previously produced a different box for the following month, which made bricks depend on history load. Warm-up cost rises from one month to two. |
 | 2026-07-26 | §13 added: repaint test results |
+| 2026-07-26 | §3 rewritten: brick size now requested from the daily timeframe instead of rebuilt from chart bars, and the monthly freeze anchored in the daily series. The old approach made the brick size depend on the chart timeframe — roughly twice as wide on weekly as on daily. Also replaces calendar-month averaging with a rolling 21-day average, which is what made the daily request possible; this is a departure from the original elicited choice and is flagged as such. |
 | 2026-07-26 | Companion indicator added. Its engine is the same text constant the strategy is built from, so the two cannot drift apart. It draws bricks against real time rather than as equal-width renko columns, so a burst of bricks inside one bar reads as one moment rather than several. |
