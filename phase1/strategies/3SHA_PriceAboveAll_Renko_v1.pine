@@ -146,8 +146,9 @@ htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval
 // ============================================================================
 grp_renko = "⑨ ━━━ RENKO FILTER ━━━"
 renko_on       = input.bool(true, "Enable Renko Filter", tooltip="OFF = this script behaves identically to plain 3SHA-PAA, same trades, same numbers. That is the A/B test: run it off, run it on, compare.", group=grp_renko)
-renko_lookback = input.int(21, "Days Of Daily Range To Average", minval=5, maxval=250, tooltip="How many DAILY bars are averaged to size the brick. 21 is about one month of trading days. This is read from the daily timeframe directly, so it is the same number whether you are looking at a 5-minute chart or a weekly one.", group=grp_renko)
-renko_mult     = input.float(0.25, "Box Size = this × average daily range", minval=0.01, maxval=5.0, step=0.01, tooltip="The brick size is worked out on the first bar of each calendar month from the month that just finished, then frozen for the whole month. Old bricks are never redrawn with the new size. 0.25 gives roughly a 15-20 pip brick on EUR/USD and roughly a 1.00-1.50 brick on QQQ - tune per market.", group=grp_renko)
+renko_reset    = input.string("Monthly", "Brick Size Reset", options=["Daily", "Weekly", "Monthly"], tooltip="How often the brick size is recalculated. Monthly: last month sizes this month. Daily: yesterday sizes today. Whatever is already painted never changes - a reset only affects bricks drawn from that point on.", group=grp_renko)
+renko_size_tf  = input.timeframe("30", "Bar Timeframe For Brick Size", tooltip="Which bars are measured to size the brick. Read from this timeframe directly, never from your chart, so the brick size is the same number whether you are looking at a 5-minute chart or a weekly one.", group=grp_renko)
+renko_mult     = input.float(1.0, "Brick Size Multiplier", minval=0.05, maxval=20.0, step=0.05, tooltip="Brick size = average range of those bars over the last period, times this. 1.0 means the brick is exactly the average bar range. Raise it for chunkier bricks and fewer signals.", group=grp_renko)
 renko_round    = input.float(0.0001, "Round Box Size To Nearest", minval=0.0, step=0.0001, tooltip="Rounds the computed brick size to something clean, so the grid levels are readable. 0.0001 suits forex, 0.05 suits equities. 0 = no rounding.", group=grp_renko)
 renko_min      = input.float(0.0, "Minimum Box Size", minval=0.0, step=0.0001, tooltip="Floor, so a dead month cannot produce a silly-small brick. 0 = use the rounding step as the floor.", group=grp_renko)
 renko_rev      = input.int(2, "Boxes Needed To Reverse", minval=1, maxval=10, tooltip="How far price must travel against the current direction to turn the renko around. 2 is standard renko: one box to keep going, two to turn. 1 makes it flip on every crossing, which is far twitchier.", group=grp_renko)
@@ -195,22 +196,41 @@ sha_bot_2 = math.min(h2O, h2C)
 //
 // [1] takes the last COMPLETED daily bar and lookahead_off blocks values from
 // arriving before they exist, so nothing leaks in early on a fast chart.
-// The monthly freeze happens INSIDE the daily context, not on the chart. That
-// matters: on a weekly chart no bar lands on the 1st, so sampling at a chart
-// month-change would read the average on a different date and hand back a
-// slightly different brick. Anchoring it to the daily series means the sample
-// is taken on the same calendar day no matter what the chart is showing.
-rk_adr = request.security(syminfo.tickerid, "D",
-             ta.valuewhen(ta.change(time("1M")) != 0,
-                          ta.sma(high - low, renko_lookback)[1], 0),
+// BRICK SIZE
+// Average the range of every sizing bar in the period that just finished, then
+// hold that number for the whole of the next period.
+//
+// The averaging runs INSIDE the sizing timeframe's own context, so the period
+// boundaries are found on those bars and not on your chart's. That is what
+// makes the number timeframe-proof: a 5-minute chart and a 4-hour chart both
+// read the identical 30-minute candles and both arrive at the identical brick.
+//
+// Note the ordering. On the first bar of a new period the running total still
+// holds the period that just ENDED, so it is banked first and only then reset.
+// Nothing is ever sized from a period still in progress.
+f_rk_avg(_reset) =>
+    bool _new = ta.change(time(_reset)) != 0
+    var float _sum  = 0.0
+    var int   _n    = 0
+    var float _held = na
+    if _new
+        _held := _n > 0 ? _sum / _n : _held
+        _sum  := 0.0
+        _n    := 0
+    _sum := _sum + (high - low)
+    _n   := _n + 1
+    _held
+
+rk_reset_tf = renko_reset == "Daily" ? "1D" : renko_reset == "Weekly" ? "1W" : "1M"
+
+rk_avg = request.security(syminfo.tickerid, renko_size_tf, f_rk_avg(rk_reset_tf),
              lookahead = barmerge.lookahead_off)
 
-// Size the brick from that frozen monthly figure. Because rk_adr only moves
-// when the daily series crosses into a new month, this holds steady all month
-// and old bricks are never redrawn with a new size.
+// rk_avg only moves at a period boundary, so the brick size holds steady in
+// between and anything already painted keeps the size it was painted with.
 float rk_box_calc = na
-if not na(rk_adr) and rk_adr > 0
-    float _raw   = rk_adr * renko_mult
+if not na(rk_avg) and rk_avg > 0
+    float _raw   = rk_avg * renko_mult
     float _step  = renko_round > 0 ? renko_round : 0.0
     float _round = _step > 0 ? math.round(_raw / _step) * _step : _raw
     float _floor = renko_min > 0 ? renko_min : (_step > 0 ? _step : 0.0)
