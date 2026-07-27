@@ -45,6 +45,10 @@ Monthly reset with 30-minute bars means: average every 30-minute candle in last 
 
 **Why it does not move with the chart timeframe.** The averaging runs inside the sizing timeframe's own context, so period boundaries are found on those bars, not on your chart's. A 5-minute chart and a 4-hour chart read the identical 30-minute candles and arrive at the identical number.
 
+**Chart type cannot change it either.** On a Heikin Ashi, Renko, Kagi, Point & Figure, Line Break or Range chart, Pine's built-in `close`, `high` and `low` are the modified values rather than real traded prices, and `syminfo.tickerid` carries the chart-type modifier so even a data request inherits it. Both the sizing average and the brick formation use `ticker.standard()`, which strips the modifier and returns plain candles from the real symbol. Switching chart type leaves the bricks untouched.
+
+Note this covers the renko only. The inherited PAA entry and exit logic still reads the chart's own close, so on a Heikin Ashi chart the strategy would trade off Heikin Ashi values. Backtesting on a non-standard chart type is a bad idea regardless — run this on ordinary candles.
+
 **Ordering.** On the first bar of a new period the running total still holds the period that just ended, so it is banked first and only then cleared. Nothing is ever sized from a period still in progress, and the request uses `lookahead_off` so no value arrives before it exists.
 
 **The seam.** When the size changes at a reset, the grid changes with it. Painted bricks never move — but there is a visible seam where brick height shifts. Monthly gives twelve seams a year. Daily gives one every day, which also means "price moved three bricks" quietly means something different today than yesterday. Monthly or weekly recommended; daily is supported but harder to reason about.
@@ -187,6 +191,7 @@ Caveat worth stating plainly: this was tested on synthetic data. It proves the a
 | 2026-07-26 | Initial draft |
 | 2026-07-26 | §3 amended after testing: bank days only from fully-observed calendar months. A mid-month start previously produced a different box for the following month, which made bricks depend on history load. Warm-up cost rises from one month to two. |
 | 2026-07-26 | §13 added: repaint test results |
+| 2026-07-26 | Both the sizing average and the brick formation switched to `ticker.standard()`. Previously, switching the chart to Heikin Ashi or Renko fed modified prices into the engine and changed the bricks. |
 | 2026-07-26 | §3 replaced with three settings: reset period, sizing bar timeframe, and multiplier. Brick size is now the average range of the sizing bars over the period that just finished. Averaging runs inside the sizing timeframe's context so it cannot vary with the chart. |
 | 2026-07-26 | §3 rewritten: brick size now requested from the daily timeframe instead of rebuilt from chart bars, and the monthly freeze anchored in the daily series. The old approach made the brick size depend on the chart timeframe — roughly twice as wide on weekly as on daily. Also replaces calendar-month averaging with a rolling 21-day average, which is what made the daily request possible; this is a departure from the original elicited choice and is flagged as such. |
 | 2026-07-26 | Companion indicator added. Its engine is the same text constant the strategy is built from, so the two cannot drift apart. It draws bricks against real time rather than as equal-width renko columns, so a burst of bricks inside one bar reads as one moment rather than several. |
