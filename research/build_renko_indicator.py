@@ -28,9 +28,17 @@ adaptations = [
 
     ('renko_show_hud = input.bool(true, "Show Renko Row In HUD", group=grp_renko)',
      'renko_show_hud = input.bool(true, "Show Status Box", group=grp_renko)\n'
-     'rk_up_col      = input.color(color.new(#2962FF, 20), "Up Brick", group=grp_renko)\n'
-     'rk_dn_col      = input.color(color.new(#F23645, 20), "Down Brick", group=grp_renko)\n'
-     'rk_edge        = input.bool(true, "Show Brick Edges", group=grp_renko)'),
+     '\n'
+     'grp_draw       = "━━━ DRAWING ━━━"\n'
+     'rk_up_col      = input.color(color.new(#2962FF, 0), "Up Brick", group=grp_draw)\n'
+     'rk_dn_col      = input.color(color.new(#F23645, 0), "Down Brick", group=grp_draw)\n'
+     'rk_transp      = input.int(82, "Brick Transparency", minval=0, maxval=100, tooltip="How see-through the brick is. This is the setting that actually matters if the renko is hiding your candles: at 0 the brick is solid and covers everything underneath, at 100 it is invisible. 82 leaves the candles clearly readable through it.", group=grp_draw)\n'
+     'rk_edge        = input.bool(true, "Show Brick Edge Lines", tooltip="The two step lines marking the top and bottom of the current brick - the live grid levels.", group=grp_draw)\n'
+     'rk_marks       = input.bool(true, "Mark Renko Turns", group=grp_draw)\n'
+     '\n'
+     'show_candles   = input.bool(false, "Draw Price Candles", tooltip="Pine cannot hide the chart\'s own candles, so leave this OFF in normal use - your candles are already there, and lowering Brick Transparency is what lets you see them. Turn this ON only if you have switched the native candles off in Chart Settings and want this indicator to draw them instead. With both on you will see every candle drawn twice.", group=grp_draw)\n'
+     'cndl_up        = input.color(color.new(#26A69A, 0), "Candle Up", group=grp_draw)\n'
+     'cndl_dn        = input.color(color.new(#EF5350, 0), "Candle Down", group=grp_draw)'),
 ]
 
 HEADER = '''//@version=6
@@ -79,30 +87,38 @@ DRAW = '''
 // ============================================================================
 // DRAWING
 // ============================================================================
-// One body per bar showing the current brick. O(1) per bar: no arrays, no box
-// objects, so nothing accumulates over history and nothing can time out.
-rk_live  = renko_on and not na(rk_box) and not na(rk_top)
-rk_col   = rk_dir == 1 ? rk_up_col : rk_dir == -1 ? rk_dn_col : color.new(#888888, 40)
-rk_bcol  = rk_edge ? color.new(#000000, 30) : na
+// The brick is drawn as a TRANSLUCENT BAND between its top and bottom edges,
+// not as a solid body, so the price candles underneath stay readable. This is
+// the whole point: the renko is meant to sit alongside price, not replace it.
+// O(1) per bar - no arrays, no box objects, nothing accumulates over history.
+rk_live = renko_on and not na(rk_box) and not na(rk_top)
+rk_base = rk_dir == 1 ? rk_up_col : rk_dir == -1 ? rk_dn_col : color.new(#888888, 0)
 
-plotcandle(rk_live ? rk_bot : na, rk_live ? rk_top : na,
-           rk_live ? rk_bot : na, rk_live ? rk_top : na,
-           title="Renko Brick", color=rk_col, wickcolor=na,
-           bordercolor=rk_bcol)
+rk_pT = plot(rk_live ? rk_top : na, "Brick Top",
+             color=rk_edge ? color.new(rk_base, 35) : color.new(#000000, 100),
+             style=plot.style_stepline, linewidth=1)
+rk_pB = plot(rk_live ? rk_bot : na, "Brick Bottom",
+             color=rk_edge ? color.new(rk_base, 35) : color.new(#000000, 100),
+             style=plot.style_stepline, linewidth=1)
+fill(rk_pT, rk_pB, color=color.new(rk_base, rk_transp), title="Brick Body")
 
-plot(rk_live ? rk_top : na, "Brick Top", color=color.new(#000000, 60),
-     style=plot.style_stepline, linewidth=1)
-plot(rk_live ? rk_bot : na, "Brick Bottom", color=color.new(#000000, 60),
-     style=plot.style_stepline, linewidth=1)
+// Optional price candles. Only for charts where the native candles have been
+// switched off in Chart Settings - Pine cannot hide them from here.
+plotcandle(show_candles ? open  : na, show_candles ? high : na,
+           show_candles ? low   : na, show_candles ? close : na,
+           title="Price Candles",
+           color       = close >= open ? cndl_up : cndl_dn,
+           wickcolor   = close >= open ? cndl_up : cndl_dn,
+           bordercolor = close >= open ? cndl_up : cndl_dn)
 
 // Mark bars where the renko turned around
 rk_flipped = rk_dir != rk_dir[1] and rk_dir != 0 and not na(rk_dir[1])
-plotshape(rk_live and rk_flipped and rk_dir == 1, "Renko Turned Up",
+plotshape(rk_marks and rk_live and rk_flipped and rk_dir == 1, "Renko Turned Up",
           shape.triangleup, location.belowbar, color.new(#2962FF, 0), size=size.tiny)
-plotshape(rk_live and rk_flipped and rk_dir == -1, "Renko Turned Down",
+plotshape(rk_marks and rk_live and rk_flipped and rk_dir == -1, "Renko Turned Down",
           shape.triangledown, location.abovebar, color.new(#F23645, 0), size=size.tiny)
 
-// ── STATUS ─────────────────────────────────────────────────────────────────
+// -- STATUS ----------------------------------------------------------------
 var table rkt = na
 if renko_show_hud and barstate.islast
     rkt := table.new(position.top_right, 2, 4, border_width=1,
@@ -110,11 +126,11 @@ if renko_show_hud and barstate.islast
     _bg = color.new(#1A1A1A, 10)
     _hd = rk_dir == 1 ? color.new(#2962FF, 0) : rk_dir == -1 ? color.new(#F23645, 0) : color.new(#888888, 0)
     table.cell(rkt, 0, 0, "3SHA RENKO", text_color=color.white, bgcolor=_hd, text_size=size.small)
-    table.cell(rkt, 1, 0, na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "▲ UP" : rk_dir == -1 ? "▼ DOWN" : "◇ NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(rkt, 1, 0, na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "\u25b2 UP" : rk_dir == -1 ? "\u25bc DOWN" : "\u25c7 NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(rkt, 0, 1, "Box Size", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(rkt, 1, 1, na(rk_box) ? "—" : str.tostring(rk_box, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(rkt, 1, 1, na(rk_box) ? "\u2014" : str.tostring(rk_box, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(rkt, 0, 2, "Bricks In A Row", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(rkt, 1, 2, na(rk_box) ? "—" : str.tostring(rk_run), text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(rkt, 1, 2, na(rk_box) ? "\u2014" : str.tostring(rk_run), text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(rkt, 0, 3, "Entries", text_color=color.white, bgcolor=_bg, text_size=size.small)
     _gate = rk_ok_long ? "LONGS ONLY" : rk_ok_short ? "SHORTS ONLY" : "BLOCKED"
     table.cell(rkt, 1, 3, _gate, text_color=color.white, bgcolor=_bg, text_size=size.small)
