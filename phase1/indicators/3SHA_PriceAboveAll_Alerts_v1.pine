@@ -115,8 +115,10 @@ grp_sl = "⑤ ━━━ INITIAL STOP ━━━"
 sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], tooltip="Last Bar Beyond ... : the most recent bar with ANY part past the SHA — below its lower edge for a long, above its upper edge for a short. Covers bars wholly beyond and bars straddling the edge. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher layer is closer to price. No lookback limit.", group=grp_sl)
 sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
-sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($).", group=grp_sl)
-min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, tooltip="0 = disabled.", group=grp_sl)
+sl_buffer_pct = input.float(0.10, "Stop Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the anchor the stop sits, as a percentage of price. 0.10 means one tenth of one percent. Percent rather than a fixed amount so the same setting is meaningful on any instrument.", group=grp_sl)
+sl_buffer_raw = rawC * sl_buffer_pct / 100
+min_stop_pct = input.float(0.00, "Min Stop Distance (%)", minval=0.0, step=0.01, tooltip="Floor on stop distance, as a percentage of price. The stop is never placed closer to entry than this. 0 = off.", group=grp_sl)
+min_stop_raw = rawC * min_stop_pct / 100
 use_hard_stop = input.bool(false, "Hard Stop (intra-bar)", tooltip="OFF: stop-hit alerts fire only when a candle CLOSES beyond the stop (matches the strategy default).\nON: fires the moment price touches the stop intra-bar.", group=grp_sl)
 
 body_low  = math.min(rawO, rawC)
@@ -314,8 +316,8 @@ f_long_stop(_kn, _km, _kf) =>
       :    sl_mode == "Middle Eligible SHA"           ? (na(_km) ? sw_low_lvl : _km)
       :    sl_mode == "Furthest Eligible SHA"         ? (na(_kf) ? sw_low_lvl : _kf)
       :                                                      sw_low_lvl
-    _s = _lvl - sl_buffer_units
-    min_stop_units > 0 ? math.min(_s, rawC - min_stop_units) : _s
+    _s = _lvl - sl_buffer_raw
+    min_stop_raw > 0 ? math.min(_s, rawC - min_stop_raw) : _s
 
 f_short_stop(_kn, _km, _kf) =>
     _near = near_is_h1_short
@@ -336,8 +338,8 @@ f_short_stop(_kn, _km, _kf) =>
       :    sl_mode == "Middle Eligible SHA"           ? (na(_km) ? sw_high_lvl : _km)
       :    sl_mode == "Furthest Eligible SHA"         ? (na(_kf) ? sw_high_lvl : _kf)
       :                                                      sw_high_lvl
-    _s = _lvl + sl_buffer_units
-    min_stop_units > 0 ? math.max(_s, rawC + min_stop_units) : _s
+    _s = _lvl + sl_buffer_raw
+    min_stop_raw > 0 ? math.max(_s, rawC + min_stop_raw) : _s
 
 // ============================================================================
 // ⑥ TRADE MANAGEMENT
@@ -345,15 +347,15 @@ f_short_stop(_kn, _km, _kf) =>
 grp_mgmt = "⑥ ━━━ TRADE MANAGEMENT ━━━"
 use_be = input.bool(true, "Move Stop To Break-Even", group=grp_mgmt)
 be_trigger_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, group=grp_mgmt)
-be_offset_units = input.float(0.0, "  Break-Even Offset", minval=0, step=0.5, group=grp_mgmt)
-
+be_offset_pct = input.float(0.00, "  Break-Even Offset (%)", minval=0.0, step=0.01, tooltip="How far beyond entry the break-even stop sits, as a percentage of price. 0 = exactly at entry.", group=grp_mgmt)
+be_offset_raw = rawC * be_offset_pct / 100
 use_trail = input.bool(true, "Trailing Stop", group=grp_mgmt)
 trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], group=grp_mgmt)
 trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], group=grp_mgmt)
 trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
-trail_buffer_units = input.float(2.0, "  Trail Buffer", minval=0, step=0.5, group=grp_mgmt)
-
+trail_buffer_pct = input.float(0.10, "  Trail Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the trail anchor the trailing stop sits, as a percentage of price.", group=grp_mgmt)
+trail_buffer_raw = rawC * trail_buffer_pct / 100
 reverse_on_stop = input.bool(false, "Reverse On Stop", tooltip="On a stop hit, immediately flip to the opposite side IF that side is fully aligned at that moment, its direction is allowed, and the gap filter passes.", group=grp_mgmt)
 align_confirm_bars = input.int(1, "  Flip Must Hold (bars)", minval=1, maxval=20, group=grp_mgmt)
 use_sha_break = input.bool(false, "Exit: Price Back Through SHA", group=grp_mgmt)
@@ -380,8 +382,8 @@ trail_sw_high  = trail_use_body ? trail_sw_high_body : trail_sw_high_wick
 
 trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "Base SHA Body" ? sha_bot_0 : trail_mode == "HTF1 SHA Body" ? sha_bot_1 : trail_mode == "HTF2 SHA Body" ? sha_bot_2 : trail_mode == "Closest Eligible SHA" ? rk_near_L : trail_mode == "Middle Eligible SHA" ? rk_mid_L : rk_far_L
 trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "Base SHA Body" ? sha_top_0 : trail_mode == "HTF1 SHA Body" ? sha_top_1 : trail_mode == "HTF2 SHA Body" ? sha_top_2 : trail_mode == "Closest Eligible SHA" ? rk_near_S : trail_mode == "Middle Eligible SHA" ? rk_mid_S : rk_far_S
-trail_low_ref  = trail_low_anchor  - trail_buffer_units
-trail_high_ref = trail_high_anchor + trail_buffer_units
+trail_low_ref  = trail_low_anchor  - trail_buffer_raw
+trail_high_ref = trail_high_anchor + trail_buffer_raw
 
 cross_dn = ta.crossunder(bC, h1C)
 cross_up = ta.crossover(bC, h1C)
@@ -421,7 +423,7 @@ stopped_from   = ""
 if pos_dir == "long" and not na(stop_level)
     _r = risk_unit > 0 ? (rawC - entry_price) / risk_unit : 0.0
     if use_be and not be_moved and _r >= be_trigger_r
-        stop_level := math.max(stop_level, entry_price + be_offset_units)
+        stop_level := math.max(stop_level, entry_price + be_offset_raw)
         be_moved := true
     if use_trail and _r >= trail_start_r
         stop_level := math.max(stop_level, trail_low_ref)
@@ -454,7 +456,7 @@ if pos_dir == "long" and not na(stop_level)
 else if pos_dir == "short" and not na(stop_level)
     _r = risk_unit > 0 ? (entry_price - rawC) / risk_unit : 0.0
     if use_be and not be_moved and _r >= be_trigger_r
-        stop_level := math.min(stop_level, entry_price - be_offset_units)
+        stop_level := math.min(stop_level, entry_price - be_offset_raw)
         be_moved := true
     if use_trail and _r >= trail_start_r
         stop_level := math.min(stop_level, trail_high_ref)
