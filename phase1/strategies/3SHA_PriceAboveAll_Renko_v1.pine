@@ -346,12 +346,11 @@ grp_sl = "④ ━━━ INITIAL STOP ━━━"
 sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], tooltip="Closest / Middle / Furthest Eligible SHA: rank the SHA layers that price has CLOSED beyond during this trade, by distance from price, and anchor on the chosen rung. Recomputed every bar. With two eligible layers Middle resolves to Furthest; with one, all three rungs resolve to it; with none, the anchor falls back to Swing.\n\nLast Bar Beyond ... : the most recent bar that sat entirely past the SHA's far edge (below it for a long, above it for a short) — the last place price was genuinely on the wrong side of the trend. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher SHA layer is closer to price. No lookback limit.\n\nTrigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
 sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
-sl_buffer_units = input.float(2.0, "Stop Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the anchor, in price points ($). Stop is CLOSE-based.", group=grp_sl)
-min_stop_units = input.float(0.0, "Min Stop Distance", minval=0, step=0.5, tooltip="Floor on stop distance in price points ($). 0 = disabled. Guards against too-tight stops that oversize the position.", group=grp_sl)
+sl_buffer_pct = input.float(0.10, "Stop Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the anchor the stop sits, as a percentage of price. 0.10 means one tenth of one percent. Percent rather than a fixed amount so the same setting is meaningful on any instrument.", group=grp_sl)
+sl_buffer_raw = close * sl_buffer_pct / 100
+min_stop_pct = input.float(0.00, "Min Stop Distance (%)", minval=0.0, step=0.01, tooltip="Floor on stop distance, as a percentage of price. The stop is never placed closer to entry than this. 0 = off.", group=grp_sl)
+min_stop_raw = close * min_stop_pct / 100
 use_hard_stop = input.bool(false, "Hard Stop (intra-bar + gap protection)", tooltip="OFF (default): the stop is CLOSE-based (mental) — it fires only when a candle CLOSES beyond the stop. ON: the stop is a REAL order that fires the instant price TOUCHES it intra-bar, and protects against overnight/weekend gaps (important for stocks like QQQ). Break-even and trailing still ratchet the stop; this only changes how it is enforced. The alignment-break exit stays close-based either way.", group=grp_sl)
-
-sl_buffer_raw = sl_buffer_units
-min_stop_raw  = min_stop_units
 
 // ── ENTRY CONDITION: WHERE PRICE SITS, NOT WHICH WAY EACH LAYER POINTS ─────
 // Which edge counts follows the Anchor Uses setting, so Body ignores wicks on
@@ -628,15 +627,15 @@ tp1_pct   = input.float(50, "  TP1 Size (% of position)", minval=1, maxval=99, s
 
 use_be    = input.bool(true, "Move Stop To Break-Even", tooltip="After price closes +Xr in favor, move the stop to entry (plus offset). Locks the trade to break-even once the trend proves itself.", group=grp_mgmt)
 be_trig_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, group=grp_mgmt)
-be_offset_units = input.float(0.0, "  Break-Even Offset", minval=0, step=0.5, tooltip="Extra distance above/below entry when moving to BE, in price points ($). Covers spread/commission.", group=grp_mgmt)
-
+be_offset_pct = input.float(0.00, "  Break-Even Offset (%)", minval=0.0, step=0.01, tooltip="How far beyond entry the break-even stop sits, as a percentage of price. 0 = exactly at entry.", group=grp_mgmt)
+be_offset_raw = close * be_offset_pct / 100
 use_trail = input.bool(true, "Trailing Stop", tooltip="Once in profit, ratchet the stop toward the chosen anchor. Never loosens. Close-based — only triggers when a candle CLOSES beyond it.", group=grp_mgmt)
 trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], tooltip="Same anchor choices as the initial stop, except Trigger Candle (a fixed entry bar can't trail).\nSwing: recent swing low/high.\nHTF1 SHA Body: trail the mid-TF trend body.\nHTF2 SHA Body: trail the high-TF trend body (loosest, rides longest).", group=grp_mgmt)
 trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="For the Swing trail anchor: Body = body edge (tighter), Wick = full extreme (wider).", group=grp_mgmt)
 trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
-trail_buffer_units = input.float(2.0, "  Trail Buffer", minval=0, step=0.5, tooltip="Extra distance beyond the trail anchor, in price points ($).", group=grp_mgmt)
-
+trail_buffer_pct = input.float(0.10, "  Trail Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the trail anchor the trailing stop sits, as a percentage of price.", group=grp_mgmt)
+trail_buffer_raw = close * trail_buffer_pct / 100
 reverse_on_stop = input.bool(false, "Reverse On Stop", tooltip="When the stop is hit, immediately open the opposite side IF that side is fully aligned at that moment (and its direction is allowed, and the gap filter passes). Built to cut the sideways bleed of exiting and re-entering the same way. Note: it does NOT wait for a fresh alignment signal — the opposite alignment simply has to be present.\n\nFor hold-until-stopped behaviour, switch Alignment-Break Exit OFF: the stop then becomes the only way out, with break-even and the trail still tightening it.", group=grp_mgmt)
 // ── EXIT SCENARIOS ─────────────────────────────────────────────────────────
 // Seven ways a trade can end, each independent and each off unless enabled.
@@ -662,9 +661,6 @@ use_cross_exit = input.bool(false, "Exit: Chart SHA Crosses Mid SHA", tooltip="C
 
 use_align_exit = input.bool(false, "Exit: Layer Flips Direction", tooltip="Exit when a SHA layer turns against the trade. OFF by default: this strategy enters on where PRICE sits, so a layer can be pointing the wrong way at entry and this exit would fire immediately. Two gates prevent that — a layer must be ELIGIBLE (price closed beyond it during the trade) and ARMED (it pointed with the trade at some point). A layer that never came onside can never exit the trade, and a flip INTO the trade\x27s direction only arms a layer. Close-based.", group=grp_mgmt)
 align_break_level = input.string("HTF1 Flips", "  Flip Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], tooltip="Base Flips: tightest — exit the moment the chart-TF SHA turns against you.\nHTF1 Flips: exit when the MID-TF anchor turns (recommended balance).\nHTF2 Flips: loosest — only exit when the HIGH-TF turns.\nAny Layer Flips: exit if any single layer disagrees.\nAll Layers Flip: exit only on full opposite alignment.", group=grp_mgmt)
-
-be_offset_raw = be_offset_units
-trail_buffer_raw = trail_buffer_units
 
 // Trail references — all ta.* computed every bar at global scope, then selected.
 trail_sw_low_wick  = ta.lowest(low,  trail_lookback)
