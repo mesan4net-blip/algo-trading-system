@@ -31,27 +31,48 @@ This is what makes it non-repainting. The standard TradingView renko chart fails
 
 ---
 
-## 3. Brick size — three settings
+## 3. Brick size and formation — the settings
 
-**The rule:** average the range (high minus low) of every sizing bar in the period that just finished. That number, times the multiplier, is the brick size, and it holds for the whole of the next period.
+### Brick size
 
 | Setting | Default | What it does |
 |---|---|---|
-| `renko_reset` | Monthly | How often the size is recalculated. Monthly, Weekly or Daily |
+| `renko_box_mode` | Derived | Derived / Fixed / Percent Of Price |
+| `renko_box_fixed` | 0.0020 | Used in Fixed mode. The grid then never moves at all |
+| `renko_box_pct` | 0.25 | Used in Percent mode. Frozen at each reset off the price then |
+| `renko_reset` | Monthly | Daily / Weekly / Monthly |
 | `renko_size_tf` | 30 min | Which bars are measured |
+| `renko_avg` | Median | Median or Mean of those bar ranges |
 | `renko_mult` | 1.0 | Brick size = average range × this |
+| `renko_rth` | off | Size from the regular session only. Equities |
+| `renko_round` | 0.0001 | Round to something clean |
+| `renko_min` | 0 | Floor |
+| `renko_box_max` | 0 | Ceiling, 0 = none |
 
-Monthly reset with 30-minute bars means: average every 30-minute candle in last month, that is this month's brick.
+**Three modes.** *Derived* measures recent bars and recalculates each reset. *Fixed* is the number you type, forever — the grid never moves and parameter sweeps stay clean because only one thing changes at a time. *Percent Of Price* scales with the instrument, which matters for something like QQQ that doubles over the years.
 
-**Why it does not move with the chart timeframe.** The averaging runs inside the sizing timeframe's own context, so period boundaries are found on those bars, not on your chart's. A 5-minute chart and a 4-hour chart read the identical 30-minute candles and arrive at the identical number.
+**Median by default.** One gap day, flash spike or bad tick will drag a mean and mis-size every brick that period. A median ignores it. Measured on test data, median and mean produced noticeably different brick counts from the same series.
 
-**Chart type cannot change it either.** On a Heikin Ashi, Renko, Kagi, Point & Figure, Line Break or Range chart, Pine's built-in `close`, `high` and `low` are the modified values rather than real traded prices, and `syminfo.tickerid` carries the chart-type modifier so even a data request inherits it. Both the sizing average and the brick formation use `ticker.standard()`, which strips the modifier and returns plain candles from the real symbol. Switching chart type leaves the bricks untouched.
+**Ceiling.** The floor stops a dead period producing a silly-small brick. The ceiling catches the opposite: a data glitch or volatility explosion producing an absurd brick that would silently stop the strategy trading for a whole period, which is the worst kind of failure because nothing looks broken.
 
-Note this covers the renko only. The inherited PAA entry and exit logic still reads the chart's own close, so on a Heikin Ashi chart the strategy would trade off Heikin Ashi values. Backtesting on a non-standard chart type is a bad idea regardless — run this on ordinary candles.
+**Order of operations** is round, then floor, then ceiling — the ceiling is the last word, so a runaway value cannot slip through by being rounded up past it.
 
-**Ordering.** On the first bar of a new period the running total still holds the period that just ended, so it is banked first and only then cleared. Nothing is ever sized from a period still in progress, and the request uses `lookahead_off` so no value arrives before it exists.
+### Brick formation
 
-**The seam.** When the size changes at a reset, the grid changes with it. Painted bricks never move — but there is a visible seam where brick height shifts. Monthly gives twelve seams a year. Daily gives one every day, which also means "price moved three bricks" quietly means something different today than yesterday. Monthly or weekly recommended; daily is supported but harder to reason about.
+| Setting | Default | What it does |
+|---|---|---|
+| `renko_feed_tf` | 5 min | Which bars the engine steps through |
+| `renko_trigger` | Close | Close or Wick |
+| `renko_rev` | 2 | Boxes needed to reverse |
+| `renko_confirm` | 1 | Bricks before entries unlock |
+
+**The feed is pinned**, not taken from the chart. This is what makes the *bricks* timeframe-proof rather than merely their size. `request.security_lower_tf` returns every feed bar inside the current chart bar, so a slow chart still sees the round trips a single chart bar would have hidden.
+
+**Close or Wick.** Close demands a close beyond the boundary — conservative, safe for backtests. Wick only needs price to touch it, which is closer to true renko and more responsive. Inside a single feed bar the engine cannot know whether the high or the low came first, so it always tests the way price was already travelling before testing a reversal. Wick produced about 24% more bricks in testing.
+
+**Nothing is sized or stepped from a modified chart type.** Both the sizing and the formation go through `ticker.standard()`, so Heikin Ashi, Renko, Kagi, Point & Figure, Line Break and Range charts leave the bricks untouched. This covers the renko only — the inherited PAA entry and exit logic still reads the chart's own close, so run this on ordinary candles.
+
+**Formation runs only on confirmed bars.** On history every bar is confirmed so nothing changes there. Live, the current bar contributes nothing until it closes, which is what guarantees nothing already painted can move.
 
 ## 4. Where the brick lines sit
 
@@ -160,7 +181,11 @@ The renko direction itself should be reconciled as its own column, not just impl
 
 The Pine engine was ported line-for-line to Python (`renko_repaint_test.py`) and run over 30,000 synthetic 15m bars with deliberately drifting volatility, so that monthly box sizes genuinely change (seven distinct sizes, 0.0006 to 0.0017).
 
-**Timeframe independence — PASS.** The same price series was rolled up to six timeframes from 15m to weekly and the engine run on each. Across 20 months, the brick size was identical on every timeframe in every month. Zero disagreements. Before the §3 fix, six of twenty months disagreed.
+**Timeframe-proof bricks — PASS.** With the feed pinned to 5 minutes, the same series was run on 5m, 15m, 1h, 4h and daily charts. All five produced 1,252 bricks in identical order. Before the feed was pinned this was 344 bricks against 214.
+
+Two real defects were caught getting there. The grid was seeded from the *last* feed bar of the chart bar rather than the first, so a 5-minute chart and a 4-hour chart started their grids in different cells and every brick afterwards sat one place out. And formation was skipped entirely on a re-anchor bar, discarding a number of feed bars that depended on the chart timeframe. Both fixed.
+
+**Timeframe independence of the box size — PASS.** The same price series was rolled up to six timeframes from 15m to weekly and the engine run on each. Across 20 months, the brick size was identical on every timeframe in every month. Zero disagreements. Before the §3 fix, six of twenty months disagreed.
 
 **Frozen history — PASS.** The series was truncated at three different points and re-run. Every surviving bar had identical brick state. Later bars never reach back and change earlier ones.
 
@@ -191,6 +216,7 @@ Caveat worth stating plainly: this was tested on synthetic data. It proves the a
 | 2026-07-26 | Initial draft |
 | 2026-07-26 | §3 amended after testing: bank days only from fully-observed calendar months. A mid-month start previously produced a different box for the following month, which made bricks depend on history load. Warm-up cost rises from one month to two. |
 | 2026-07-26 | §13 added: repaint test results |
+| 2026-07-26 | Six additions: pinned formation feed, three box modes (Derived/Fixed/Percent), median averaging, regular-hours sizing, maximum box size, and wick-or-close trigger. Two defects found by the new timeframe test and fixed: grid seeded from the last feed bar instead of the first, and formation skipped on re-anchor bars. |
 | 2026-07-26 | Both the sizing average and the brick formation switched to `ticker.standard()`. Previously, switching the chart to Heikin Ashi or Renko fed modified prices into the engine and changed the bricks. |
 | 2026-07-26 | §3 replaced with three settings: reset period, sizing bar timeframe, and multiplier. Brick size is now the average range of the sizing bars over the period that just finished. Averaging runs inside the sizing timeframe's context so it cannot vary with the chart. |
 | 2026-07-26 | §3 rewritten: brick size now requested from the daily timeframe instead of rebuilt from chart bars, and the monthly freeze anchored in the daily series. The old approach made the brick size depend on the chart timeframe — roughly twice as wide on weekly as on daily. Also replaces calendar-month averaging with a rolling 21-day average, which is what made the daily request possible; this is a departure from the original elicited choice and is flagged as such. |
