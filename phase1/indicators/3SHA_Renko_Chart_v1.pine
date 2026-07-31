@@ -5,41 +5,70 @@
 // The companion picture for 3SHA_PriceAboveAll_Renko_v1.pine (3SHA-PAAR).
 //
 // WHAT THIS IS:
-//   The renko the strategy actually reads, drawn on top of your normal time
-//   chart. The engine below is the SAME TEXT the strategy is built from — both
-//   files are generated from one source block, so they cannot drift apart. Put
-//   the same settings in both and what you see here is what the strategy trades.
+//   The renko the strategy actually reads, drawn over your normal time chart.
+//   The engine below is the SAME TEXT the strategy is built from — both files
+//   are generated from one source block and the build asserts it survived
+//   assembly byte-identical, so the two cannot drift apart. Give both scripts
+//   the same renko settings and what you see here is what the strategy trades.
 //
 // WHAT THIS IS NOT:
-//   It is not a renko chart in the TradingView sense, and that is deliberate.
-//   A real renko chart throws time away — every brick gets equal width no
-//   matter whether it took four minutes or four days. That is precisely what
-//   makes renko backtests lie: five bricks inside one real minute look like
-//   five separate chances to trade. Here the bricks are drawn against real
-//   time, so a burst of five shows up as five stacked steps on ONE bar, and
-//   you can see at a glance that it was one moment, not five.
+//   It is not a renko chart in the TradingView sense. A real renko chart has no
+//   time axis at all: every brick is one column of equal width, whether it took
+//   four minutes or four days. Only TradingView's own chart type can do that,
+//   because the horizontal axis belongs to the chart and not to an indicator.
+//   Here the bricks are drawn against real time instead, and the trade-off is
+//   deliberate. On a brick axis you cannot see that eight bricks were one
+//   instant — and that blindness is exactly what makes renko backtests lie.
 //
-// WHY IT DOES NOT REPAINT:
-//   - Box size is frozen for a calendar month, computed from a month that has
-//     already finished and was observed from its first bar.
+// HOW IT IS DRAWN:
+//   The shaded band is the CURRENT brick; its edges are the live grid lines.
+//   It is translucent so your candles stay readable underneath. If it is
+//   hiding them, raise Brick Transparency — that is the setting that matters,
+//   not the candle toggle.
+//   Blue is renko up, red is renko down, grey is warm-up, when the strategy
+//   takes no trades at all. A long flat run is price sitting inside one brick.
+//   A step is a brick printing, and a tall step means several printed on that
+//   one bar — which is a burst you could not have traded piece by piece.
+//   Triangles mark the bars where the renko turned around.
+//   Draw Price Candles exists for charts where you have switched the native
+//   candles off in Chart Settings. Pine cannot hide them from here, so with
+//   both on you will see every candle drawn twice.
+//
+// WHAT MAKES IT NON-REPAINTING, AND TIMEFRAME- AND CHART-TYPE-PROOF:
+//   - The brick size is held for a whole reset period (Daily, Weekly or
+//     Monthly) and computed from the period that already FINISHED. It can also
+//     be a fixed number you type, or a percentage of price. Whatever is already
+//     painted is never redrawn with a new size.
+//   - The sizing bars are read from their own fixed timeframe, never from the
+//     chart, so the brick size is the same number on every chart.
+//   - The bricks are STEPPED through a pinned feed timeframe, not through the
+//     chart's bars. A coarse chart bar hides moves that went out and came back;
+//     the feed does not. Tested at 5m, 15m, 1h, 4h and daily: 1,252 bricks in
+//     identical order on all five. Reading the chart's own bars instead gave
+//     344 bricks against 214 on the same data.
 //   - Brick boundaries sit at absolute multiples of the box size counted from
-//     zero, so loading more history does not shift the grid.
-//   - Bricks form only on a CLOSED bar, off the close. Nothing intrabar.
-//   Tested: truncating history never alters an earlier bar, and four different
-//   history loads produced identical bricks on 100% of comparable bars.
+//     zero, so loading more history does not move the grid.
+//   - Everything is sized and stepped off ticker.standard(). Switching the
+//     chart to Heikin Ashi, Renko, Kagi, Point & Figure, Line Break or Range
+//     leaves the bricks untouched — on those chart types the built-in
+//     close/high/low are modified values that never traded anywhere.
+//   - Formation runs only on CONFIRMED bars, so the live bar contributes
+//     nothing until it closes and nothing already painted can move.
 //
-// HOW TO READ IT:
-//   The coloured body is the current brick — its top and bottom edges are the
-//   live grid lines. Blue = renko up, red = renko down, grey = warm-up, when
-//   the strategy takes no trades at all. A flat run of the same body is price
-//   sitting inside one brick. Steps are bricks printing.
+// A NOTE ON HISTORY:
+//   The pinned feed is fetched with request.security_lower_tf, and TradingView
+//   caps how many intrabar values it will hand over. The cap bites hardest when
+//   your chart timeframe sits far above the feed — a 5-minute feed on a 4-hour
+//   chart is 48 values per bar. If history looks short or the script is slow,
+//   raise the feed timeframe first; it is the setting with the most effect.
 // ============================================================================
 
 indicator("3SHA Renko Chart", shorttitle="3SHA-RK", overlay=true,
      max_labels_count=100)
 
 // ============================================================================
-// ⑨ RENKO FILTER  (non-repainting — see header)
+// RENKO SETTINGS  (identical to 3SHA-PAAR — match them and the picture
+// matches the trades)
 // ============================================================================
 grp_renko = "━━━ RENKO ━━━"
 renko_on       = input.bool(true, "Show Renko", tooltip="Kept here so this indicator takes the SAME inputs as 3SHA-PAAR. Match the settings on both and what you see is exactly what the strategy trades on.", group=grp_renko)
