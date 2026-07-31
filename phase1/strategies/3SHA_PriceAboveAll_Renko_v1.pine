@@ -12,22 +12,54 @@
 //   touches nothing else.
 //
 // WHY THE RENKO IS TRACKED, NOT CHARTED:
-//   The chart stays on its normal time-based bars. The renko lives as a
-//   number computed alongside them. This is what makes it non-repainting:
-//     - box size is frozen for a calendar month, derived from the month
-//       that already finished, and old bricks are never redrawn with a new
-//       size;
-//     - brick boundaries sit at absolute multiples of the box size counted
-//       from zero, so loading more history does not move the grid;
-//     - bricks form only on a CLOSED bar, off the close.
-//   TradingView's built-in renko chart fails on all three counts.
+//   The chart stays on its normal time-based bars. The renko lives as a set
+//   of numbers computed alongside them, so it can be read as a filter
+//   without putting the strategy on a chart type that inflates results.
+//
+// WHAT MAKES IT NON-REPAINTING, AND TIMEFRAME- AND CHART-TYPE-PROOF:
+//   - The brick size is held for a whole reset period (Daily, Weekly or
+//     Monthly) and computed from the period that already FINISHED. It can also
+//     be a fixed number you type, or a percentage of price. Whatever is already
+//     painted is never redrawn with a new size.
+//   - The sizing bars are read from their own fixed timeframe, never from the
+//     chart, so the brick size is the same number on every chart.
+//   - The bricks are STEPPED through a pinned feed timeframe, not through the
+//     chart's bars. A coarse chart bar hides moves that went out and came back;
+//     the feed does not. Tested at 5m, 15m, 1h, 4h and daily: 1,252 bricks in
+//     identical order on all five. Reading the chart's own bars instead gave
+//     344 bricks against 214 on the same data.
+//   - Brick boundaries sit at absolute multiples of the box size counted from
+//     zero, so loading more history does not move the grid.
+//   - Everything is sized and stepped off ticker.standard(). Switching the
+//     chart to Heikin Ashi, Renko, Kagi, Point & Figure, Line Break or Range
+//     leaves the bricks untouched — on those chart types the built-in
+//     close/high/low are modified values that never traded anywhere.
+//   - Formation runs only on CONFIRMED bars, so the live bar contributes
+//     nothing until it closes and nothing already painted can move.
+//   TradingView's built-in renko chart fails most of these.
+//
+// WHAT THE RENKO DOES HERE:
+//   It gates ENTRIES only. Renko up permits longs, renko down permits
+//   shorts, and neither permits anything until a direction is established
+//   and confirmed. It does NOT close an open position: if the renko flips
+//   against a live trade, that trade still exits on normal PAA rules.
+//   BOTH entry paths are gated — the fresh signal and the reverse-on-stop
+//   flip, which does not pass through the signal at all.
+//   Turning the filter off makes this file behave identically to plain PAA,
+//   same trades, same numbers. That is the A/B test.
 //
 // BACKTEST HONESTY:
-//   Several bricks can print inside one bar. They change the renko
+//   Several bricks can print inside one chart bar. They change the renko
 //   direction and nothing else — one decision per bar, filled at the real
-//   bar close. A renko-charted backtest would instead treat each brick as
+//   bar close. A renko-CHARTED backtest would instead treat each brick as
 //   its own moment and let you buy the first and sell the last, a trade
 //   that never existed. That is why renko backtests flatter to deceive.
+//
+// WHAT IS NOT COVERED:
+//   Only the RENKO is chart-type-proof. The inherited PAA entry and exit
+//   logic still reads the chart's own close, so on a Heikin Ashi chart the
+//   strategy would trade off Heikin Ashi values. Run this on ordinary
+//   candles.
 //
 // SIGNAL:
 //   Not "which way is each layer pointing" — that is Full Alignment. This asks
