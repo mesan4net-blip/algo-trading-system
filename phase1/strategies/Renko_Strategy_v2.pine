@@ -301,6 +301,11 @@ rk_ok_long  = not renko_on or (rk_have and rk_dir ==  1 and rk_run >= renko_conf
 rk_ok_short = not renko_on or (rk_have and rk_dir == -1 and rk_run >= renko_confirm)
 
 
+// ── COVERAGE SHIM (v2) ─────────────────────────────────────────────────────
+// rk_have is declared by the strict engine above. Trading validity is the same
+// thing here: no intrabar data means the renko is unknown, not merely stale.
+rk_valid = rk_have
+
 // ── DATA COVERAGE ──────────────────────────────────────────────────────────
 // How much of the visible history actually had intrabar data. This is the
 // number that tells you whether what you are looking at means anything.
@@ -324,8 +329,8 @@ in_date = not use_dates or (time >= date_from and time <= date_to)
 go_long  = rk_ok_long  and allow_longs  and in_date
 go_short = rk_ok_short and allow_shorts and in_date
 
-flip_up   = rk_dir ==  1 and rk_dir[1] == -1 and rk_have
-flip_down = rk_dir == -1 and rk_dir[1] ==  1 and rk_have
+flip_up   = rk_dir ==  1 and rk_dir[1] == -1 and rk_valid
+flip_down = rk_dir == -1 and rk_dir[1] ==  1 and rk_valid
 
 var float stop_px = na
 
@@ -376,9 +381,9 @@ if renko_show_hud and barstate.islast
     st := table.new(position.top_right, 2, 6, border_width=1,
          frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
-    _hd = not rk_have ? color.new(#F23645, 0) : rk_dir == 1 ? color.new(#2962FF, 0) : rk_dir == -1 ? color.new(#F23645, 0) : color.new(#888888, 0)
+    _hd = not rk_valid ? color.new(#F23645, 0) : not rk_have ? color.new(#B8860B, 0) : rk_dir == 1 ? color.new(#2962FF, 0) : rk_dir == -1 ? color.new(#F23645, 0) : color.new(#888888, 0)
     table.cell(st, 0, 0, "RENKO STRATEGY v2", text_color=color.white, bgcolor=_hd, text_size=size.small)
-    table.cell(st, 1, 0, not rk_have ? "NO DATA" : na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "UP" : rk_dir == -1 ? "DOWN" : "NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(st, 1, 0, not rk_valid ? "NO DATA" : not rk_have ? "COARSE" : na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "UP" : rk_dir == -1 ? "DOWN" : "NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(st, 0, 1, "Brick Size", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(st, 1, 1, na(rk_box) ? "-" : str.tostring(rk_box, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(st, 0, 2, "Bricks In A Row", text_color=color.white, bgcolor=_bg, text_size=size.small)
