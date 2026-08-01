@@ -7,8 +7,8 @@
 // direction is the entire signal. Nothing in this file affects, or is affected
 // by, any other strategy in the repository.
 //
-// Companion picture: 3SHA_Renko_Chart_v2.pine. Same engine text, so give both
-// the same settings and what you see is what this trades.
+// Companion picture: 3SHA_Renko_Chart_v1.pine. Same engine text, so give
+// both the same settings and what you see is what this trades.
 //
 // THE RULE:
 //   Renko turns up   -> go long.
@@ -17,15 +17,22 @@
 //   It is always in the market once started, unless a stop takes it out or the
 //   renko has no data.
 //
-// WHY IT REFUSES TO TRADE WITHOUT INTRABAR DATA:
-//   TradingView serves roughly the most recent 100,000 intrabars, and that
-//   window slides forward with time. A bar computed from fine feed data today
-//   would be recomputed from coarse chart data months from now, changing its
-//   bricks - and because the engine carries state forward, one changed brick
-//   back there alters everything after it. Same settings, same dates, different
-//   results, months apart. So where there is no intrabar data there are no
-//   bricks, no direction and no trades. The Coverage figure in the status box
-//   shows how much of the tested range was real.
+// VERSION 1 - PERMISSIVE.
+//   Where TradingView has no intrabar data to give, this version falls back to
+//   the chart bar's own close and keeps forming bricks from coarser prices.
+//   That buys history at a real cost: the intrabar window slides forward with
+//   time, so a bar computed from fine data today is recomputed from coarse data
+//   months from now and its bricks change. Because the engine carries state
+//   forward, one changed brick back there alters everything after it. Run the
+//   same backtest today and in three months, same settings and same dates, and
+//   the older portion will not reproduce.
+//
+//   Version 2 refuses to form bricks without intrabar data. Shorter range, but
+//   it does not rewrite its own past. Prefer v2 unless you specifically need
+//   the extra history and understand what it costs.
+//
+//   Pair this with 3SHA_Renko_Chart_v1.pine. Same engine text, so the picture
+//   matches the trades. Do not mix a v1 chart with a v2 strategy.
 //
 // BACKTEST HONESTY:
 //   This runs on ORDINARY CANDLES and must stay that way. Putting a strategy on
@@ -42,7 +49,7 @@
 //   starting point for testing, not as a finished system.
 // ============================================================================
 
-strategy("Renko Strategy", shorttitle="RENKO-S", overlay=true,
+strategy("Renko Strategy v1", shorttitle="RENKO-S1", overlay=true,
      initial_capital       = 10000,
      default_qty_type      = strategy.percent_of_equity,
      default_qty_value     = 100,
@@ -190,14 +197,10 @@ rk_fc = request.security_lower_tf(rk_sym, renko_feed_tf, close)
 rk_fh = request.security_lower_tf(rk_sym, renko_feed_tf, high)
 rk_fl = request.security_lower_tf(rk_sym, renko_feed_tf, low)
 
-// V2: NO FALLBACK SERIES.
-// v1 kept a single chart-bar close to fall back on when the intrabar request
-// came back empty. That fallback is exactly the repainting problem: the
-// intrabar window slides forward with time, so a bar computed from fine data
-// today gets recomputed from coarse data later, and the bricks change. Here
-// there is nothing to fall back to, so a bar with no intrabar data simply
-// produces no bricks and the state stops advancing.
-rk_have = array.size(rk_fc) > 0
+rk_sc = request.security(rk_sym, renko_feed_tf, close, lookahead = barmerge.lookahead_off)
+rk_cc = request.security(rk_sym, timeframe.period, close, lookahead = barmerge.lookahead_off)
+rk_sh = request.security(rk_sym, renko_feed_tf, high,  lookahead = barmerge.lookahead_off)
+rk_sl = request.security(rk_sym, renko_feed_tf, low,   lookahead = barmerge.lookahead_off)
 
 // ── BRICK STATE ────────────────────────────────────────────────────────────
 // rk_dir: 1 up, -1 down, 0 not yet established. rk_run: bricks in a row.
@@ -214,12 +217,10 @@ int rk_bricks = 0
 // the last was a real bug: on a 5-minute chart that is one bar along, on a
 // 4-hour chart it is forty-eight bars along, so the two charts started their
 // grids in different cells and every brick afterwards sat one place out.
-// Seed off the FIRST feed bar of this chart bar, never the last: on a 5-minute
-// chart that is one bar along, on a 4-hour chart forty-eight bars along, so
-// seeding off the last would start the grid in a different cell on each chart.
-// V2 seeds only from real intrabar data. No data, no grid.
-if rk_box_new and rk_have and not na(rk_box) and rk_box > 0
-    float _seed = array.get(rk_fc, 0)
+if rk_box_new and not na(rk_box) and rk_box > 0
+    float _seed = na(rk_sc) ? rk_cc : rk_sc
+    if array.size(rk_fc) > 0
+        _seed := array.get(rk_fc, 0)
     if not na(_seed)
         rk_bot := math.floor(_seed / rk_box) * rk_box
         rk_top := rk_bot + rk_box
@@ -232,11 +233,18 @@ if rk_box_new and rk_have and not na(rk_box) and rk_box > 0
 // bars, and how many got discarded depended on the chart timeframe. Any brick
 // printing here comes from real price movement through the newly seeded grid,
 // not from the size change itself.
-if barstate.isconfirmed and rk_have and not na(rk_box) and rk_box > 0 and not na(rk_top)
-    for _s = 0 to array.size(rk_fc) - 1
-        float _c = array.get(rk_fc, _s)
-        float _h = array.size(rk_fh) > _s ? array.get(rk_fh, _s) : _c
-        float _l = array.size(rk_fl) > _s ? array.get(rk_fl, _s) : _c
+if barstate.isconfirmed and not na(rk_box) and rk_box > 0 and not na(rk_top)
+    // Choose the source arrays FIRST, then index them. Writing this as
+    // `size > 0 ? array.get(a, i) : fallback` looks equivalent but is not:
+    // Pine can evaluate both sides, and array.get on an empty array is a
+    // runtime error that stops the script dead.
+    float[] _cs = array.size(rk_fc) > 0 ? rk_fc : array.from(na(rk_sc) ? rk_cc : rk_sc)
+    float[] _hs = array.size(rk_fh) > 0 ? rk_fh : array.from(na(rk_sh) ? rk_cc : rk_sh)
+    float[] _ls = array.size(rk_fl) > 0 ? rk_fl : array.from(na(rk_sl) ? rk_cc : rk_sl)
+    for _s = 0 to array.size(_cs) - 1
+        float _c = array.get(_cs, _s)
+        float _h = array.size(_hs) > _s ? array.get(_hs, _s) : _c
+        float _l = array.size(_ls) > _s ? array.get(_ls, _s) : _c
         if not na(_c)
             // Wick mode lets a touch print the brick; close mode demands a
             // close beyond the boundary. Within one feed bar the engine cannot
@@ -288,11 +296,8 @@ if barstate.isconfirmed and rk_have and not na(rk_box) and rk_box > 0 and not na
                 rk_bricks := rk_bricks + 1
 
 // The gate. No box, or no direction yet, means no entries at all.
-// V2: entries also require intrabar data on THIS bar. Past the edge of the
-// intrabar window the renko is not merely stale, it is unknown, and an unknown
-// filter must not authorise a trade.
-rk_ok_long  = not renko_on or (rk_have and rk_dir ==  1 and rk_run >= renko_confirm)
-rk_ok_short = not renko_on or (rk_have and rk_dir == -1 and rk_run >= renko_confirm)
+rk_ok_long  = not renko_on or (rk_dir ==  1 and rk_run >= renko_confirm)
+rk_ok_short = not renko_on or (rk_dir == -1 and rk_run >= renko_confirm)
 
 
 // ── DATA COVERAGE ──────────────────────────────────────────────────────────
@@ -371,7 +376,7 @@ if renko_show_hud and barstate.islast
          frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
     _hd = not rk_have ? color.new(#F23645, 0) : rk_dir == 1 ? color.new(#2962FF, 0) : rk_dir == -1 ? color.new(#F23645, 0) : color.new(#888888, 0)
-    table.cell(st, 0, 0, "RENKO STRATEGY", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(st, 0, 0, "RENKO STRATEGY v1", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(st, 1, 0, not rk_have ? "NO DATA" : na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "UP" : rk_dir == -1 ? "DOWN" : "NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(st, 0, 1, "Brick Size", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(st, 1, 1, na(rk_box) ? "-" : str.tostring(rk_box, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
