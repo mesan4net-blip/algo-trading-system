@@ -338,7 +338,7 @@ if renko_show_hud and barstate.islast
          frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
     _hd = rk_dir == 1 ? color.new(#2962FF, 0) : rk_dir == -1 ? color.new(#F23645, 0) : color.new(#888888, 0)
-    table.cell(rkt, 0, 0, "3SHA RENKO", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(rkt, 0, 0, "3SHA RENKO v1", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(rkt, 1, 0, na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "▲ UP" : rk_dir == -1 ? "▼ DOWN" : "◇ NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(rkt, 0, 1, "Box Size", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(rkt, 1, 1, na(rk_box) ? "—" : str.tostring(rk_box, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
