@@ -1,0 +1,387 @@
+//@version=6
+// ============================================================================
+// RENKO STRATEGY  (v1)
+// ============================================================================
+// A standalone renko strategy. It is NOT part of the 3SHA system: there are no
+// smoothed Heikin Ashi layers here, no Price Above All, no alignment. The renko
+// direction is the entire signal. Nothing in this file affects, or is affected
+// by, any other strategy in the repository.
+//
+// Companion picture: 3SHA_Renko_Chart_v2.pine. Same engine text, so give both
+// the same settings and what you see is what this trades.
+//
+// THE RULE:
+//   Renko turns up   -> go long.
+//   Renko turns down -> go short.
+//   Optionally wait for a number of bricks to confirm before acting.
+//   It is always in the market once started, unless a stop takes it out or the
+//   renko has no data.
+//
+// WHY IT REFUSES TO TRADE WITHOUT INTRABAR DATA:
+//   TradingView serves roughly the most recent 100,000 intrabars, and that
+//   window slides forward with time. A bar computed from fine feed data today
+//   would be recomputed from coarse chart data months from now, changing its
+//   bricks - and because the engine carries state forward, one changed brick
+//   back there alters everything after it. Same settings, same dates, different
+//   results, months apart. So where there is no intrabar data there are no
+//   bricks, no direction and no trades. The Coverage figure in the status box
+//   shows how much of the tested range was real.
+//
+// BACKTEST HONESTY:
+//   This runs on ORDINARY CANDLES and must stay that way. Putting a strategy on
+//   a renko chart is what produces those absurd equity curves: the engine treats
+//   each brick close as a separate tradable moment, so a burst of five bricks in
+//   one real minute becomes five chances to trade at five prices, and it will
+//   happily buy the first and sell the last. That trade never existed.
+//   Here, several bricks inside one bar change the direction and nothing else -
+//   one decision per bar, filled at the real bar close.
+//
+// WHAT THIS IS FOR:
+//   Measuring what the renko signal is worth on its own, so that its value as a
+//   filter elsewhere can be judged against something. Treat the numbers as a
+//   starting point for testing, not as a finished system.
+// ============================================================================
+
+strategy("Renko Strategy", shorttitle="RENKO-S", overlay=true,
+     initial_capital       = 10000,
+     default_qty_type      = strategy.percent_of_equity,
+     default_qty_value     = 100,
+     pyramiding            = 0,
+     calc_on_every_tick    = false,
+     process_orders_on_close = true)
+
+// ============================================================================
+// RENKO SETTINGS
+// ============================================================================
+grp_renko = "━━━ RENKO ━━━"
+renko_on       = input.bool(true, "Enable Renko", group=grp_renko)
+
+// ── BRICK SIZE ─────────────────────────────────────────────────────────────
+renko_box_mode = input.string("Derived", "Brick Size Mode", options=["Derived", "Fixed", "Percent Of Price"], tooltip="Derived: measured from recent bars and recalculated each reset. Fixed: the number you type, forever - the grid never moves and parameter sweeps stay clean, because only one thing changes at a time. Percent Of Price: scales with the instrument, which matters for something like QQQ that doubles over the years.", group=grp_renko)
+renko_box_fixed= input.float(0.0020, "    Fixed Brick Size", minval=0.0, step=0.0001, tooltip="Used only when Mode is Fixed. 0.0020 is 20 pips on EUR/USD. Remember the reversal distance is this times the reversal setting - a 20 pip brick with a 2 box reversal needs 40 pips against you to turn.", group=grp_renko)
+renko_box_pct  = input.float(0.25, "    Brick Size % Of Price", minval=0.001, maxval=25.0, step=0.01, tooltip="Used only when Mode is Percent Of Price. Frozen at each reset off the price at that moment, so it does not drift mid-period.", group=grp_renko)
+renko_reset    = input.string("Monthly", "Brick Size Reset", options=["Daily", "Weekly", "Monthly"], tooltip="How often the size is recalculated. Monthly: last month sizes this month. Daily: yesterday sizes today. Whatever is already painted never changes - a reset only affects bricks drawn from that point on. Daily gives a seam every day, which makes 'price moved three bricks' mean something different today than yesterday.", group=grp_renko)
+renko_size_tf  = input.timeframe("30", "Bar Timeframe For Brick Size", tooltip="Which bars are measured to size the brick. Read from this timeframe directly, never from your chart, so the brick size is the same number whether you are looking at a 5-minute chart or a weekly one.", group=grp_renko)
+renko_avg      = input.string("Median", "Average Type", options=["Median", "Mean"], tooltip="Median ignores a single gap day, flash spike or bad tick in the sizing window. The mean lets one bad bar drag every brick that whole period. Median is the safer default.", group=grp_renko)
+renko_mult     = input.float(1.0, "Brick Size Multiplier", minval=0.05, maxval=20.0, step=0.05, tooltip="Brick size = average range of the sizing bars, times this. 1.0 means the brick is exactly the average bar range. Raise it for chunkier bricks and fewer signals.", group=grp_renko)
+renko_rth      = input.bool(false, "Size From Regular Hours Only", tooltip="Equities only. Pre-market and post-market bars are thin and wide, so including them inflates the average range and hands you bricks too large for the session you actually trade. No effect on forex, which runs around the clock.", group=grp_renko)
+renko_round    = input.float(0.0001, "Round Brick Size To Nearest", minval=0.0, step=0.0001, tooltip="Rounds the brick size to something clean so the grid levels are readable. 0.0001 suits forex, 0.05 suits equities. 0 = no rounding.", group=grp_renko)
+renko_min      = input.float(0.0, "Minimum Brick Size", minval=0.0, step=0.0001, tooltip="Floor, so a dead period cannot produce a silly-small brick. 0 = use the rounding step as the floor.", group=grp_renko)
+renko_box_max  = input.float(0.0, "Maximum Brick Size", minval=0.0, step=0.0001, tooltip="Ceiling. 0 = none. Catches a data glitch or a volatility explosion producing an absurd brick that would silently stop the strategy trading for a whole period - which is the worst kind of failure, because nothing looks broken.", group=grp_renko)
+
+// ── BRICK FORMATION ────────────────────────────────────────────────────────
+renko_feed_tf  = input.timeframe("5", "Brick Formation Feed", tooltip="Which bars the engine steps through to build bricks. Pinned here rather than following your chart, so a 4-hour chart and a 15-minute chart produce identical bricks. Finer catches more round trips - coarse bars hide moves that went out and came back - but TradingView caps how far back it hands over intrabar data, and that cap bites hardest when your chart timeframe is far above the feed.", group=grp_renko)
+renko_trigger  = input.string("Close", "Brick Trigger", options=["Close", "Wick"], tooltip="Close: a brick needs a close beyond the boundary. Conservative and safe for backtests. Wick: price only has to touch it, which is closer to true renko and more responsive - but inside a single bar the engine cannot know whether the high or the low came first, so it checks the way price was already travelling.", group=grp_renko)
+renko_rev      = input.int(2, "Boxes Needed To Reverse", minval=1, maxval=10, tooltip="How far price must travel against the current direction to turn the renko around. 2 is standard renko: one box to keep going, two to turn. 1 makes it flip on every crossing, which is far twitchier.", group=grp_renko)
+renko_confirm  = input.int(1, "Bricks In New Direction Before Entries Unlock", minval=1, maxval=10, tooltip="Separate from the reversal rule above. 1 = entries unlock the moment direction flips. 2 or 3 makes the renko commit before entries are allowed, at the cost of getting in later.", group=grp_renko)
+renko_show_hud = input.bool(true, "Show Renko Row In HUD", group=grp_renko)
+
+
+// ============================================================================
+// TRADE SETTINGS
+// ============================================================================
+grp_trade = "━━━ TRADES ━━━"
+allow_longs   = input.bool(true,  "Allow Longs",  group=grp_trade)
+allow_shorts  = input.bool(true,  "Allow Shorts", group=grp_trade)
+close_on_flip = input.bool(true,  "Close On Renko Flip", tooltip="On a flip, close the open trade. With the opposite direction also allowed, the position reverses on the same bar.", group=grp_trade)
+
+grp_stop = "━━━ STOP ━━━"
+use_stop      = input.bool(true, "Use Stop", group=grp_stop)
+stop_bricks   = input.float(2.0, "Stop Distance (bricks)", minval=0.25, maxval=20.0, step=0.25, tooltip="Stop distance measured in bricks, so it scales with the brick size instead of being a fixed price gap. 2 bricks sits just beyond a standard reversal.", group=grp_stop)
+use_trail     = input.bool(false, "Trail The Stop", tooltip="Move the stop up behind the bricks as they print in your favour. It never moves against you.", group=grp_stop)
+trail_bricks  = input.float(2.0, "Trail Distance (bricks)", minval=0.25, maxval=20.0, step=0.25, group=grp_stop)
+
+grp_date = "━━━ DATE RANGE ━━━"
+use_dates     = input.bool(false, "Limit Date Range", group=grp_date)
+date_from     = input.time(timestamp("01 Jan 2020 00:00"), "From", group=grp_date)
+date_to       = input.time(timestamp("01 Jan 2030 00:00"), "To", group=grp_date)
+
+grp_cost = "━━━ COSTS ━━━"
+comm_pct      = input.float(0.0, "Commission %", minval=0.0, step=0.001, tooltip="Set this before believing any result. Left at zero, the equity curve is fiction.", group=grp_cost)
+slip_ticks    = input.int(0, "Slippage (ticks)", minval=0, group=grp_cost)
+
+// ============================================================================
+// RENKO ENGINE  (state only — nothing is drawn as a chart type)
+// ============================================================================
+// CHART TYPE MUST NOT CHANGE THE NUMBERS.
+// On a Heikin Ashi, Renko, Kagi, Point & Figure, Line Break or Range chart, the
+// built-in close/high/low are the MODIFIED values, not real traded prices - and
+// syminfo.tickerid carries the chart-type modifier with it, so even a data
+// request inherits it. ticker.standard() strips that off and returns plain
+// candles from the real symbol.
+rk_sym = ticker.standard(syminfo.tickerid)
+
+// Sizing may optionally be restricted to the regular session. ticker.new()
+// builds a plain ticker by construction, so this stays chart-type-proof too.
+rk_sym_size = renko_rth ? ticker.new(syminfo.prefix, syminfo.ticker, session.regular) : rk_sym
+
+rk_reset_tf = renko_reset == "Daily" ? "1D" : renko_reset == "Weekly" ? "1W" : "1M"
+
+// ── BRICK SIZE ─────────────────────────────────────────────────────────────
+// Collect the range of every sizing bar in the period, then at the period
+// boundary bank the mean, the median and the closing price, and start again.
+//
+// Note the ordering. On the first bar of a new period the collection still
+// holds the period that just ENDED, so it is banked first and only then
+// cleared. Nothing is ever sized from a period still in progress.
+//
+// The median is there because one gap day, flash spike or bad tick will drag a
+// mean and mis-size every brick that period. A median ignores it.
+//
+// The collection is cleared every period so it cannot grow without bound, and
+// is capped anyway in case someone points a monthly reset at 1-minute bars.
+f_rk_size(_reset) =>
+    bool _new = ta.change(time(_reset)) != 0
+    var float[] _r  = array.new_float()
+    var float _mean = na
+    var float _med  = na
+    var float _ref  = na
+    if _new
+        if array.size(_r) > 0
+            _mean := array.avg(_r)
+            _med  := array.median(_r)
+            _ref  := close[1]
+            array.clear(_r)
+    if array.size(_r) < 10000
+        array.push(_r, high - low)
+    [_mean, _med, _ref]
+
+[rk_mean, rk_med, rk_ref] = request.security(rk_sym_size, renko_size_tf,
+             f_rk_size(rk_reset_tf), lookahead = barmerge.lookahead_off)
+
+rk_avg = renko_avg == "Median" ? rk_med : rk_mean
+
+float rk_box_raw = na
+if renko_box_mode == "Fixed"
+    rk_box_raw := renko_box_fixed
+else if renko_box_mode == "Percent Of Price"
+    rk_box_raw := na(rk_ref) ? na : rk_ref * renko_box_pct / 100.0
+else
+    rk_box_raw := na(rk_avg) ? na : rk_avg * renko_mult
+
+// Round, then floor, then ceiling. Order matters: the ceiling is the last word,
+// so a runaway value cannot slip through by being rounded up past it.
+float rk_box_calc = na
+if not na(rk_box_raw) and rk_box_raw > 0
+    float _step  = renko_round > 0 ? renko_round : 0.0
+    float _round = _step > 0 ? math.round(rk_box_raw / _step) * _step : rk_box_raw
+    float _floor = renko_min > 0 ? renko_min : (_step > 0 ? _step : 0.0)
+    float _v     = math.max(_round, _floor)
+    rk_box_calc := renko_box_max > 0 ? math.min(_v, renko_box_max) : _v
+
+// The size only moves at a period boundary, so it holds steady in between and
+// anything already painted keeps the size it was painted with.
+var float rk_box = na
+bool rk_box_new = not na(rk_box_calc) and (na(rk_box) or rk_box != rk_box_calc)
+if rk_box_new
+    rk_box := rk_box_calc
+
+// ── THE FEED ───────────────────────────────────────────────────────────────
+// The prices the engine steps through, pinned to renko_feed_tf rather than
+// following the chart. This is what makes the BRICKS timeframe-proof, not just
+// their size: a 4-hour chart and a 15-minute chart step through the identical
+// sequence of feed bars and therefore build identical bricks.
+//
+// security_lower_tf returns every feed bar inside the current chart bar, so on
+// a slow chart the engine still sees the round trips that a single chart bar
+// would have hidden. When the feed is the same as or slower than the chart it
+// has nothing finer to hand back, and the plain request below is used instead.
+rk_fc = request.security_lower_tf(rk_sym, renko_feed_tf, close)
+rk_fh = request.security_lower_tf(rk_sym, renko_feed_tf, high)
+rk_fl = request.security_lower_tf(rk_sym, renko_feed_tf, low)
+
+// V2: NO FALLBACK SERIES.
+// v1 kept a single chart-bar close to fall back on when the intrabar request
+// came back empty. That fallback is exactly the repainting problem: the
+// intrabar window slides forward with time, so a bar computed from fine data
+// today gets recomputed from coarse data later, and the bricks change. Here
+// there is nothing to fall back to, so a bar with no intrabar data simply
+// produces no bricks and the state stops advancing.
+rk_have = array.size(rk_fc) > 0
+
+// ── BRICK STATE ────────────────────────────────────────────────────────────
+// rk_dir: 1 up, -1 down, 0 not yet established. rk_run: bricks in a row.
+var float rk_top = na
+var float rk_bot = na
+var int   rk_dir = 0
+var int   rk_run = 0
+int rk_bricks = 0
+
+// A new brick size means a new grid. Re-anchor SILENTLY: direction and run
+// carry over untouched and no brick prints on this bar. A change in the
+// measuring stick must never flip the signal by itself.
+// Seed off the FIRST feed bar of this chart bar, never the last. Seeding off
+// the last was a real bug: on a 5-minute chart that is one bar along, on a
+// 4-hour chart it is forty-eight bars along, so the two charts started their
+// grids in different cells and every brick afterwards sat one place out.
+// Seed off the FIRST feed bar of this chart bar, never the last: on a 5-minute
+// chart that is one bar along, on a 4-hour chart forty-eight bars along, so
+// seeding off the last would start the grid in a different cell on each chart.
+// V2 seeds only from real intrabar data. No data, no grid.
+if rk_box_new and rk_have and not na(rk_box) and rk_box > 0
+    float _seed = array.get(rk_fc, 0)
+    if not na(_seed)
+        rk_bot := math.floor(_seed / rk_box) * rk_box
+        rk_top := rk_bot + rk_box
+
+// Formation runs only on a CONFIRMED bar. On history every bar is confirmed so
+// nothing changes there; live, it means the current bar contributes nothing
+// until it closes, and therefore nothing already painted can ever move.
+//
+// This runs on the re-anchor bar too. Skipping it discarded that bar's feed
+// bars, and how many got discarded depended on the chart timeframe. Any brick
+// printing here comes from real price movement through the newly seeded grid,
+// not from the size change itself.
+if barstate.isconfirmed and rk_have and not na(rk_box) and rk_box > 0 and not na(rk_top)
+    for _s = 0 to array.size(rk_fc) - 1
+        float _c = array.get(rk_fc, _s)
+        float _h = array.size(rk_fh) > _s ? array.get(rk_fh, _s) : _c
+        float _l = array.size(rk_fl) > _s ? array.get(rk_fl, _s) : _c
+        if not na(_c)
+            // Wick mode lets a touch print the brick; close mode demands a
+            // close beyond the boundary. Within one feed bar the engine cannot
+            // know whether the high or the low came first, so it always tests
+            // the way price was already travelling before it tests a reversal.
+            float _up = renko_trigger == "Wick" and not na(_h) ? _h : _c
+            float _dn = renko_trigger == "Wick" and not na(_l) ? _l : _c
+            for _i = 0 to 199
+                bool _p = false
+                if rk_dir == 1
+                    if _up >= rk_top + rk_box
+                        rk_bot := rk_top
+                        rk_top := rk_top + rk_box
+                        rk_run := rk_run + 1
+                        _p := true
+                    else if _dn <= rk_top - renko_rev * rk_box
+                        rk_top := rk_top - (renko_rev - 1) * rk_box
+                        rk_bot := rk_top - rk_box
+                        rk_dir := -1
+                        rk_run := 1
+                        _p := true
+                else if rk_dir == -1
+                    if _dn <= rk_bot - rk_box
+                        rk_top := rk_bot
+                        rk_bot := rk_bot - rk_box
+                        rk_run := rk_run + 1
+                        _p := true
+                    else if _up >= rk_bot + renko_rev * rk_box
+                        rk_bot := rk_bot + (renko_rev - 1) * rk_box
+                        rk_top := rk_bot + rk_box
+                        rk_dir := 1
+                        rk_run := 1
+                        _p := true
+                else
+                    if _up >= rk_top + rk_box
+                        rk_bot := rk_top
+                        rk_top := rk_top + rk_box
+                        rk_dir := 1
+                        rk_run := 1
+                        _p := true
+                    else if _dn <= rk_bot - rk_box
+                        rk_top := rk_bot
+                        rk_bot := rk_bot - rk_box
+                        rk_dir := -1
+                        rk_run := 1
+                        _p := true
+                if not _p
+                    break
+                rk_bricks := rk_bricks + 1
+
+// The gate. No box, or no direction yet, means no entries at all.
+// V2: entries also require intrabar data on THIS bar. Past the edge of the
+// intrabar window the renko is not merely stale, it is unknown, and an unknown
+// filter must not authorise a trade.
+rk_ok_long  = not renko_on or (rk_have and rk_dir ==  1 and rk_run >= renko_confirm)
+rk_ok_short = not renko_on or (rk_have and rk_dir == -1 and rk_run >= renko_confirm)
+
+
+// ── DATA COVERAGE ──────────────────────────────────────────────────────────
+// How much of the visible history actually had intrabar data. This is the
+// number that tells you whether what you are looking at means anything.
+var int rk_bars_ok   = 0
+var int rk_bars_none = 0
+if barstate.isconfirmed
+    if rk_have
+        rk_bars_ok := rk_bars_ok + 1
+    else
+        rk_bars_none := rk_bars_none + 1
+rk_cover = rk_bars_ok + rk_bars_none > 0 ? 100.0 * rk_bars_ok / (rk_bars_ok + rk_bars_none) : 0.0
+
+// ============================================================================
+// TRADING
+// ============================================================================
+in_date = not use_dates or (time >= date_from and time <= date_to)
+
+// Entries need a confirmed direction AND live intrabar data. Past the edge of
+// the intrabar window the renko is unknown, not merely stale, and an unknown
+// signal must not authorise a trade.
+go_long  = rk_ok_long  and allow_longs  and in_date
+go_short = rk_ok_short and allow_shorts and in_date
+
+flip_up   = rk_dir ==  1 and rk_dir[1] == -1 and rk_have
+flip_down = rk_dir == -1 and rk_dir[1] ==  1 and rk_have
+
+var float stop_px = na
+
+// ── EXITS ──────────────────────────────────────────────────────────────────
+if strategy.position_size > 0
+    if close_on_flip and flip_down
+        strategy.close("L", comment="flip")
+        stop_px := na
+    else if use_stop and not na(stop_px) and low <= stop_px
+        strategy.close("L", comment="stop")
+        stop_px := na
+
+if strategy.position_size < 0
+    if close_on_flip and flip_up
+        strategy.close("S", comment="flip")
+        stop_px := na
+    else if use_stop and not na(stop_px) and high >= stop_px
+        strategy.close("S", comment="stop")
+        stop_px := na
+
+// ── ENTRIES ────────────────────────────────────────────────────────────────
+// One decision per bar, filled at the real bar close. Several bricks inside one
+// bar move the direction and nothing else.
+if strategy.position_size == 0 and not na(rk_box)
+    if go_long and rk_dir == 1
+        strategy.entry("L", strategy.long)
+        stop_px := close - stop_bricks * rk_box
+    else if go_short and rk_dir == -1
+        strategy.entry("S", strategy.short)
+        stop_px := close + stop_bricks * rk_box
+
+// ── TRAIL ──────────────────────────────────────────────────────────────────
+// Never moves against the trade.
+if use_trail and not na(rk_box)
+    if strategy.position_size > 0 and not na(stop_px)
+        float _s = close - trail_bricks * rk_box
+        stop_px := math.max(stop_px, _s)
+    if strategy.position_size < 0 and not na(stop_px)
+        float _s = close + trail_bricks * rk_box
+        stop_px := math.min(stop_px, _s)
+
+plot(strategy.position_size != 0 and use_stop ? stop_px : na, "Stop",
+     color=color.new(#F23645, 20), style=plot.style_linebr, linewidth=1)
+
+// ── STATUS ─────────────────────────────────────────────────────────────────
+var table st = na
+if renko_show_hud and barstate.islast
+    st := table.new(position.top_right, 2, 6, border_width=1,
+         frame_color=color.new(#000000, 40), frame_width=1)
+    _bg = color.new(#1A1A1A, 10)
+    _hd = not rk_have ? color.new(#F23645, 0) : rk_dir == 1 ? color.new(#2962FF, 0) : rk_dir == -1 ? color.new(#F23645, 0) : color.new(#888888, 0)
+    table.cell(st, 0, 0, "RENKO STRATEGY", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(st, 1, 0, not rk_have ? "NO DATA" : na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "UP" : rk_dir == -1 ? "DOWN" : "NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(st, 0, 1, "Brick Size", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 1, 1, na(rk_box) ? "-" : str.tostring(rk_box, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 0, 2, "Bricks In A Row", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 1, 2, na(rk_box) ? "-" : str.tostring(rk_run), text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 0, 3, "Position", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 1, 3, strategy.position_size > 0 ? "LONG" : strategy.position_size < 0 ? "SHORT" : "FLAT", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 0, 4, "Data Coverage", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    _cvc = rk_cover > 99 ? color.new(#1D9E75, 0) : rk_cover > 80 ? color.new(#B8860B, 0) : color.new(#F23645, 0)
+    table.cell(st, 1, 4, str.tostring(rk_cover, "#.#") + "% of bars", text_color=color.white, bgcolor=_cvc, text_size=size.small)
+    table.cell(st, 0, 5, "Costs Set", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    _cc = comm_pct > 0 ? color.new(#1D9E75, 0) : color.new(#B8860B, 0)
+    table.cell(st, 1, 5, comm_pct > 0 ? "yes" : "NO - results are fiction", text_color=color.white, bgcolor=_cc, text_size=size.small)
