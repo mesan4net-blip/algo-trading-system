@@ -480,7 +480,7 @@ if pos_dir == "long" and not na(stop_level)
 
     // 1. Partial take-profit
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.rawC("FA", qty_percent=tp1_pct, comment="TP1")
+        strategy.close("FA", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.max(stop_level, entry_price + be_offset_raw)
@@ -533,7 +533,7 @@ else if pos_dir == "short" and not na(stop_level)
     _rr = risk_unit > 0 ? (entry_price - rawC) / risk_unit : 0.0
 
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.rawC("FA", qty_percent=tp1_pct, comment="TP1")
+        strategy.close("FA", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.min(stop_level, entry_price - be_offset_raw)
