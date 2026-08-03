@@ -14,8 +14,20 @@
 //   Renko turns up   -> go long.
 //   Renko turns down -> go short.
 //   Optionally wait for a number of bricks to confirm before acting.
-//   It is always in the market once started, unless a stop takes it out or the
-//   renko has no data.
+//   The position closes when the renko turns back, or at the daily cut-off.
+//
+// NO STOP, NO TRAIL, NO TARGET - DELIBERATELY:
+//   Those were built and then removed. With them in place a result reflects the
+//   renko signal and the trade management tangled together, and there is no way
+//   to tell which is doing the work. Stripped back, the test measures one thing:
+//   what the renko turn is worth on its own. Management can be layered back on
+//   afterwards, against a baseline that means something.
+//
+//   The consequence is that a position is exposed to whatever happens between
+//   one turn and the next, capped only by the daily cut-off. Position sizing is
+//   percent of equity from the strategy properties, because risk-based sizing
+//   divides by the entry-to-stop distance and there is no stop to measure.
+//   Set commission before reading anything into the equity curve.
 //
 // VERSION 2 - STRICT.
 //   TradingView serves roughly the most recent 100,000 intrabars, and that
@@ -86,65 +98,22 @@ renko_show_hud = input.bool(true, "Show Renko Row In HUD", group=grp_renko)
 // ============================================================================
 // TRADE SETTINGS
 // ============================================================================
+// There is no stop, no trail and no profit target here by design. A position is
+// opened when the renko turns and closed when it turns back, or at the daily
+// cut-off, and nothing else touches it. That makes the test measure one thing:
+// what the renko signal is worth on its own. Trade management can be layered on
+// afterwards, once there is a baseline to compare it against.
 grp_trade = "━━━ TRADES ━━━"
 allow_longs   = input.bool(true,  "Allow Longs",  group=grp_trade)
 allow_shorts  = input.bool(true,  "Allow Shorts", group=grp_trade)
-close_on_flip = input.bool(true,  "Close On Renko Flip", tooltip="On a flip, close the open trade. With the opposite direction also allowed, the position reverses on the same bar.", group=grp_trade)
+close_on_flip = input.bool(true,  "Close On Renko Flip", tooltip="On a flip, close the open trade. With the opposite direction also allowed, the position reverses on the same bar. With this OFF the only exit left is the daily cut-off.", group=grp_trade)
 show_diag     = input.bool(true, "Show Diagnostics Panel", tooltip="Shows every gate an entry has to pass, with its live value, so a strategy taking no trades tells you WHICH condition is stopping it instead of leaving you to guess.", group=grp_trade)
 use_reentry_confirm = input.bool(true, "Confirm Re-Entry With A Push", tooltip="Applies to entries that follow an exit, not the first entry of the chart. A long then needs the bar to CLOSE above the previous bar's high, and a short to close below the previous bar's low - price actually pushing, not merely the renko still pointing that way. It can fire on the exit bar itself if that bar already closes beyond.", group=grp_trade)
-reenter_stop  = input.bool(false, "Re-Enter After Stop", tooltip="OFF (default): one entry per renko swing. Stopped out while the renko is still pointing the same way, it waits for the next turn rather than climbing back in. ON: it re-enters as soon as it is flat and the renko still agrees, which in a choppy stretch can mean a lot of trades in the same direction.", group=grp_trade)
-
-// ── SIZING ─────────────────────────────────────────────────────────────────
-// R is the distance from entry to the initial stop. Every target and trigger
-// below is measured in R, so they mean the same thing whatever the brick size
-// or the market. Without risk-based sizing, R would be a number with no
-// consistent value behind it.
-grp_size = "━━━ SIZING ━━━"
-use_risk_size = input.bool(true, "Size By Risk", tooltip="Position size = (equity x Risk %) / stop distance, so every trade puts the same amount at stake regardless of how wide the stop is. Off = the fixed order size in the strategy properties.", group=grp_size)
-risk_pct      = input.float(1.0, "  Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, group=grp_size)
-max_equity_pct= input.float(100.0, "  Max Equity Per Trade (%)", minval=1.0, maxval=100.0, step=1.0, tooltip="Hard cap on capital deployed, even when the risk calculation would allow more.", group=grp_size)
-
-// ── STOP ───────────────────────────────────────────────────────────────────
-grp_stop = "━━━ STOP ━━━"
-use_stop      = input.bool(true, "Use Stop", group=grp_stop)
-stop_bricks   = input.float(2.0, "  Stop Distance (bricks)", minval=0.25, maxval=20.0, step=0.25, tooltip="Measured in bricks, so it scales with brick size instead of being a fixed price gap. 2 bricks sits just beyond a standard reversal.", group=grp_stop)
-use_hard_stop = input.bool(false, "Hard Stop (intra-bar + gap protection)", tooltip="OFF (default): the stop is close-based - it fires only when a bar CLOSES beyond it. ON: a real order that fires the instant price touches it intra-bar, and survives overnight and weekend gaps, which matters for something like QQQ. Break-even and the trail still ratchet it either way; this only changes how it is enforced.", group=grp_stop)
-
-// ── TRADE MANAGEMENT ───────────────────────────────────────────────────────
-// Ported from the 3SHA strategies. Each is independent and each is off unless
-// enabled; whichever triggers first ends the trade.
-grp_mgmt = "━━━ TRADE MANAGEMENT ━━━"
-
-use_tp1   = input.bool(false, "Partial Take-Profit", tooltip="Scale out a portion at a fixed R multiple and ride the rest on the trail. Off by default to let winners run. Taking a partial also moves the stop to break-even.", group=grp_mgmt)
-tp1_r     = input.float(2.0, "  TP1 At (R multiple)", minval=0.5, step=0.5, group=grp_mgmt)
-tp1_pct   = input.float(50, "  TP1 Size (% of position)", minval=1, maxval=99, step=5, group=grp_mgmt)
-
-use_be    = input.bool(true, "Move Stop To Break-Even", tooltip="Once price closes +X R in favour, move the stop to entry plus the offset. Locks the trade to break-even once the move has proved itself.", group=grp_mgmt)
-be_trig_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, group=grp_mgmt)
-be_offset_bricks = input.float(0.0, "  Break-Even Offset (bricks)", minval=0, step=0.25, tooltip="Extra distance beyond entry when moving to break-even, measured in bricks. Covers spread and commission.", group=grp_mgmt)
-
-use_trail  = input.bool(true, "Trailing Stop", tooltip="Once in profit, ratchet the stop toward the chosen anchor. It never loosens. Close-based unless the hard stop is on.", group=grp_mgmt)
-trail_mode = input.string("Brick Grid", "  Trail Anchor", options=["Brick Grid", "Fixed Bricks Behind", "Swing (Prev N Bars)"], tooltip="Brick Grid: trail the far edge of the current brick, so the stop steps up only when a brick prints - the renko-native choice. Fixed Bricks Behind: a set number of bricks behind price, which moves every bar. Swing: the recent swing low or high, the anchor the 3SHA strategies use.", group=grp_mgmt)
-trail_bricks   = input.float(2.0, "  Trail Distance (bricks)", minval=0.25, maxval=20.0, step=0.25, tooltip="Used ONLY by Fixed Bricks Behind - how far behind price the stop sits.", group=grp_mgmt)
-trail_buf_bricks = input.float(0.0, "  Anchor Buffer (bricks)", minval=0.0, maxval=5.0, step=0.25, tooltip="Extra clearance beyond the Brick Grid or Swing anchor. 0 puts the stop exactly ON the swing low or brick edge, which is what following the candles means. Raise it only to allow for spread or a noisy instrument - every 0.25 here is a quarter of a brick of extra room given up.", group=grp_mgmt)
-trail_start_r  = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
-trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, tooltip="Swing anchor only.", group=grp_mgmt)
-trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Swing anchor only. Body is tighter, Wick is wider.", group=grp_mgmt)
-
-use_target = input.bool(false, "Exit: Profit Target", tooltip="Close the whole position at a multiple of the initial risk. Caps winners, which is usually costly for a trend system but may suit a market that grinds rather than runs.", group=grp_mgmt)
-target_r   = input.float(3.0, "  Target (R)", minval=0.5, step=0.5, group=grp_mgmt)
-
-use_giveback  = input.bool(false, "Exit: Give-Back", tooltip="Close if the trade hands back this share of its best profit. A percentage alternative to the structural trail, and it behaves very differently in chop.", group=grp_mgmt)
-giveback_pct  = input.float(40.0, "  Give-Back (% of peak profit)", minval=5, maxval=95, step=5, group=grp_mgmt)
-giveback_min_r= input.float(1.0, "  Only After (R)", minval=0.1, step=0.1, tooltip="Give-back is ignored until the trade has reached at least this much profit.", group=grp_mgmt)
-
-use_time_stop  = input.bool(false, "Exit: Time Stop", tooltip="Close a trade that has gone nowhere after this many bars, freeing the capital rather than letting it sit.", group=grp_mgmt)
-time_stop_bars = input.int(50, "  After (bars)", minval=1, maxval=1000, group=grp_mgmt)
-time_stop_min_r= input.float(0.5, "  Unless Beyond (R)", minval=0.0, step=0.1, tooltip="A trade past this much profit is left alone.", group=grp_mgmt)
+reenter_same  = input.bool(false, "Re-Enter The Same Swing", tooltip="OFF (default): one entry per renko swing. Once a swing has been traded and exited - by the cut-off, say - it waits for the next turn rather than climbing back in. ON: it may re-open the same swing.", group=grp_trade)
 
 // ── DAILY SESSION CUT-OFF ──────────────────────────────────────────────────
 grp_cut = "━━━ DAILY CUT-OFF ━━━"
-use_cutoff  = input.bool(true, "Close Everything At A Fixed Time Daily", tooltip="Flattens any open position at the cut-off, whatever its state - no target, no trail, no exception. Runs on the first bar that CLOSES at or after the cut-off, so on a chart whose bars do not land exactly on it the exit is the first bar to finish past it. On a 1-hour chart a 12:45 cut-off therefore fires at 13:00.", group=grp_cut)
+use_cutoff  = input.bool(true, "Close Everything At A Fixed Time Daily", tooltip="Flattens any open position at the cut-off, whatever its state. Runs on the first bar that CLOSES at or after the cut-off, so on a chart whose bars do not land exactly on it the exit is the first bar to finish past it. On a 1-hour chart a 12:45 cut-off therefore fires at 13:00.", group=grp_cut)
 cutoff_hour = input.int(12, "  Hour (24h)", minval=0, maxval=23, group=grp_cut)
 cutoff_min  = input.int(45, "  Minute", minval=0, maxval=59, group=grp_cut)
 cutoff_tz   = input.string("America/Los_Angeles", "  Timezone", options=["America/Los_Angeles", "America/New_York", "America/Chicago", "Europe/London", "Asia/Kolkata", "Asia/Tokyo", "UTC", "UTC-8", "UTC-5"], tooltip="America/Los_Angeles follows Pacific time and shifts with daylight saving, so the cut-off stays at 12:45 local all year. Pick UTC-8 instead only if you want a fixed offset that does not move - that lands at 12:45 in winter and 11:45 in summer.", group=grp_cut)
@@ -156,7 +125,7 @@ date_from     = input.time(timestamp("01 Jan 2020 00:00"), "From", group=grp_dat
 date_to       = input.time(timestamp("01 Jan 2030 00:00"), "To", group=grp_date)
 
 grp_cost = "━━━ COSTS ━━━"
-comm_pct      = input.float(0.0, "Commission %", minval=0.0, step=0.001, tooltip="Set this before believing any result. Left at zero, the equity curve is fiction.", group=grp_cost)
+comm_pct      = input.float(0.0, "Commission %", minval=0.0, step=0.001, tooltip="Set this before believing any result. Left at zero, the equity curve is fiction - and with no stop in place, position sizes here are large.", group=grp_cost)
 slip_ticks    = input.int(0, "Slippage (ticks)", minval=0, group=grp_cost)
 
 // ============================================================================
@@ -376,10 +345,19 @@ rk_cover = rk_bars_ok + rk_bars_none > 0 ? 100.0 * rk_bars_ok / (rk_bars_ok + rk
 // ============================================================================
 in_date = not use_dates or (time >= date_from and time <= date_to)
 
+// ── DAILY CUT-OFF ──────────────────────────────────────────────────────────
+// Measured on the bar's CLOSING time, not its opening time. A bar that opens at
+// 12:30 and closes at 13:00 has already carried the position through the
+// cut-off, so it is the close that has to be tested.
+cut_mins   = cutoff_hour * 60 + cutoff_min
+bar_mins   = hour(time_close, cutoff_tz) * 60 + minute(time_close, cutoff_tz)
+past_cut   = use_cutoff and bar_mins >= cut_mins
+cut_blocks = cutoff_block and past_cut
+
 // ── THE SIGNAL IS AN EVENT, NOT A STATE ────────────────────────────────────
 // Testing "flat and renko is up" fires on EVERY bar the renko happens to be up.
-// Stopped out mid-trend, it would pile straight back in on the next bar, and
-// the next, producing a stream of trades that have nothing to do with the renko
+// Exited mid-trend, it would pile straight back in on the next bar, and the
+// next, producing a stream of trades that have nothing to do with the renko
 // turning. The signal has to be the TURN itself.
 //
 // traded_dir remembers which way this swing was already traded. It clears only
@@ -395,29 +373,12 @@ if rk_turned
 armed_long  = rk_ok_long  and rk_dir ==  1
 armed_short = rk_ok_short and rk_dir == -1
 
-go_long  = armed_long  and allow_longs  and in_date and (traded_dir != 1  or reenter_stop)
-go_short = armed_short and allow_shorts and in_date and (traded_dir != -1 or reenter_stop)
-
-// ── DAILY CUT-OFF ──────────────────────────────────────────────────────────
-// Measured on the bar's CLOSING time, not its opening time. A bar that opens at
-// 12:30 and closes at 13:00 has already carried the position through the
-// cut-off, so it is the close that has to be tested.
-cut_mins  = cutoff_hour * 60 + cutoff_min
-bar_mins  = hour(time_close, cutoff_tz) * 60 + minute(time_close, cutoff_tz)
-past_cut  = use_cutoff and bar_mins >= cut_mins
-force_flat = past_cut
+go_long  = armed_long  and allow_longs  and in_date and (traded_dir != 1  or reenter_same)
+go_short = armed_short and allow_shorts and in_date and (traded_dir != -1 or reenter_same)
 
 // ── TRADE STATE ────────────────────────────────────────────────────────────
-// risk_unit is the entry-to-initial-stop distance and is FROZEN at entry. Every
-// R figure below divides by it, so it must not move when the stop later
-// ratchets - otherwise "2R" would quietly mean something different mid-trade.
 var float entry_px  = na
-var float stop_px   = na
-var float risk_unit = na
 var int   entry_bar = na
-var bool  be_moved  = false
-var bool  tp1_taken = false
-var float peak_r    = 0.0
 
 // Re-entry confirmation. had_exit latches on the first exit and stays set, so
 // the very first entry of the chart is unconfirmed and every later one is not.
@@ -427,118 +388,23 @@ var float peak_r    = 0.0
 var bool  had_exit   = false
 bool      exited_now = false
 
-// Swing anchor for the trail, same construction the 3SHA strategies use.
-trail_lo_ref = trail_price_basis == "Wick (high/low)" ? ta.lowest(low,  trail_lookback) : ta.lowest(math.min(open, close),  trail_lookback)
-trail_hi_ref = trail_price_basis == "Wick (high/low)" ? ta.highest(high, trail_lookback) : ta.highest(math.max(open, close), trail_lookback)
+// ── EXITS ──────────────────────────────────────────────────────────────────
+// Two, and only two: the renko turning back, and the daily cut-off. Nothing
+// else can close a position.
+if strategy.position_size > 0 and close_on_flip and flip_down
+    strategy.close("L", comment="Flip")
+    exited_now := true
+    had_exit   := true
 
-be_offset = na(rk_box) ? 0.0 : be_offset_bricks * rk_box
-// Two different jobs, two different numbers. trail_dist is how far behind price
-// the Fixed anchor sits. trail_buf is clearance beyond the Swing or Brick Grid
-// anchor, and defaults to ZERO so the stop lands exactly on the swing low or
-// brick edge. Sharing one input put the swing stop two full bricks below the
-// candles, which is why it stopped looking like it was following them.
-trail_dist = na(rk_box) ? 0.0 : trail_bricks * rk_box
-trail_buf  = na(rk_box) ? 0.0 : trail_buf_bricks * rk_box
+if strategy.position_size < 0 and close_on_flip and flip_up
+    strategy.close("S", comment="Flip")
+    exited_now := true
+    had_exit   := true
 
-// ── LONG MANAGEMENT ────────────────────────────────────────────────────────
-if strategy.position_size > 0 and not na(stop_px) and not na(risk_unit)
-    _rr = risk_unit > 0 ? (close - entry_px) / risk_unit : 0.0
-
-    // 1. Partial take-profit. Taking a partial also locks break-even: having
-    //    banked part of the move, handing the rest back is the worse outcome.
-    if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("L", qty_percent=tp1_pct, comment="TP1")
-        tp1_taken := true
-        if not be_moved
-            stop_px  := math.max(stop_px, entry_px + be_offset)
-            be_moved := true
-
-    // 2. Break-even
-    if use_be and not be_moved and _rr >= be_trig_r
-        stop_px  := math.max(stop_px, entry_px + be_offset)
-        be_moved := true
-
-    // 3. Trail. Ratchet only - math.max means it can never loosen.
-    if use_trail and _rr >= trail_start_r
-        float _anchor = na
-        if trail_mode == "Brick Grid"
-            _anchor := na(rk_bot) ? na : rk_bot - trail_buf
-        else if trail_mode == "Fixed Bricks Behind"
-            _anchor := close - trail_dist
-        else
-            _anchor := trail_lo_ref - trail_buf
-        if not na(_anchor) and _anchor > stop_px
-            stop_px := _anchor
-
-    // 4. Exits
-    peak_r := math.max(peak_r, _rr)
-    _flip_out = close_on_flip and flip_down
-    _tgt_out  = use_target and _rr >= target_r
-    _give_out = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
-    _time_out = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
-    _other    = _flip_out or _tgt_out or _give_out or _time_out
-    _stop_hit = use_stop and not use_hard_stop and close <= stop_px
-
-    if use_stop and use_hard_stop and not _other
-        strategy.exit("L-stop", from_entry="L", stop=stop_px)
-    if _stop_hit or _other
-        strategy.close("L", comment = _stop_hit ? "Stop" : _flip_out ? "Flip" : _tgt_out ? "Target" : _give_out ? "Give-Back" : "Time")
-        stop_px    := na
-        peak_r     := 0.0
-        exited_now := true
-        had_exit   := true
-
-// ── SHORT MANAGEMENT ───────────────────────────────────────────────────────
-if strategy.position_size < 0 and not na(stop_px) and not na(risk_unit)
-    _rr = risk_unit > 0 ? (entry_px - close) / risk_unit : 0.0
-
-    if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("S", qty_percent=tp1_pct, comment="TP1")
-        tp1_taken := true
-        if not be_moved
-            stop_px  := math.min(stop_px, entry_px - be_offset)
-            be_moved := true
-
-    if use_be and not be_moved and _rr >= be_trig_r
-        stop_px  := math.min(stop_px, entry_px - be_offset)
-        be_moved := true
-
-    if use_trail and _rr >= trail_start_r
-        float _anchor = na
-        if trail_mode == "Brick Grid"
-            _anchor := na(rk_top) ? na : rk_top + trail_buf
-        else if trail_mode == "Fixed Bricks Behind"
-            _anchor := close + trail_dist
-        else
-            _anchor := trail_hi_ref + trail_buf
-        if not na(_anchor) and _anchor < stop_px
-            stop_px := _anchor
-
-    peak_r := math.max(peak_r, _rr)
-    _flip_out = close_on_flip and flip_up
-    _tgt_out  = use_target and _rr >= target_r
-    _give_out = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
-    _time_out = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
-    _other    = _flip_out or _tgt_out or _give_out or _time_out
-    _stop_hit = use_stop and not use_hard_stop and close >= stop_px
-
-    if use_stop and use_hard_stop and not _other
-        strategy.exit("S-stop", from_entry="S", stop=stop_px)
-    if _stop_hit or _other
-        strategy.close("S", comment = _stop_hit ? "Stop" : _flip_out ? "Flip" : _tgt_out ? "Target" : _give_out ? "Give-Back" : "Time")
-        stop_px    := na
-        peak_r     := 0.0
-        exited_now := true
-        had_exit   := true
-
-// ── FORCED FLAT AT THE CUT-OFF ─────────────────────────────────────────────
-// Unconditional. Nothing above can veto it, and it ignores target, trail,
-// break-even and the renko alike. Skipped only if this bar already exited, so
-// the same bar cannot close the position twice.
-if force_flat and strategy.position_size != 0 and not exited_now
+// Unconditional. It ignores the renko entirely. Skipped only if this bar has
+// already exited, so the same bar cannot close the position twice.
+if past_cut and strategy.position_size != 0 and not exited_now
     strategy.close_all(comment="Cut-Off")
-    stop_px    := na
-    peak_r     := 0.0
     exited_now := true
     had_exit   := true
 
@@ -546,82 +412,23 @@ if force_flat and strategy.position_size != 0 and not exited_now
 // One decision per bar, filled at the real bar close. Several bricks inside one
 // bar move the direction and nothing else.
 //
-// Size and quantity are computed at TOP LEVEL, not inside the entry block, so
-// the diagnostics panel can show them even on bars where no entry is attempted.
-// A quantity that rounds to zero is a silent no-trade otherwise.
-float dg_sd  = na(rk_box) ? na : stop_bricks * rk_box
-float dg_qty = na
-if use_risk_size and not na(dg_sd) and dg_sd > 0
-    dg_qty := math.min(strategy.equity * risk_pct / 100.0 / dg_sd,
-                       strategy.equity * max_equity_pct / 100.0 / close)
-
-// The push test. Measured on the chart's own bars, which is also what fills
-// use - this strategy is meant to be run on ordinary candles.
+// Size comes from the strategy properties (percent of equity by default). With
+// no stop there is no risk distance to size against, so risk-based sizing would
+// have nothing to divide by.
 confirm_long  = not use_reentry_confirm or not had_exit or close > high[1]
 confirm_short = not use_reentry_confirm or not had_exit or close < low[1]
 
-cut_blocks = cutoff_block and past_cut
-
 if (strategy.position_size == 0 or exited_now) and not cut_blocks and not na(rk_box) and rk_box > 0
-    float _sd  = dg_sd
-    float _qty = dg_qty
-    if go_long and confirm_long and (na(_qty) or _qty > 0)
-        strategy.entry("L", strategy.long, qty = _qty)
+    if go_long and confirm_long
+        strategy.entry("L", strategy.long)
         entry_px   := close
-        stop_px    := close - _sd
-        risk_unit  := _sd
         entry_bar  := bar_index
         traded_dir := 1
-        be_moved   := false
-        tp1_taken  := false
-        peak_r     := 0.0
-    else if go_short and confirm_short and (na(_qty) or _qty > 0)
-        strategy.entry("S", strategy.short, qty = _qty)
+    else if go_short and confirm_short
+        strategy.entry("S", strategy.short)
         entry_px   := close
-        stop_px    := close + _sd
-        risk_unit  := _sd
         entry_bar  := bar_index
         traded_dir := -1
-        be_moved   := false
-        tp1_taken  := false
-        peak_r     := 0.0
-
-plot(strategy.position_size != 0 and use_stop ? stop_px : na, "Stop",
-     color=color.new(#F23645, 20), style=plot.style_linebr, linewidth=2)
-
-// The raw anchor, before the ratchet. Plotting it makes an unmoving stop
-// readable: if the anchor is climbing but the stop is flat, the ratchet is
-// holding it because the anchor has not yet passed where the stop already is.
-plot(show_diag and use_trail and strategy.position_size > 0 ? (trail_mode == "Brick Grid" ? rk_bot - trail_buf : trail_mode == "Fixed Bricks Behind" ? close - trail_dist : trail_lo_ref - trail_buf) : na,
-     "Trail Anchor (long)", color=color.new(#B8860B, 45), style=plot.style_linebr, linewidth=1)
-plot(show_diag and use_trail and strategy.position_size < 0 ? (trail_mode == "Brick Grid" ? rk_top + trail_buf : trail_mode == "Fixed Bricks Behind" ? close + trail_dist : trail_hi_ref + trail_buf) : na,
-     "Trail Anchor (short)", color=color.new(#B8860B, 45), style=plot.style_linebr, linewidth=1)
-
-// ── STATUS ─────────────────────────────────────────────────────────────────
-var table st = na
-if renko_show_hud and barstate.islast
-    st := table.new(position.top_right, 2, 7, border_width=1,
-         frame_color=color.new(#000000, 40), frame_width=1)
-    _bg = color.new(#1A1A1A, 10)
-    _hd = not rk_valid ? color.new(#F23645, 0) : not rk_have ? color.new(#B8860B, 0) : rk_dir == 1 ? color.new(#2962FF, 0) : rk_dir == -1 ? color.new(#F23645, 0) : color.new(#888888, 0)
-    table.cell(st, 0, 0, "RENKO STRATEGY v2", text_color=color.white, bgcolor=_hd, text_size=size.small)
-    table.cell(st, 1, 0, not rk_valid ? "NO DATA" : not rk_have ? "COARSE" : na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "UP" : rk_dir == -1 ? "DOWN" : "NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
-    table.cell(st, 0, 1, "Brick Size", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(st, 1, 1, na(rk_box) ? "-" : str.tostring(rk_box, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(st, 0, 2, "Bricks In A Row", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(st, 1, 2, na(rk_box) ? "-" : str.tostring(rk_run), text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(st, 0, 3, "Position", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    _pos = strategy.position_size > 0 ? "LONG" : strategy.position_size < 0 ? "SHORT" : traded_dir != 0 ? "FLAT - swing traded" : "FLAT - waiting for turn"
-    table.cell(st, 1, 3, _pos, text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(st, 0, 4, "Open R", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    _or = strategy.position_size == 0 or na(risk_unit) or risk_unit <= 0 ? "-" : str.tostring((strategy.position_size > 0 ? close - entry_px : entry_px - close) / risk_unit, "#.##") + " R" + (be_moved ? "  BE" : "") + (tp1_taken ? "  TP1" : "")
-    table.cell(st, 1, 4, _or, text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(st, 0, 5, "Data Coverage", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    _cvc = rk_cover > 99 ? color.new(#1D9E75, 0) : rk_cover > 80 ? color.new(#B8860B, 0) : color.new(#F23645, 0)
-    table.cell(st, 1, 5, str.tostring(rk_cover, "#.#") + "% of bars", text_color=color.white, bgcolor=_cvc, text_size=size.small)
-    table.cell(st, 0, 6, "Costs Set", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    _cc = comm_pct > 0 ? color.new(#1D9E75, 0) : color.new(#B8860B, 0)
-    table.cell(st, 1, 6, comm_pct > 0 ? "yes" : "NO - results are fiction", text_color=color.white, bgcolor=_cc, text_size=size.small)
 
 // ── ACTIVITY COUNTERS ──────────────────────────────────────────────────────
 // Bricks and flips since the chart began. If flips is 0 or 1 the renko is not
@@ -634,12 +441,35 @@ if barstate.isconfirmed
     if rk_dir != rk_dir[1] and rk_dir != 0 and not na(rk_dir[1]) and rk_dir[1] != 0
         dg_flips := dg_flips + 1
 
+// ── STATUS ─────────────────────────────────────────────────────────────────
+var table st = na
+if renko_show_hud and barstate.islast
+    st := table.new(position.top_right, 2, 6, border_width=1,
+         frame_color=color.new(#000000, 40), frame_width=1)
+    _bg = color.new(#1A1A1A, 10)
+    _hd = not rk_valid ? color.new(#F23645, 0) : not rk_have ? color.new(#B8860B, 0) : rk_dir == 1 ? color.new(#2962FF, 0) : rk_dir == -1 ? color.new(#F23645, 0) : color.new(#888888, 0)
+    table.cell(st, 0, 0, "RENKO STRATEGY v2", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(st, 1, 0, not rk_valid ? "NO DATA" : not rk_have ? "COARSE" : na(rk_box) ? "WARM-UP" : rk_dir == 1 ? "UP" : rk_dir == -1 ? "DOWN" : "NONE", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(st, 0, 1, "Brick Size", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 1, 1, na(rk_box) ? "-" : str.tostring(rk_box, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 0, 2, "Bricks In A Row", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 1, 2, na(rk_box) ? "-" : str.tostring(rk_run), text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 0, 3, "Position", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    _pos = strategy.position_size > 0 ? "LONG" : strategy.position_size < 0 ? "SHORT" : traded_dir != 0 ? "FLAT - swing traded" : "FLAT - waiting for turn"
+    table.cell(st, 1, 3, _pos, text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(st, 0, 4, "Data Coverage", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    _cvc = rk_cover > 99 ? color.new(#1D9E75, 0) : rk_cover > 80 ? color.new(#B8860B, 0) : color.new(#F23645, 0)
+    table.cell(st, 1, 4, str.tostring(rk_cover, "#.#") + "% of bars", text_color=color.white, bgcolor=_cvc, text_size=size.small)
+    table.cell(st, 0, 5, "Costs Set", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    _cc = comm_pct > 0 ? color.new(#1D9E75, 0) : color.new(#B8860B, 0)
+    table.cell(st, 1, 5, comm_pct > 0 ? "yes" : "NO - results are fiction", text_color=color.white, bgcolor=_cc, text_size=size.small)
+
 // ── DIAGNOSTICS ────────────────────────────────────────────────────────────
 // Every condition an entry must pass, with its live value. Read top to bottom:
 // the first BLOCKED row is what is stopping the strategy trading.
 var table dg = na
 if show_diag and barstate.islast
-    dg := table.new(position.bottom_right, 3, 16, border_width=1,
+    dg := table.new(position.bottom_right, 3, 13, border_width=1,
          frame_color=color.new(#000000, 40), frame_width=1)
     _ok = color.new(#1D9E75, 0)
     _no = color.new(#F23645, 0)
@@ -649,8 +479,8 @@ if show_diag and barstate.islast
     table.cell(dg, 1, 0, "value",      text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(dg, 2, 0, "",           text_color=color.white, bgcolor=_hd, text_size=size.small)
 
-    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Re-entry push", "Order size", "Position", "Daily cut-off", "Bricks formed", "Renko flips", "Trades", "Trail")
-    _val  = array.from(
+    _lbl = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Re-entry push", "Daily cut-off", "Position", "Bricks formed", "Renko flips")
+    _val = array.from(
          str.tostring(array.size(rk_fc)) + (array.size(rk_fc) > 0 ? "" : "  none - fallback"),
          na(rk_box) ? "na - no size yet" : str.tostring(rk_box, format.mintick),
          na(rk_top) ? "na - not anchored" : str.tostring(rk_bot, format.mintick) + " to " + str.tostring(rk_top, format.mintick),
@@ -660,35 +490,30 @@ if show_diag and barstate.islast
          in_date ? "yes" : "no",
          not use_reentry_confirm ? "off" : not had_exit ? "first entry - not needed" : rk_dir == 1 ? (confirm_long ? "yes - closed above prev high" : "waiting - need close > " + str.tostring(high[1], format.mintick)) : rk_dir == -1 ? (confirm_short ? "yes - closed below prev low" : "waiting - need close < " + str.tostring(low[1], format.mintick)) : "-",
          not use_cutoff ? "off" : str.tostring(cutoff_hour) + ":" + (cutoff_min < 10 ? "0" : "") + str.tostring(cutoff_min) + " " + cutoff_tz + (past_cut ? "  PAST - flat until midnight" : "  before"),
-         na(dg_qty) ? "strategy default" : str.tostring(dg_qty, "#.####"),
          strategy.position_size == 0 ? "flat - can enter" : strategy.position_size > 0 ? "long - holding" : "short - holding",
          str.tostring(dg_bricks),
-         str.tostring(dg_flips),
-         str.tostring(strategy.closedtrades) + " closed, " + str.tostring(strategy.opentrades) + " open",
-         not use_trail ? "off" : strategy.position_size == 0 ? "no position" : na(risk_unit) or risk_unit <= 0 ? "-" : ((strategy.position_size > 0 ? close - entry_px : entry_px - close) / risk_unit) < trail_start_r ? "inactive - needs " + str.tostring(trail_start_r, "#.#") + "R" : trail_mode + " @ " + str.tostring(stop_px, format.mintick))
+         str.tostring(dg_flips) + "   (" + str.tostring(strategy.closedtrades) + " closed trades)")
     _pass = array.from(
          array.size(rk_fc) > 0,
          not na(rk_box) and rk_box > 0,
          not na(rk_top),
          rk_dir != 0,
          rk_run >= renko_confirm,
-         traded_dir == 0 or reenter_stop,
+         traded_dir == 0 or reenter_same,
          in_date,
          rk_dir == 1 ? confirm_long : rk_dir == -1 ? confirm_short : true,
          not cut_blocks,
-         na(dg_qty) or dg_qty > 0,
          true,
          dg_bricks > 0,
-         dg_flips > 0,
-         strategy.closedtrades + strategy.opentrades > 0,
-         true)
+         dg_flips > 0)
     for _i = 0 to array.size(_lbl) - 1
         bool _p = array.get(_pass, _i)
+        // Rows 0-8 are gates an entry must pass. Rows 9-11 are activity
+        // readings: being in a position is not a fault, so they never read
+        // BLOCKED.
+        bool _info = _i >= 9
         table.cell(dg, 0, _i + 1, array.get(_lbl, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
         table.cell(dg, 1, _i + 1, array.get(_val, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
-        // Rows 0-9 are gates an entry must pass. Rows 10-13 are activity readings:
-        // being in a position is not a fault, so they never read BLOCKED.
-        bool _info = _i >= 10
         table.cell(dg, 2, _i + 1, _p ? "ok" : _info ? "none yet" : "BLOCKED",
              text_color=color.white,
              bgcolor = _p ? _ok : _info ? color.new(#B8860B, 0) : _no,
