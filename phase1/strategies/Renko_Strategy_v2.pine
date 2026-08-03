@@ -125,7 +125,8 @@ be_offset_bricks = input.float(0.0, "  Break-Even Offset (bricks)", minval=0, st
 
 use_trail  = input.bool(true, "Trailing Stop", tooltip="Once in profit, ratchet the stop toward the chosen anchor. It never loosens. Close-based unless the hard stop is on.", group=grp_mgmt)
 trail_mode = input.string("Brick Grid", "  Trail Anchor", options=["Brick Grid", "Fixed Bricks Behind", "Swing (Prev N Bars)"], tooltip="Brick Grid: trail the far edge of the current brick, so the stop steps up only when a brick prints - the renko-native choice. Fixed Bricks Behind: a set number of bricks behind price, which moves every bar. Swing: the recent swing low or high, the anchor the 3SHA strategies use.", group=grp_mgmt)
-trail_bricks   = input.float(2.0, "  Trail Distance (bricks)", minval=0.25, maxval=20.0, step=0.25, tooltip="Used by Fixed Bricks Behind, and as the buffer beyond the Brick Grid and Swing anchors.", group=grp_mgmt)
+trail_bricks   = input.float(2.0, "  Trail Distance (bricks)", minval=0.25, maxval=20.0, step=0.25, tooltip="Used ONLY by Fixed Bricks Behind - how far behind price the stop sits.", group=grp_mgmt)
+trail_buf_bricks = input.float(0.0, "  Anchor Buffer (bricks)", minval=0.0, maxval=5.0, step=0.25, tooltip="Extra clearance beyond the Brick Grid or Swing anchor. 0 puts the stop exactly ON the swing low or brick edge, which is what following the candles means. Raise it only to allow for spread or a noisy instrument - every 0.25 here is a quarter of a brick of extra room given up.", group=grp_mgmt)
 trail_start_r  = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, tooltip="Swing anchor only.", group=grp_mgmt)
 trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Swing anchor only. Body is tighter, Wick is wider.", group=grp_mgmt)
@@ -414,7 +415,13 @@ trail_lo_ref = trail_price_basis == "Wick (high/low)" ? ta.lowest(low,  trail_lo
 trail_hi_ref = trail_price_basis == "Wick (high/low)" ? ta.highest(high, trail_lookback) : ta.highest(math.max(open, close), trail_lookback)
 
 be_offset = na(rk_box) ? 0.0 : be_offset_bricks * rk_box
-trail_buf = na(rk_box) ? 0.0 : trail_bricks * rk_box
+// Two different jobs, two different numbers. trail_dist is how far behind price
+// the Fixed anchor sits. trail_buf is clearance beyond the Swing or Brick Grid
+// anchor, and defaults to ZERO so the stop lands exactly on the swing low or
+// brick edge. Sharing one input put the swing stop two full bricks below the
+// candles, which is why it stopped looking like it was following them.
+trail_dist = na(rk_box) ? 0.0 : trail_bricks * rk_box
+trail_buf  = na(rk_box) ? 0.0 : trail_buf_bricks * rk_box
 
 // ── LONG MANAGEMENT ────────────────────────────────────────────────────────
 if strategy.position_size > 0 and not na(stop_px) and not na(risk_unit)
@@ -440,7 +447,7 @@ if strategy.position_size > 0 and not na(stop_px) and not na(risk_unit)
         if trail_mode == "Brick Grid"
             _anchor := na(rk_bot) ? na : rk_bot - trail_buf
         else if trail_mode == "Fixed Bricks Behind"
-            _anchor := close - trail_buf
+            _anchor := close - trail_dist
         else
             _anchor := trail_lo_ref - trail_buf
         if not na(_anchor) and _anchor > stop_px
@@ -484,7 +491,7 @@ if strategy.position_size < 0 and not na(stop_px) and not na(risk_unit)
         if trail_mode == "Brick Grid"
             _anchor := na(rk_top) ? na : rk_top + trail_buf
         else if trail_mode == "Fixed Bricks Behind"
-            _anchor := close + trail_buf
+            _anchor := close + trail_dist
         else
             _anchor := trail_hi_ref + trail_buf
         if not na(_anchor) and _anchor < stop_px
@@ -550,7 +557,15 @@ if (strategy.position_size == 0 or exited_now) and not na(rk_box) and rk_box > 0
         peak_r     := 0.0
 
 plot(strategy.position_size != 0 and use_stop ? stop_px : na, "Stop",
-     color=color.new(#F23645, 20), style=plot.style_linebr, linewidth=1)
+     color=color.new(#F23645, 20), style=plot.style_linebr, linewidth=2)
+
+// The raw anchor, before the ratchet. Plotting it makes an unmoving stop
+// readable: if the anchor is climbing but the stop is flat, the ratchet is
+// holding it because the anchor has not yet passed where the stop already is.
+plot(show_diag and use_trail and strategy.position_size > 0 ? (trail_mode == "Brick Grid" ? rk_bot - trail_buf : trail_mode == "Fixed Bricks Behind" ? close - trail_dist : trail_lo_ref - trail_buf) : na,
+     "Trail Anchor (long)", color=color.new(#B8860B, 45), style=plot.style_linebr, linewidth=1)
+plot(show_diag and use_trail and strategy.position_size < 0 ? (trail_mode == "Brick Grid" ? rk_top + trail_buf : trail_mode == "Fixed Bricks Behind" ? close + trail_dist : trail_hi_ref + trail_buf) : na,
+     "Trail Anchor (short)", color=color.new(#B8860B, 45), style=plot.style_linebr, linewidth=1)
 
 // ── STATUS ─────────────────────────────────────────────────────────────────
 var table st = na
@@ -594,7 +609,7 @@ if barstate.isconfirmed
 // the first BLOCKED row is what is stopping the strategy trading.
 var table dg = na
 if show_diag and barstate.islast
-    dg := table.new(position.bottom_right, 3, 14, border_width=1,
+    dg := table.new(position.bottom_right, 3, 15, border_width=1,
          frame_color=color.new(#000000, 40), frame_width=1)
     _ok = color.new(#1D9E75, 0)
     _no = color.new(#F23645, 0)
@@ -604,7 +619,7 @@ if show_diag and barstate.islast
     table.cell(dg, 1, 0, "value",      text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(dg, 2, 0, "",           text_color=color.white, bgcolor=_hd, text_size=size.small)
 
-    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Re-entry push", "Order size", "Position", "Bricks formed", "Renko flips", "Trades")
+    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Re-entry push", "Order size", "Position", "Bricks formed", "Renko flips", "Trades", "Trail")
     _val  = array.from(
          str.tostring(array.size(rk_fc)) + (array.size(rk_fc) > 0 ? "" : "  none - fallback"),
          na(rk_box) ? "na - no size yet" : str.tostring(rk_box, format.mintick),
@@ -618,7 +633,8 @@ if show_diag and barstate.islast
          strategy.position_size == 0 ? "flat - can enter" : strategy.position_size > 0 ? "long - holding" : "short - holding",
          str.tostring(dg_bricks),
          str.tostring(dg_flips),
-         str.tostring(strategy.closedtrades) + " closed, " + str.tostring(strategy.opentrades) + " open")
+         str.tostring(strategy.closedtrades) + " closed, " + str.tostring(strategy.opentrades) + " open",
+         not use_trail ? "off" : strategy.position_size == 0 ? "no position" : na(risk_unit) or risk_unit <= 0 ? "-" : ((strategy.position_size > 0 ? close - entry_px : entry_px - close) / risk_unit) < trail_start_r ? "inactive - needs " + str.tostring(trail_start_r, "#.#") + "R" : trail_mode + " @ " + str.tostring(stop_px, format.mintick))
     _pass = array.from(
          array.size(rk_fc) > 0,
          not na(rk_box) and rk_box > 0,
@@ -632,7 +648,8 @@ if show_diag and barstate.islast
          true,
          dg_bricks > 0,
          dg_flips > 0,
-         strategy.closedtrades + strategy.opentrades > 0)
+         strategy.closedtrades + strategy.opentrades > 0,
+         true)
     for _i = 0 to array.size(_lbl) - 1
         bool _p = array.get(_pass, _i)
         table.cell(dg, 0, _i + 1, array.get(_lbl, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
