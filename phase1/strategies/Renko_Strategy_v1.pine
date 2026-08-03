@@ -91,6 +91,7 @@ grp_trade = "━━━ TRADES ━━━"
 allow_longs   = input.bool(true,  "Allow Longs",  group=grp_trade)
 allow_shorts  = input.bool(true,  "Allow Shorts", group=grp_trade)
 close_on_flip = input.bool(true,  "Close On Renko Flip", tooltip="On a flip, close the open trade. With the opposite direction also allowed, the position reverses on the same bar.", group=grp_trade)
+show_diag     = input.bool(true, "Show Diagnostics Panel", tooltip="Shows every gate an entry has to pass, with its live value, so a strategy taking no trades tells you WHICH condition is stopping it instead of leaving you to guess.", group=grp_trade)
 reenter_stop  = input.bool(false, "Re-Enter After Stop", tooltip="OFF (default): one entry per renko swing. Stopped out while the renko is still pointing the same way, it waits for the next turn rather than climbing back in. ON: it re-enters as soon as it is flat and the renko still agrees, which in a choppy stretch can mean a lot of trades in the same direction.", group=grp_trade)
 
 // ── SIZING ─────────────────────────────────────────────────────────────────
@@ -498,13 +499,19 @@ if strategy.position_size < 0 and not na(stop_px) and not na(risk_unit)
 // ── ENTRIES ────────────────────────────────────────────────────────────────
 // One decision per bar, filled at the real bar close. Several bricks inside one
 // bar move the direction and nothing else.
+//
+// Size and quantity are computed at TOP LEVEL, not inside the entry block, so
+// the diagnostics panel can show them even on bars where no entry is attempted.
+// A quantity that rounds to zero is a silent no-trade otherwise.
+float dg_sd  = na(rk_box) ? na : stop_bricks * rk_box
+float dg_qty = na
+if use_risk_size and not na(dg_sd) and dg_sd > 0
+    dg_qty := math.min(strategy.equity * risk_pct / 100.0 / dg_sd,
+                       strategy.equity * max_equity_pct / 100.0 / close)
+
 if strategy.position_size == 0 and not na(rk_box) and rk_box > 0
-    float _sd = stop_bricks * rk_box
-    float _qty = na
-    if use_risk_size and _sd > 0
-        float _risk_cash = strategy.equity * risk_pct / 100.0
-        float _cap       = strategy.equity * max_equity_pct / 100.0
-        _qty := math.min(_risk_cash / _sd, _cap / close)
+    float _sd  = dg_sd
+    float _qty = dg_qty
     if go_long and (na(_qty) or _qty > 0)
         strategy.entry("L", strategy.long, qty = _qty)
         entry_px   := close
@@ -554,3 +561,45 @@ if renko_show_hud and barstate.islast
     table.cell(st, 0, 6, "Costs Set", text_color=color.white, bgcolor=_bg, text_size=size.small)
     _cc = comm_pct > 0 ? color.new(#1D9E75, 0) : color.new(#B8860B, 0)
     table.cell(st, 1, 6, comm_pct > 0 ? "yes" : "NO - results are fiction", text_color=color.white, bgcolor=_cc, text_size=size.small)
+
+// ── DIAGNOSTICS ────────────────────────────────────────────────────────────
+// Every condition an entry must pass, with its live value. Read top to bottom:
+// the first BLOCKED row is what is stopping the strategy trading.
+var table dg = na
+if show_diag and barstate.islast
+    dg := table.new(position.bottom_right, 3, 10, border_width=1,
+         frame_color=color.new(#000000, 40), frame_width=1)
+    _ok = color.new(#1D9E75, 0)
+    _no = color.new(#F23645, 0)
+    _nu = color.new(#1A1A1A, 10)
+    _hd = color.new(#333333, 0)
+    table.cell(dg, 0, 0, "ENTRY GATE", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(dg, 1, 0, "value",      text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(dg, 2, 0, "",           text_color=color.white, bgcolor=_hd, text_size=size.small)
+
+    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Order size", "Position")
+    _val  = array.from(
+         str.tostring(array.size(rk_fc)) + (array.size(rk_fc) > 0 ? "" : "  none - fallback"),
+         na(rk_box) ? "na - no size yet" : str.tostring(rk_box, format.mintick),
+         na(rk_top) ? "na - not anchored" : str.tostring(rk_bot, format.mintick) + " to " + str.tostring(rk_top, format.mintick),
+         rk_dir == 1 ? "UP" : rk_dir == -1 ? "DOWN" : "0 - not established",
+         str.tostring(rk_run) + " of " + str.tostring(renko_confirm) + " needed",
+         traded_dir == 0 ? "no" : traded_dir == 1 ? "yes - long" : "yes - short",
+         in_date ? "yes" : "no",
+         na(dg_qty) ? "strategy default" : str.tostring(dg_qty, "#.####"),
+         strategy.position_size == 0 ? "flat" : strategy.position_size > 0 ? "long" : "short")
+    _pass = array.from(
+         array.size(rk_fc) > 0,
+         not na(rk_box) and rk_box > 0,
+         not na(rk_top),
+         rk_dir != 0,
+         rk_run >= renko_confirm,
+         traded_dir == 0 or reenter_stop,
+         in_date,
+         na(dg_qty) or dg_qty > 0,
+         strategy.position_size == 0)
+    for _i = 0 to array.size(_lbl) - 1
+        bool _p = array.get(_pass, _i)
+        table.cell(dg, 0, _i + 1, array.get(_lbl, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
+        table.cell(dg, 1, _i + 1, array.get(_val, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
+        table.cell(dg, 2, _i + 1, _p ? "ok" : "BLOCKED", text_color=color.white, bgcolor=_p ? _ok : _no, text_size=size.small)
