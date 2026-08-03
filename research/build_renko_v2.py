@@ -656,12 +656,23 @@ if renko_show_hud and barstate.islast
     _cc = comm_pct > 0 ? color.new(#1D9E75, 0) : color.new(#B8860B, 0)
     table.cell(st, 1, 6, comm_pct > 0 ? "yes" : "NO - results are fiction", text_color=color.white, bgcolor=_cc, text_size=size.small)
 
+// ── ACTIVITY COUNTERS ──────────────────────────────────────────────────────
+// Bricks and flips since the chart began. If flips is 0 or 1 the renko is not
+// turning, and a strategy that enters once and holds is behaving correctly -
+// the setting to change is the brick size or the reversal, not the code.
+var int dg_bricks = 0
+var int dg_flips  = 0
+if barstate.isconfirmed
+    dg_bricks := dg_bricks + rk_bricks
+    if rk_dir != rk_dir[1] and rk_dir != 0 and not na(rk_dir[1]) and rk_dir[1] != 0
+        dg_flips := dg_flips + 1
+
 // ── DIAGNOSTICS ────────────────────────────────────────────────────────────
 // Every condition an entry must pass, with its live value. Read top to bottom:
 // the first BLOCKED row is what is stopping the strategy trading.
 var table dg = na
 if show_diag and barstate.islast
-    dg := table.new(position.bottom_right, 3, 10, border_width=1,
+    dg := table.new(position.bottom_right, 3, 13, border_width=1,
          frame_color=color.new(#000000, 40), frame_width=1)
     _ok = color.new(#1D9E75, 0)
     _no = color.new(#F23645, 0)
@@ -671,7 +682,7 @@ if show_diag and barstate.islast
     table.cell(dg, 1, 0, "value",      text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(dg, 2, 0, "",           text_color=color.white, bgcolor=_hd, text_size=size.small)
 
-    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Order size", "Position")
+    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Order size", "Position", "Bricks formed", "Renko flips", "Trades")
     _val  = array.from(
          str.tostring(array.size(rk_fc)) + (array.size(rk_fc) > 0 ? "" : "  none - fallback"),
          na(rk_box) ? "na - no size yet" : str.tostring(rk_box, format.mintick),
@@ -681,7 +692,10 @@ if show_diag and barstate.islast
          traded_dir == 0 ? "no" : traded_dir == 1 ? "yes - long" : "yes - short",
          in_date ? "yes" : "no",
          na(dg_qty) ? "strategy default" : str.tostring(dg_qty, "#.####"),
-         strategy.position_size == 0 ? "flat" : strategy.position_size > 0 ? "long" : "short")
+         strategy.position_size == 0 ? "flat - can enter" : strategy.position_size > 0 ? "long - holding" : "short - holding",
+         str.tostring(dg_bricks),
+         str.tostring(dg_flips),
+         str.tostring(strategy.closedtrades) + " closed, " + str.tostring(strategy.opentrades) + " open")
     _pass = array.from(
          array.size(rk_fc) > 0,
          not na(rk_box) and rk_box > 0,
@@ -691,12 +705,21 @@ if show_diag and barstate.islast
          traded_dir == 0 or reenter_stop,
          in_date,
          na(dg_qty) or dg_qty > 0,
-         strategy.position_size == 0)
+         true,
+         dg_bricks > 0,
+         dg_flips > 0,
+         strategy.closedtrades + strategy.opentrades > 0)
     for _i = 0 to array.size(_lbl) - 1
         bool _p = array.get(_pass, _i)
         table.cell(dg, 0, _i + 1, array.get(_lbl, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
         table.cell(dg, 1, _i + 1, array.get(_val, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
-        table.cell(dg, 2, _i + 1, _p ? "ok" : "BLOCKED", text_color=color.white, bgcolor=_p ? _ok : _no, text_size=size.small)
+        // Rows 0-7 are gates an entry must pass. Rows 8-11 are activity readings:
+        // being in a position is not a fault, so they never read BLOCKED.
+        bool _info = _i >= 8
+        table.cell(dg, 2, _i + 1, _p ? "ok" : _info ? "none yet" : "BLOCKED",
+             text_color=color.white,
+             bgcolor = _p ? _ok : _info ? color.new(#B8860B, 0) : _no,
+             text_size=size.small)
 '''
 
 # ---------------------------------------------------------------------------
