@@ -59,13 +59,25 @@ htf2_tf   = input.timeframe("240", "HTF2 Timeframe", group=grp_htf2)
 htf2_len1 = input.int(4, "HTF2 Stage-1 EMA", minval=1, group=grp_htf2)
 htf2_len2 = input.int(8, "HTF2 Stage-2 EMA", minval=1, group=grp_htf2)
 
-// ── Compute layers (HTF smoothed natively inside request.security) ──────────
-[bO, bH, bL, bC]     = f_sha(base_len1, base_len2, open, high, low, close)
-[h1O, h1H, h1L, h1C] = request.security(syminfo.tickerid, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
-[h2O, h2H, h2L, h2C] = request.security(syminfo.tickerid, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+// ── RAW CANDLE SOURCE ─────────────────────────────────────────
+// Pine's open/high/low/close return whatever the CHART is showing. On a
+// Renko, Heikin-Ashi, Kagi or Line-Break chart those are synthetic values,
+// so the SHA layers would be built from bricks instead of from price and
+// would move every time the chart type changed. Everything below sources
+// from a standard ticker instead, so the layers are identical on any chart
+// type. NOTE: this fixes the SIGNALS only. Orders still fill at whatever
+// price the chart bar reports, so backtests must be run on standard
+// candles regardless — fills on Renko/HA are not real prices.
+tStd = ticker.standard(syminfo.tickerid)
+[rawO, rawH, rawL, rawC] = request.security(tStd, timeframe.period, [open, high, low, close], barmerge.gaps_off, barmerge.lookahead_off)
 
-day_open   = request.security(syminfo.tickerid, "1D", open,     barmerge.gaps_off, barmerge.lookahead_off)
-day_pclose = request.security(syminfo.tickerid, "1D", close[1], barmerge.gaps_off, barmerge.lookahead_off)
+// ── Compute layers (HTF smoothed natively inside request.security) ──────────
+[bO, bH, bL, bC]     = f_sha(base_len1, base_len2, rawO, rawH, rawL, rawC)
+[h1O, h1H, h1L, h1C] = request.security(tStd, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+[h2O, h2H, h2L, h2C] = request.security(tStd, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+
+day_open   = request.security(tStd, "1D", open,     barmerge.gaps_off, barmerge.lookahead_off)
+day_pclose = request.security(tStd, "1D", close[1], barmerge.gaps_off, barmerge.lookahead_off)
 gap_pct    = not na(day_open) and not na(day_pclose) and day_pclose != 0 ? math.abs(day_open - day_pclose) / day_pclose * 100.0 : 0.0
 
 base_ready = not na(bO)  and not na(bC)
@@ -118,28 +130,28 @@ sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger C
 sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
 sl_buffer_pct = input.float(0.10, "Stop Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the anchor the stop sits, as a percentage of price. 0.10 means one tenth of one percent. Percent rather than a fixed amount so the same setting is meaningful on any instrument.", group=grp_sl)
-sl_buffer_raw = close * sl_buffer_pct / 100
+sl_buffer_raw = rawC * sl_buffer_pct / 100
 min_stop_pct = input.float(0.00, "Min Stop Distance (%)", minval=0.0, step=0.01, tooltip="Floor on stop distance, as a percentage of price. The stop is never placed closer to entry than this. 0 = off.", group=grp_sl)
-min_stop_raw = close * min_stop_pct / 100
+min_stop_raw = rawC * min_stop_pct / 100
 use_hard_stop = input.bool(false, "Hard Stop (intra-bar)", tooltip="OFF: stop-hit alerts fire only when a candle CLOSES beyond the stop (matches the strategy default).\nON: fires the moment price touches the stop intra-bar.", group=grp_sl)
 
-body_low  = math.min(open, close)
-body_high = math.max(open, close)
+body_low  = math.min(rawO, rawC)
+body_high = math.max(rawO, rawC)
 
-swing_low_wick  = ta.lowest(low,  sl_lookback)
-swing_high_wick = ta.highest(high, sl_lookback)
+swing_low_wick  = ta.lowest(rawL,  sl_lookback)
+swing_high_wick = ta.highest(rawH, sl_lookback)
 swing_low_body  = ta.lowest(body_low,  sl_lookback)
 swing_high_body = ta.highest(body_high, sl_lookback)
 
 sl_use_body   = sl_price_basis == "Body (open/close)"
-trig_low_lvl  = sl_use_body ? body_low  : low
-trig_high_lvl = sl_use_body ? body_high : high
+trig_low_lvl  = sl_use_body ? body_low  : rawL
+trig_high_lvl = sl_use_body ? body_high : rawH
 sw_low_lvl    = sl_use_body ? swing_low_body  : swing_low_wick
 sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
 
 // ── LAST-BAR-BEYOND ANCHORS (mirrors the strategy verbatim) ────────────────
-px_low_test  = sl_use_body ? body_low  : low
-px_high_test = sl_use_body ? body_high : high
+px_low_test  = sl_use_body ? body_low  : rawL
+px_high_test = sl_use_body ? body_high : rawH
 ha_low_test  = sl_use_body ? math.min(bO, bC) : bL
 ha_high_test = sl_use_body ? math.max(bO, bC) : bH
 h1_bot_edge  = sl_use_body ? sha_bot_1 : h1L
@@ -168,10 +180,10 @@ if not na(h1_top_edge) and ha_high_test > h1_top_edge
 if not na(h2_top_edge) and ha_high_test > h2_top_edge
     xh_ha_h2 := ha_high_test
 
-d_h1_bot = na(h1_bot_edge) ? 1e18 : math.abs(close - h1_bot_edge)
-d_h2_bot = na(h2_bot_edge) ? 1e18 : math.abs(close - h2_bot_edge)
-d_h1_top = na(h1_top_edge) ? 1e18 : math.abs(close - h1_top_edge)
-d_h2_top = na(h2_top_edge) ? 1e18 : math.abs(close - h2_top_edge)
+d_h1_bot = na(h1_bot_edge) ? 1e18 : math.abs(rawC - h1_bot_edge)
+d_h2_bot = na(h2_bot_edge) ? 1e18 : math.abs(rawC - h2_bot_edge)
+d_h1_top = na(h1_top_edge) ? 1e18 : math.abs(rawC - h1_top_edge)
+d_h2_top = na(h2_top_edge) ? 1e18 : math.abs(rawC - h2_top_edge)
 near_is_h1_long  = d_h1_bot <= d_h2_bot
 near_is_h1_short = d_h1_top <= d_h2_top
 
@@ -192,7 +204,7 @@ f_long_stop() =>
       :    sl_mode == "Last SHA Bar Beyond Furthest SHA"   ? (na(_lchF) ? sw_low_lvl : _lchF)
       :                                                      sw_low_lvl
     _s = _lvl - sl_buffer_raw
-    min_stop_raw > 0 ? math.min(_s, close - min_stop_raw) : _s
+    min_stop_raw > 0 ? math.min(_s, rawC - min_stop_raw) : _s
 
 f_short_stop() =>
     _near = near_is_h1_short
@@ -211,7 +223,7 @@ f_short_stop() =>
       :    sl_mode == "Last SHA Bar Beyond Furthest SHA"   ? (na(_hchF) ? sw_high_lvl : _hchF)
       :                                                      sw_high_lvl
     _s = _lvl + sl_buffer_raw
-    min_stop_raw > 0 ? math.max(_s, close + min_stop_raw) : _s
+    min_stop_raw > 0 ? math.max(_s, rawC + min_stop_raw) : _s
 
 // ============================================================================
 // ⑥ TRADE MANAGEMENT
@@ -220,14 +232,14 @@ grp_mgmt = "⑥ ━━━ TRADE MANAGEMENT ━━━"
 use_be = input.bool(true, "Move Stop To Break-Even", group=grp_mgmt)
 be_trigger_r = input.float(1.0, "  Break-Even Trigger (R)", minval=0.1, step=0.1, group=grp_mgmt)
 be_offset_pct = input.float(0.00, "  Break-Even Offset (%)", minval=0.0, step=0.01, tooltip="How far beyond entry the break-even stop sits, as a percentage of price. 0 = exactly at entry.", group=grp_mgmt)
-be_offset_raw = close * be_offset_pct / 100
+be_offset_raw = rawC * be_offset_pct / 100
 use_trail = input.bool(true, "Trailing Stop", group=grp_mgmt)
 trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body"], group=grp_mgmt)
 trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], group=grp_mgmt)
 trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
 trail_buffer_pct = input.float(0.10, "  Trail Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the trail anchor the trailing stop sits, as a percentage of price.", group=grp_mgmt)
-trail_buffer_raw = close * trail_buffer_pct / 100
+trail_buffer_raw = rawC * trail_buffer_pct / 100
 reverse_on_stop = input.bool(false, "Reverse On Stop", tooltip="On a stop hit, immediately flip to the opposite side IF that side is fully aligned at that moment, its direction is allowed, and the gap filter passes.", group=grp_mgmt)
 align_confirm_bars = input.int(1, "  Break Must Hold (bars)", minval=1, maxval=20, group=grp_mgmt)
 use_sha_break = input.bool(false, "Exit: Price Back Through SHA", group=grp_mgmt)
@@ -244,9 +256,9 @@ use_cross_exit = input.bool(false, "Exit: Chart SHA Crosses Mid SHA", group=grp_
 use_align_exit = input.bool(true, "Alignment-Break Exit", group=grp_mgmt)
 align_break_level = input.string("HTF1 Flips", "  Break Trigger", options=["Base Flips","HTF1 Flips","HTF2 Flips","Any Layer Flips","All Layers Flip"], group=grp_mgmt)
 
-trail_sw_low_wick  = ta.lowest(low,  trail_lookback)
+trail_sw_low_wick  = ta.lowest(rawL,  trail_lookback)
 trail_sw_low_body  = ta.lowest(body_low,  trail_lookback)
-trail_sw_high_wick = ta.highest(high, trail_lookback)
+trail_sw_high_wick = ta.highest(rawH, trail_lookback)
 trail_sw_high_body = ta.highest(body_high, trail_lookback)
 trail_use_body = trail_price_basis == "Body (open/close)"
 trail_sw_low   = trail_use_body ? trail_sw_low_body  : trail_sw_low_wick
@@ -279,6 +291,26 @@ f_align_broken_short() =>
 // ============================================================================
 // ⑦ TRADE STATE  (hypothetical position, so exit and stop alerts can fire)
 // ============================================================================
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DAILY CUTOFF  (mirrors the strategy)
+// ═════════════════════════════════════════════════════════════════════════════
+// Closes the tracked trade at a set time each day and stops new entries for
+// the rest of that day, so the alerts agree with the strategy. The clock is
+// EXCHANGE time, so it follows daylight saving on its own and is right for
+// whichever market the instrument trades on. On a 24-hour instrument set it to
+// whichever close matters (e.g. the NY close).
+grp_eod = "① ━━━ DAILY CUTOFF ━━━"
+use_eod    = input.bool(false, "Daily Cutoff", tooltip="Close the tracked trade at the cutoff time and take no new trades until the next day. Off by default.", group=grp_eod)
+eod_hour   = input.int(15, "  Cutoff Hour (exchange time, 0-23)", minval=0, maxval=23, tooltip="24-hour clock in the exchange's own time zone. 15 = 3 PM. For a US stock, 15:55 is five minutes before the close.", group=grp_eod)
+eod_minute = input.int(55, "  Cutoff Minute", minval=0, maxval=59, group=grp_eod)
+eod_block_entries = input.bool(true, "  Block New Entries After Cutoff", tooltip="Stops new trades opening in the minutes after the cutoff only to be closed straight away.", group=grp_eod)
+
+_now_min = hour(time, syminfo.timezone) * 60 + minute(time, syminfo.timezone)
+_eod_min = eod_hour * 60 + eod_minute
+past_cutoff = use_eod and _now_min >= _eod_min
+eod_entry_block = past_cutoff and eod_block_entries
+
 var string pos_dir     = "flat"
 var float  entry_price = na
 var float  stop_level  = na
@@ -298,7 +330,7 @@ stopped_from   = ""
 
 // ── manage the open hypothetical position first ────────────────────────────
 if pos_dir == "long" and not na(stop_level)
-    _r = risk_unit > 0 ? (close - entry_price) / risk_unit : 0.0
+    _r = risk_unit > 0 ? (rawC - entry_price) / risk_unit : 0.0
     if use_be and not be_moved and _r >= be_trigger_r
         stop_level := math.max(stop_level, entry_price + be_offset_raw)
         be_moved := true
@@ -307,14 +339,14 @@ if pos_dir == "long" and not na(stop_level)
     peak_r := math.max(peak_r, _r)
     bad_bars := f_align_broken_long() ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _other = _align_out or (use_sha_break and close < shab_bot) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_dn)
-    _stop_hit  = use_hard_stop ? (low <= stop_level) : (close <= stop_level)
+    _other = (_align_out or (use_sha_break and rawC < shab_bot) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_dn)) or past_cutoff
+    _stop_hit  = use_hard_stop ? (rawL <= stop_level) : (rawC <= stop_level)
     if _stop_hit or _other
         ev_stop_hit    := _stop_hit
         ev_align_break := _other and not _stop_hit
         if _stop_hit
             stopped_from := "long"
-        rearm_high := high
+        rearm_high := rawH
         rearm_low := na
         pos_dir := "flat"
         entry_price := na
@@ -325,7 +357,7 @@ if pos_dir == "long" and not na(stop_level)
         peak_r := 0.0
 
 else if pos_dir == "short" and not na(stop_level)
-    _r = risk_unit > 0 ? (entry_price - close) / risk_unit : 0.0
+    _r = risk_unit > 0 ? (entry_price - rawC) / risk_unit : 0.0
     if use_be and not be_moved and _r >= be_trigger_r
         stop_level := math.min(stop_level, entry_price - be_offset_raw)
         be_moved := true
@@ -334,14 +366,14 @@ else if pos_dir == "short" and not na(stop_level)
     peak_r := math.max(peak_r, _r)
     bad_bars := f_align_broken_short() ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _other = _align_out or (use_sha_break and close > shab_top) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_up)
-    _stop_hit  = use_hard_stop ? (high >= stop_level) : (close >= stop_level)
+    _other = (_align_out or (use_sha_break and rawC > shab_top) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_up)) or past_cutoff
+    _stop_hit  = use_hard_stop ? (rawH >= stop_level) : (rawC >= stop_level)
     if _stop_hit or _other
         ev_stop_hit    := _stop_hit
         ev_align_break := _other and not _stop_hit
         if _stop_hit
             stopped_from := "short"
-        rearm_low := low
+        rearm_low := rawL
         rearm_high := na
         pos_dir := "flat"
         entry_price := na
@@ -356,21 +388,21 @@ if reentry_expires and not na(rearm_high) and not all_bull
     rearm_high := na
 if reentry_expires and not na(rearm_low) and not all_bear
     rearm_low := na
-re_long  = use_reentry and not na(rearm_high) and close > rearm_high and (not reentry_needs_base or all_bull)
-re_short = use_reentry and not na(rearm_low)  and close < rearm_low  and (not reentry_needs_base or all_bear)
+re_long  = use_reentry and not na(rearm_high) and rawC > rearm_high and (not reentry_needs_base or all_bull)
+re_short = use_reentry and not na(rearm_low)  and rawC < rearm_low  and (not reentry_needs_base or all_bear)
 
-long_signal  = allow_longs  and (fa_bull_raw or re_long)  and not gap_block
-short_signal = allow_shorts and (fa_bear_raw or re_short) and not gap_block
-rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and not gap_block
-rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and not gap_block
+long_signal  = allow_longs  and (fa_bull_raw or re_long)  and not gap_block and not eod_entry_block
+short_signal = allow_shorts and (fa_bear_raw or re_short) and not gap_block and not eod_entry_block
+rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and not gap_block and not eod_entry_block
+rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and not gap_block and not eod_entry_block
 
 if pos_dir == "flat" and (long_signal or rev_long)
     _s = f_long_stop()
-    if _s < close
+    if _s < rawC
         pos_dir := "long"
-        entry_price := close
+        entry_price := rawC
         stop_level := _s
-        risk_unit := close - _s
+        risk_unit := rawC - _s
         be_moved := false
         bad_bars := 0
         peak_r := 0.0
@@ -381,11 +413,11 @@ if pos_dir == "flat" and (long_signal or rev_long)
 
 else if pos_dir == "flat" and (short_signal or rev_short)
     _s = f_short_stop()
-    if _s > close
+    if _s > rawC
         pos_dir := "short"
-        entry_price := close
+        entry_price := rawC
         stop_level := _s
-        risk_unit := _s - close
+        risk_unit := _s - rawC
         be_moved := false
         bad_bars := 0
         peak_r := 0.0
