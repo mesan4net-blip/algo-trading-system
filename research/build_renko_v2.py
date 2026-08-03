@@ -447,6 +447,14 @@ use_time_stop  = input.bool(false, "Exit: Time Stop", tooltip="Close a trade tha
 time_stop_bars = input.int(50, "  After (bars)", minval=1, maxval=1000, group=grp_mgmt)
 time_stop_min_r= input.float(0.5, "  Unless Beyond (R)", minval=0.0, step=0.1, tooltip="A trade past this much profit is left alone.", group=grp_mgmt)
 
+// ── DAILY SESSION CUT-OFF ──────────────────────────────────────────────────
+grp_cut = "━━━ DAILY CUT-OFF ━━━"
+use_cutoff  = input.bool(true, "Close Everything At A Fixed Time Daily", tooltip="Flattens any open position at the cut-off, whatever its state - no target, no trail, no exception. Runs on the first bar that CLOSES at or after the cut-off, so on a chart whose bars do not land exactly on it the exit is the first bar to finish past it. On a 1-hour chart a 12:45 cut-off therefore fires at 13:00.", group=grp_cut)
+cutoff_hour = input.int(12, "  Hour (24h)", minval=0, maxval=23, group=grp_cut)
+cutoff_min  = input.int(45, "  Minute", minval=0, maxval=59, group=grp_cut)
+cutoff_tz   = input.string("America/Los_Angeles", "  Timezone", options=["America/Los_Angeles", "America/New_York", "America/Chicago", "Europe/London", "Asia/Kolkata", "Asia/Tokyo", "UTC", "UTC-8", "UTC-5"], tooltip="America/Los_Angeles follows Pacific time and shifts with daylight saving, so the cut-off stays at 12:45 local all year. Pick UTC-8 instead only if you want a fixed offset that does not move - that lands at 12:45 in winter and 11:45 in summer.", group=grp_cut)
+cutoff_block= input.bool(true, "  Block New Entries Until Next Day", tooltip="ON: once flattened, nothing new opens until the clock passes midnight in the chosen timezone, so the cut-off is not undone a bar later. OFF: it may re-enter straight away, which usually defeats the point of having a cut-off.", group=grp_cut)
+
 grp_date = "━━━ DATE RANGE ━━━"
 use_dates     = input.bool(false, "Limit Date Range", group=grp_date)
 date_from     = input.time(timestamp("01 Jan 2020 00:00"), "From", group=grp_date)
@@ -485,6 +493,15 @@ armed_short = rk_ok_short and rk_dir == -1
 
 go_long  = armed_long  and allow_longs  and in_date and (traded_dir != 1  or reenter_stop)
 go_short = armed_short and allow_shorts and in_date and (traded_dir != -1 or reenter_stop)
+
+// ── DAILY CUT-OFF ──────────────────────────────────────────────────────────
+// Measured on the bar's CLOSING time, not its opening time. A bar that opens at
+// 12:30 and closes at 13:00 has already carried the position through the
+// cut-off, so it is the close that has to be tested.
+cut_mins  = cutoff_hour * 60 + cutoff_min
+bar_mins  = hour(time_close, cutoff_tz) * 60 + minute(time_close, cutoff_tz)
+past_cut  = use_cutoff and bar_mins >= cut_mins
+force_flat = past_cut
 
 // ── TRADE STATE ────────────────────────────────────────────────────────────
 // risk_unit is the entry-to-initial-stop distance and is FROZEN at entry. Every
@@ -610,6 +627,17 @@ if strategy.position_size < 0 and not na(stop_px) and not na(risk_unit)
         exited_now := true
         had_exit   := true
 
+// ── FORCED FLAT AT THE CUT-OFF ─────────────────────────────────────────────
+// Unconditional. Nothing above can veto it, and it ignores target, trail,
+// break-even and the renko alike. Skipped only if this bar already exited, so
+// the same bar cannot close the position twice.
+if force_flat and strategy.position_size != 0 and not exited_now
+    strategy.close_all(comment="Cut-Off")
+    stop_px    := na
+    peak_r     := 0.0
+    exited_now := true
+    had_exit   := true
+
 // ── ENTRIES ────────────────────────────────────────────────────────────────
 // One decision per bar, filled at the real bar close. Several bricks inside one
 // bar move the direction and nothing else.
@@ -628,7 +656,9 @@ if use_risk_size and not na(dg_sd) and dg_sd > 0
 confirm_long  = not use_reentry_confirm or not had_exit or close > high[1]
 confirm_short = not use_reentry_confirm or not had_exit or close < low[1]
 
-if (strategy.position_size == 0 or exited_now) and not na(rk_box) and rk_box > 0
+cut_blocks = cutoff_block and past_cut
+
+if (strategy.position_size == 0 or exited_now) and not cut_blocks and not na(rk_box) and rk_box > 0
     float _sd  = dg_sd
     float _qty = dg_qty
     if go_long and confirm_long and (na(_qty) or _qty > 0)
@@ -705,7 +735,7 @@ if barstate.isconfirmed
 // the first BLOCKED row is what is stopping the strategy trading.
 var table dg = na
 if show_diag and barstate.islast
-    dg := table.new(position.bottom_right, 3, 15, border_width=1,
+    dg := table.new(position.bottom_right, 3, 16, border_width=1,
          frame_color=color.new(#000000, 40), frame_width=1)
     _ok = color.new(#1D9E75, 0)
     _no = color.new(#F23645, 0)
@@ -715,7 +745,7 @@ if show_diag and barstate.islast
     table.cell(dg, 1, 0, "value",      text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(dg, 2, 0, "",           text_color=color.white, bgcolor=_hd, text_size=size.small)
 
-    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Re-entry push", "Order size", "Position", "Bricks formed", "Renko flips", "Trades", "Trail")
+    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Re-entry push", "Order size", "Position", "Daily cut-off", "Bricks formed", "Renko flips", "Trades", "Trail")
     _val  = array.from(
          str.tostring(array.size(rk_fc)) + (array.size(rk_fc) > 0 ? "" : "  none - fallback"),
          na(rk_box) ? "na - no size yet" : str.tostring(rk_box, format.mintick),
@@ -725,6 +755,7 @@ if show_diag and barstate.islast
          traded_dir == 0 ? "no" : traded_dir == 1 ? "yes - long" : "yes - short",
          in_date ? "yes" : "no",
          not use_reentry_confirm ? "off" : not had_exit ? "first entry - not needed" : rk_dir == 1 ? (confirm_long ? "yes - closed above prev high" : "waiting - need close > " + str.tostring(high[1], format.mintick)) : rk_dir == -1 ? (confirm_short ? "yes - closed below prev low" : "waiting - need close < " + str.tostring(low[1], format.mintick)) : "-",
+         not use_cutoff ? "off" : str.tostring(cutoff_hour) + ":" + (cutoff_min < 10 ? "0" : "") + str.tostring(cutoff_min) + " " + cutoff_tz + (past_cut ? "  PAST - flat until midnight" : "  before"),
          na(dg_qty) ? "strategy default" : str.tostring(dg_qty, "#.####"),
          strategy.position_size == 0 ? "flat - can enter" : strategy.position_size > 0 ? "long - holding" : "short - holding",
          str.tostring(dg_bricks),
@@ -740,6 +771,7 @@ if show_diag and barstate.islast
          traded_dir == 0 or reenter_stop,
          in_date,
          rk_dir == 1 ? confirm_long : rk_dir == -1 ? confirm_short : true,
+         not cut_blocks,
          na(dg_qty) or dg_qty > 0,
          true,
          dg_bricks > 0,
@@ -750,9 +782,9 @@ if show_diag and barstate.islast
         bool _p = array.get(_pass, _i)
         table.cell(dg, 0, _i + 1, array.get(_lbl, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
         table.cell(dg, 1, _i + 1, array.get(_val, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
-        // Rows 0-8 are gates an entry must pass. Rows 9-12 are activity readings:
+        // Rows 0-9 are gates an entry must pass. Rows 10-13 are activity readings:
         // being in a position is not a fault, so they never read BLOCKED.
-        bool _info = _i >= 9
+        bool _info = _i >= 10
         table.cell(dg, 2, _i + 1, _p ? "ok" : _info ? "none yet" : "BLOCKED",
              text_color=color.white,
              bgcolor = _p ? _ok : _info ? color.new(#B8860B, 0) : _no,
