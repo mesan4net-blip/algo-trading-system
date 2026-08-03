@@ -359,6 +359,24 @@ date_start = input.time(timestamp("2025-01-01 00:00"), "Start", group=grp_date)
 date_end   = input.time(timestamp("2026-12-31 23:59"), "End", group=grp_date)
 in_date = not use_date or (time >= date_start and time <= date_end)
 
+// ── DAILY CUTOFF ───────────────────────────────────────────────
+// Closes any open trade at a set time each day and stops new entries for the
+// rest of that day, so nothing is carried overnight. The clock is EXCHANGE
+// time, so it follows daylight saving on its own and is right for whichever
+// market the instrument trades on. On a 24-hour instrument there is no session
+// close, so set the time to whichever close matters (e.g. the NY close).
+use_eod    = input.bool(false, "Daily Cutoff", tooltip="Close any open trade at the cutoff time and take no new trades until the next day. Off by default.", group=grp_date)
+eod_hour   = input.int(15, "  Cutoff Hour (exchange time, 0-23)", minval=0, maxval=23, tooltip="24-hour clock in the exchange's own time zone. 15 = 3 PM. For a US stock, 15:55 is five minutes before the close.", group=grp_date)
+eod_minute = input.int(55, "  Cutoff Minute", minval=0, maxval=59, group=grp_date)
+eod_block_entries = input.bool(true, "  Block New Entries After Cutoff", tooltip="Stops new trades opening in the minutes after the cutoff only to be closed straight away. Leave on unless you specifically want late entries.", group=grp_date)
+
+// Minutes since midnight, exchange time, compared against the cutoff.
+_now_min = hour(time, syminfo.timezone) * 60 + minute(time, syminfo.timezone)
+_eod_min = eod_hour * 60 + eod_minute
+past_cutoff = use_eod and _now_min >= _eod_min
+eod_entry_block = past_cutoff and eod_block_entries
+
+
 // ============================================================================
 // ⑧ DISPLAY
 // ============================================================================
@@ -398,8 +416,8 @@ re_short = use_reentry and not na(rearm_low)  and close < rearm_low  and (not re
 // Gap skip: block only the entry that fires on a gapped daily open (not the whole day).
 is_new_day = ta.change(time("1D")) != 0
 gap_block  = gap_thresh > 0 and is_new_day and gap_pct > gap_thresh
-long_signal  = allow_longs  and (fa_bull_raw or re_long)  and in_date and not gap_block
-short_signal = allow_shorts and (fa_bear_raw or re_short) and in_date and not gap_block
+long_signal  = allow_longs  and (fa_bull_raw or re_long)  and in_date and not gap_block and not eod_entry_block
+short_signal = allow_shorts and (fa_bear_raw or re_short) and in_date and not gap_block and not eod_entry_block
 
 // Per-bar event flags (for markers)
 did_exit  = false
@@ -475,12 +493,13 @@ if pos_dir == "long" and not na(stop_level)
     _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
     _cross_out = use_cross_exit and cross_dn
-    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
+    _eod_out   = past_cutoff
+    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
     _stop_hit  = (not use_hard_stop) and (close <= stop_level)
     if use_hard_stop and not _other_out
         strategy.exit("FA-stop", from_entry="FA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
-        _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
+        _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
         did_exit := true
         exit_reason := _stop_hit ? "STOP" : "EXIT"
@@ -524,12 +543,13 @@ else if pos_dir == "short" and not na(stop_level)
     _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
     _cross_out = use_cross_exit and cross_up
-    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out
+    _eod_out   = past_cutoff
+    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
     _stop_hit  = (not use_hard_stop) and (close >= stop_level)
     if use_hard_stop and not _other_out
         strategy.exit("FA-stop", from_entry="FA", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
-        _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : "SHA Cross"
+        _why = _stop_hit ? "Stop" : _align_out ? "Align Break" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
         did_exit := true
         exit_reason := _stop_hit ? "STOP" : "EXIT"
@@ -550,8 +570,8 @@ else if pos_dir == "short" and not na(stop_level)
 // ── REVERSE ON STOP ────────────────────────────────────────────────────────
 // Flip only if the opposite side is FULLY ALIGNED at this moment, its direction
 // is permitted, and the gap filter passes. It does not require a fresh signal.
-rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and in_date and not gap_block
-rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and in_date and not gap_block
+rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and in_date and not gap_block and not eod_entry_block
+rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and in_date and not gap_block and not eod_entry_block
 
 // ───────────────────────────────── ENTRIES ────────────────────────────────
 // Only when flat (possibly just made flat above → same-bar flip).
