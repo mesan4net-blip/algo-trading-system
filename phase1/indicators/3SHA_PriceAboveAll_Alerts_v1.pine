@@ -216,6 +216,26 @@ d_h2_top = na(h2_top_edge) ? 1e18 : math.abs(rawC - h2_top_edge)
 near_is_h1_long  = d_h1_bot <= d_h2_bot
 near_is_h1_short = d_h1_top <= d_h2_top
 
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DAILY CUTOFF  (mirrors the strategy)
+// ═════════════════════════════════════════════════════════════════════════════
+// Closes the tracked trade at a set time each day and stops new entries for
+// the rest of that day, so the alerts agree with the strategy. The clock is
+// EXCHANGE time, so it follows daylight saving on its own and is right for
+// whichever market the instrument trades on. On a 24-hour instrument set it to
+// whichever close matters (e.g. the NY close).
+grp_eod = "① ━━━ DAILY CUTOFF ━━━"
+use_eod    = input.bool(false, "Daily Cutoff", tooltip="Close the tracked trade at the cutoff time and take no new trades until the next day. Off by default.", group=grp_eod)
+eod_hour   = input.int(15, "  Cutoff Hour (exchange time, 0-23)", minval=0, maxval=23, tooltip="24-hour clock in the exchange's own time zone. 15 = 3 PM. For a US stock, 15:55 is five minutes before the close.", group=grp_eod)
+eod_minute = input.int(55, "  Cutoff Minute", minval=0, maxval=59, group=grp_eod)
+eod_block_entries = input.bool(true, "  Block New Entries After Cutoff", tooltip="Stops new trades opening in the minutes after the cutoff only to be closed straight away.", group=grp_eod)
+
+_now_min = hour(time, syminfo.timezone) * 60 + minute(time, syminfo.timezone)
+_eod_min = eod_hour * 60 + eod_minute
+past_cutoff = use_eod and _now_min >= _eod_min
+eod_entry_block = past_cutoff and eod_block_entries
+
 // ============================================================================
 // TRADE STATE  (declared here — eligibility, ranking and the trail all read
 // pos_dir before the management block runs)
@@ -430,7 +450,7 @@ if pos_dir == "long" and not na(stop_level)
     peak_r := math.max(peak_r, _r)
     bad_bars := align_broken_long ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _other = _align_out or (use_sha_break and rawC < shab_bot) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_dn)
+    _other = (_align_out or (use_sha_break and rawC < shab_bot) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_dn)) or past_cutoff
     _stop_hit  = use_hard_stop ? (rawL <= stop_level) : (rawC <= stop_level)
     if _stop_hit or _other
         ev_stop_hit    := _stop_hit
@@ -463,7 +483,7 @@ else if pos_dir == "short" and not na(stop_level)
     peak_r := math.max(peak_r, _r)
     bad_bars := align_broken_short ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _other = _align_out or (use_sha_break and rawC > shab_top) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_up)
+    _other = (_align_out or (use_sha_break and rawC > shab_top) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_up)) or past_cutoff
     _stop_hit  = use_hard_stop ? (rawH >= stop_level) : (rawC >= stop_level)
     if _stop_hit or _other
         ev_stop_hit    := _stop_hit
@@ -494,10 +514,10 @@ if reentry_expires and not na(rearm_low) and not all_bear
 re_long  = use_reentry and not na(rearm_high) and rawC > rearm_high and (not reentry_needs_base or all_bull)
 re_short = use_reentry and not na(rearm_low)  and rawC < rearm_low  and (not reentry_needs_base or all_bear)
 
-long_signal  = allow_longs  and (pa_bull_raw or re_long)  and not gap_block
-short_signal = allow_shorts and (pa_bear_raw or re_short) and not gap_block
-rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and not gap_block
-rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and not gap_block
+long_signal  = allow_longs  and (pa_bull_raw or re_long)  and not gap_block and not eod_entry_block
+short_signal = allow_shorts and (pa_bear_raw or re_short) and not gap_block and not eod_entry_block
+rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and not gap_block and not eod_entry_block
+rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and not gap_block and not eod_entry_block
 
 if pos_dir == "flat" and (long_signal or rev_long)
     _s = f_long_stop(ik_near_L, ik_mid_L, ik_far_L)
