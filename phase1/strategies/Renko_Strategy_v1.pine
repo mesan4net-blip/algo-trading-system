@@ -92,6 +92,7 @@ allow_longs   = input.bool(true,  "Allow Longs",  group=grp_trade)
 allow_shorts  = input.bool(true,  "Allow Shorts", group=grp_trade)
 close_on_flip = input.bool(true,  "Close On Renko Flip", tooltip="On a flip, close the open trade. With the opposite direction also allowed, the position reverses on the same bar.", group=grp_trade)
 show_diag     = input.bool(true, "Show Diagnostics Panel", tooltip="Shows every gate an entry has to pass, with its live value, so a strategy taking no trades tells you WHICH condition is stopping it instead of leaving you to guess.", group=grp_trade)
+use_reentry_confirm = input.bool(true, "Confirm Re-Entry With A Push", tooltip="Applies to entries that follow an exit, not the first entry of the chart. A long then needs the bar to CLOSE above the previous bar's high, and a short to close below the previous bar's low - price actually pushing, not merely the renko still pointing that way. It can fire on the exit bar itself if that bar already closes beyond.", group=grp_trade)
 reenter_stop  = input.bool(false, "Re-Enter After Stop", tooltip="OFF (default): one entry per renko swing. Stopped out while the renko is still pointing the same way, it waits for the next turn rather than climbing back in. ON: it re-enters as soon as it is flat and the renko still agrees, which in a choppy stretch can mean a lot of trades in the same direction.", group=grp_trade)
 
 // ── SIZING ─────────────────────────────────────────────────────────────────
@@ -402,6 +403,14 @@ var bool  be_moved  = false
 var bool  tp1_taken = false
 var float peak_r    = 0.0
 
+// Re-entry confirmation. had_exit latches on the first exit and stays set, so
+// the very first entry of the chart is unconfirmed and every later one is not.
+// exited_now lets an exit and a fresh entry share a bar: strategy.position_size
+// does not update until the next bar, so without it the entry block would think
+// the position was still open and skip the bar entirely.
+var bool  had_exit   = false
+bool      exited_now = false
+
 // Swing anchor for the trail, same construction the 3SHA strategies use.
 trail_lo_ref = trail_price_basis == "Wick (high/low)" ? ta.lowest(low,  trail_lookback) : ta.lowest(math.min(open, close),  trail_lookback)
 trail_hi_ref = trail_price_basis == "Wick (high/low)" ? ta.highest(high, trail_lookback) : ta.highest(math.max(open, close), trail_lookback)
@@ -452,8 +461,10 @@ if strategy.position_size > 0 and not na(stop_px) and not na(risk_unit)
         strategy.exit("L-stop", from_entry="L", stop=stop_px)
     if _stop_hit or _other
         strategy.close("L", comment = _stop_hit ? "Stop" : _flip_out ? "Flip" : _tgt_out ? "Target" : _give_out ? "Give-Back" : "Time")
-        stop_px := na
-        peak_r  := 0.0
+        stop_px    := na
+        peak_r     := 0.0
+        exited_now := true
+        had_exit   := true
 
 // ── SHORT MANAGEMENT ───────────────────────────────────────────────────────
 if strategy.position_size < 0 and not na(stop_px) and not na(risk_unit)
@@ -493,8 +504,10 @@ if strategy.position_size < 0 and not na(stop_px) and not na(risk_unit)
         strategy.exit("S-stop", from_entry="S", stop=stop_px)
     if _stop_hit or _other
         strategy.close("S", comment = _stop_hit ? "Stop" : _flip_out ? "Flip" : _tgt_out ? "Target" : _give_out ? "Give-Back" : "Time")
-        stop_px := na
-        peak_r  := 0.0
+        stop_px    := na
+        peak_r     := 0.0
+        exited_now := true
+        had_exit   := true
 
 // ── ENTRIES ────────────────────────────────────────────────────────────────
 // One decision per bar, filled at the real bar close. Several bricks inside one
@@ -509,10 +522,15 @@ if use_risk_size and not na(dg_sd) and dg_sd > 0
     dg_qty := math.min(strategy.equity * risk_pct / 100.0 / dg_sd,
                        strategy.equity * max_equity_pct / 100.0 / close)
 
-if strategy.position_size == 0 and not na(rk_box) and rk_box > 0
+// The push test. Measured on the chart's own bars, which is also what fills
+// use - this strategy is meant to be run on ordinary candles.
+confirm_long  = not use_reentry_confirm or not had_exit or close > high[1]
+confirm_short = not use_reentry_confirm or not had_exit or close < low[1]
+
+if (strategy.position_size == 0 or exited_now) and not na(rk_box) and rk_box > 0
     float _sd  = dg_sd
     float _qty = dg_qty
-    if go_long and (na(_qty) or _qty > 0)
+    if go_long and confirm_long and (na(_qty) or _qty > 0)
         strategy.entry("L", strategy.long, qty = _qty)
         entry_px   := close
         stop_px    := close - _sd
@@ -522,7 +540,7 @@ if strategy.position_size == 0 and not na(rk_box) and rk_box > 0
         be_moved   := false
         tp1_taken  := false
         peak_r     := 0.0
-    else if go_short and (na(_qty) or _qty > 0)
+    else if go_short and confirm_short and (na(_qty) or _qty > 0)
         strategy.entry("S", strategy.short, qty = _qty)
         entry_px   := close
         stop_px    := close + _sd
@@ -578,7 +596,7 @@ if barstate.isconfirmed
 // the first BLOCKED row is what is stopping the strategy trading.
 var table dg = na
 if show_diag and barstate.islast
-    dg := table.new(position.bottom_right, 3, 13, border_width=1,
+    dg := table.new(position.bottom_right, 3, 14, border_width=1,
          frame_color=color.new(#000000, 40), frame_width=1)
     _ok = color.new(#1D9E75, 0)
     _no = color.new(#F23645, 0)
@@ -588,7 +606,7 @@ if show_diag and barstate.islast
     table.cell(dg, 1, 0, "value",      text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(dg, 2, 0, "",           text_color=color.white, bgcolor=_hd, text_size=size.small)
 
-    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Order size", "Position", "Bricks formed", "Renko flips", "Trades")
+    _lbl  = array.from("Feed bars this bar", "Brick size", "Grid anchored", "Renko direction", "Bricks in a row", "Swing already traded", "In date range", "Re-entry push", "Order size", "Position", "Bricks formed", "Renko flips", "Trades")
     _val  = array.from(
          str.tostring(array.size(rk_fc)) + (array.size(rk_fc) > 0 ? "" : "  none - fallback"),
          na(rk_box) ? "na - no size yet" : str.tostring(rk_box, format.mintick),
@@ -597,6 +615,7 @@ if show_diag and barstate.islast
          str.tostring(rk_run) + " of " + str.tostring(renko_confirm) + " needed",
          traded_dir == 0 ? "no" : traded_dir == 1 ? "yes - long" : "yes - short",
          in_date ? "yes" : "no",
+         not use_reentry_confirm ? "off" : not had_exit ? "first entry - not needed" : rk_dir == 1 ? (confirm_long ? "yes - closed above prev high" : "waiting - need close > " + str.tostring(high[1], format.mintick)) : rk_dir == -1 ? (confirm_short ? "yes - closed below prev low" : "waiting - need close < " + str.tostring(low[1], format.mintick)) : "-",
          na(dg_qty) ? "strategy default" : str.tostring(dg_qty, "#.####"),
          strategy.position_size == 0 ? "flat - can enter" : strategy.position_size > 0 ? "long - holding" : "short - holding",
          str.tostring(dg_bricks),
@@ -610,6 +629,7 @@ if show_diag and barstate.islast
          rk_run >= renko_confirm,
          traded_dir == 0 or reenter_stop,
          in_date,
+         rk_dir == 1 ? confirm_long : rk_dir == -1 ? confirm_short : true,
          na(dg_qty) or dg_qty > 0,
          true,
          dg_bricks > 0,
@@ -619,9 +639,9 @@ if show_diag and barstate.islast
         bool _p = array.get(_pass, _i)
         table.cell(dg, 0, _i + 1, array.get(_lbl, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
         table.cell(dg, 1, _i + 1, array.get(_val, _i), text_color=color.white, bgcolor=_nu, text_size=size.small)
-        // Rows 0-7 are gates an entry must pass. Rows 8-11 are activity readings:
+        // Rows 0-8 are gates an entry must pass. Rows 9-12 are activity readings:
         // being in a position is not a fault, so they never read BLOCKED.
-        bool _info = _i >= 8
+        bool _info = _i >= 9
         table.cell(dg, 2, _i + 1, _p ? "ok" : _info ? "none yet" : "BLOCKED",
              text_color=color.white,
              bgcolor = _p ? _ok : _info ? color.new(#B8860B, 0) : _no,
