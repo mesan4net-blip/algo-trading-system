@@ -103,9 +103,8 @@ pa_layers = input.string("All three", "Price Must Clear", options=["All three","
 confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): fires the bar AFTER price completes the condition.\nImmediate: fires on the bar price completes it.", group=grp_entry)
 allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
 allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
-use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, fire again when a later candle CLOSES above the exit candle's HIGH (long) or below its LOW (short). No fresh transition needed.", group=grp_entry)
+use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when the setup is valid AND a candle CLOSES beyond the reference level. The reference is the close of whichever candle came last: the one the trade exited on, or the one that made the setup invalid.", group=grp_entry)
 reentry_needs_base = input.bool(true, "  Setup Must Still Hold", group=grp_entry)
-reentry_reset = input.bool(true, "  Raise Bar On Setup Break", tooltip="If the condition fails before price clears the exit candle, move the re-entry trigger to the most recent swing point instead of dropping it. The trigger only ever moves in the trade's favour, so a stall cannot make getting back in easier. Off: the trigger stays at the exit candle's extreme however long the setup is broken.", group=grp_entry)
 gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
 
 // ============================================================================
@@ -457,7 +456,7 @@ if pos_dir == "long" and not na(stop_level)
         ev_align_break := _other and not _stop_hit
         if _stop_hit
             stopped_from := "long"
-        rearm_high := rawH
+        rearm_high := rawC
         rearm_low := na
         pos_dir := "flat"
         elig_b := false
@@ -490,7 +489,7 @@ else if pos_dir == "short" and not na(stop_level)
         ev_align_break := _other and not _stop_hit
         if _stop_hit
             stopped_from := "short"
-        rearm_low := rawL
+        rearm_low := rawC
         rearm_high := na
         pos_dir := "flat"
         elig_b := false
@@ -507,13 +506,15 @@ else if pos_dir == "short" and not na(stop_level)
         peak_r := 0.0
 
 // ── then entries ───────────────────────────────────────────────────────────
-// The armed re-entry is never dropped. If the setup breaks, the trigger moves
-// up to the most recent swing point (down, for a short) and stays there - it
-// ratchets one way only, so a sideways stretch cannot lower the bar.
-if reentry_reset and not na(rearm_high) and not all_bull
-    rearm_high := math.max(rearm_high, sw_high_lvl)
-if reentry_reset and not na(rearm_low) and not all_bear
-    rearm_low := math.min(rearm_low, sw_low_lvl)
+// RE-ENTRY REFERENCE LEVEL
+// The level to beat is the CLOSE of whichever candle came last: the one the
+// trade exited on, or the one that made the setup invalid. When the setup
+// breaks, the level moves to that breaking candle's close. It is not dropped
+// and it is not carried over - the most recent event simply sets it.
+if not na(rearm_high) and all_bull[1] and not all_bull
+    rearm_high := rawC
+if not na(rearm_low) and all_bear[1] and not all_bear
+    rearm_low := rawC
 re_long  = use_reentry and not na(rearm_high) and rawC > rearm_high and (not reentry_needs_base or all_bull)
 re_short = use_reentry and not na(rearm_low)  and rawC < rearm_low  and (not reentry_needs_base or all_bear)
 
