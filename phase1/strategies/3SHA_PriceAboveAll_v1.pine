@@ -173,7 +173,7 @@ allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
 // to prove it is resuming by CLOSING beyond the exit candle itself.
 use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when a later candle CLOSES above the exit candle's HIGH (for longs) or below its LOW (for shorts). No fresh transition needed — price simply has to clear the bar you were knocked out on.", group=grp_entry)
 reentry_needs_base = input.bool(true, "  Setup Must Still Hold", tooltip="Only re-enter while the entry condition is still true. Off means price clearing the exit candle is enough on its own, even if the layers have since fallen out of agreement.", group=grp_entry)
-reentry_expires = input.bool(true, "  Cancel If Setup Breaks", tooltip="If the condition fails before price clears the exit candle, drop the armed re-entry rather than waiting indefinitely. It re-arms only after another exit.", group=grp_entry)
+reentry_reset = input.bool(true, "  Raise Bar On Setup Break", tooltip="If the condition fails before price clears the exit candle, move the re-entry trigger to the most recent swing point instead of dropping it. The trigger only ever moves in the trade's favour, so a stall cannot make getting back in easier. Off: the trigger stays at the exit candle's extreme however long the setup is broken.", group=grp_entry)
 gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
 
 // ============================================================================
@@ -550,10 +550,13 @@ show_hud = input.bool(true, "State HUD", group=grp_disp)
 hud_pos = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_disp)
 
 // Drop an armed re-entry once the setup itself has gone
-if reentry_expires and not na(rearm_high) and not all_bull
-    rearm_high := na
-if reentry_expires and not na(rearm_low) and not all_bear
-    rearm_low := na
+// The armed re-entry is never dropped. If the setup breaks, the trigger moves
+// up to the most recent swing point (down, for a short) and stays there - it
+// ratchets one way only, so a sideways stretch cannot lower the bar.
+if reentry_reset and not na(rearm_high) and not all_bull
+    rearm_high := math.max(rearm_high, sw_high_lvl)
+if reentry_reset and not na(rearm_low) and not all_bear
+    rearm_low := math.min(rearm_low, sw_low_lvl)
 
 // Re-entry: price CLOSES beyond the exit candle, setup optionally still required
 re_long  = use_reentry and not na(rearm_high) and rawC > rearm_high and (not reentry_needs_base or all_bull)
