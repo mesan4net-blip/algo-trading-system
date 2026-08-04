@@ -173,6 +173,8 @@ allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
 // to prove it is resuming by CLOSING beyond the exit candle itself.
 use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when the setup is valid AND a candle CLOSES beyond the reference level. The reference is the close of whichever candle came last: the one the trade exited on, or the one that made the setup invalid.", group=grp_entry)
 reentry_needs_base = input.bool(true, "  Setup Must Still Hold", tooltip="Only re-enter while the entry condition is still true. Off means price clearing the exit candle is enough on its own, even if the layers have since fallen out of agreement.", group=grp_entry)
+reentry_style = input.string("Two-candle pattern", "  Re-Entry Style", options=["Two-candle pattern","Close beyond reference"], tooltip="Two-candle pattern: after the setup is valid again, wait for a candle that closes beyond the SHA layer body below (the trigger candle), then enter at the close of a later candle that closes beyond the TRIGGER CANDLE'S low (short) or high (long).\n\nClose beyond reference: the simpler rule - enter on any close beyond the close of the candle the trade exited on, or of the candle that made the setup invalid, whichever came last.", group=grp_entry)
+reentry_layer = input.string("Base", "  Re-Entry Trigger Layer", options=["Base","HTF1","HTF2"], tooltip="Which SHA layer's body the trigger candle has to close beyond. This applies to RE-ENTRY ONLY - it does not change what the first entry requires.", group=grp_entry)
 gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
 
 // ============================================================================
@@ -560,8 +562,41 @@ if not na(rearm_low) and all_bear[1] and not all_bear
     rearm_low := rawC
 
 // Re-entry: price CLOSES beyond the exit candle, setup optionally still required
-re_long  = use_reentry and not na(rearm_high) and rawC > rearm_high and (not reentry_needs_base or all_bull)
-re_short = use_reentry and not na(rearm_low)  and rawC < rearm_low  and (not reentry_needs_base or all_bear)
+// ── RE-ENTRY: TWO-CANDLE PATTERN ────────────────────────────────────────────
+// Trigger candle: the first raw candle in the trade's direction that closes
+// beyond the chosen SHA layer's body. Trade candle: a later raw candle in the
+// same direction that closes beyond the TRIGGER CANDLE'S extreme - its low for
+// a short, its high for a long. Entry is at that candle's close.
+//
+// The trigger never moves. Later candles clearing the layer body do not
+// replace it. If the setup goes invalid the pattern is abandoned, and starts
+// again from scratch when the setup returns.
+rex_bot = reentry_layer == "Base" ? sha_bot_0 : reentry_layer == "HTF1" ? sha_bot_1 : sha_bot_2
+rex_top = reentry_layer == "Base" ? sha_top_0 : reentry_layer == "HTF1" ? sha_top_1 : sha_top_2
+raw_is_bull = rawC > rawO
+raw_is_bear = rawC < rawO
+
+var float trig_high = na
+var float trig_low  = na
+
+if na(rearm_high) or not all_bull
+    trig_high := na
+else if na(trig_high) and raw_is_bull and rawC > rex_top
+    trig_high := rawH
+
+if na(rearm_low) or not all_bear
+    trig_low := na
+else if na(trig_low) and raw_is_bear and rawC < rex_bot
+    trig_low := rawL
+
+pat_long  = not na(trig_high) and raw_is_bull and rawC > trig_high
+pat_short = not na(trig_low)  and raw_is_bear and rawC < trig_low
+
+ref_long  = not na(rearm_high) and rawC > rearm_high and (not reentry_needs_base or all_bull)
+ref_short = not na(rearm_low)  and rawC < rearm_low  and (not reentry_needs_base or all_bear)
+
+re_long  = use_reentry and (reentry_style == "Two-candle pattern" ? pat_long  : ref_long)
+re_short = use_reentry and (reentry_style == "Two-candle pattern" ? pat_short : ref_short)
 
 // Gate: only a fresh breakout enters, only when flat, within the date range.
 // Gap skip: block only the entry that fires on a gapped daily open (not the whole day).
