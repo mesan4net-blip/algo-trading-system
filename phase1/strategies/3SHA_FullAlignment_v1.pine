@@ -150,9 +150,8 @@ allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
 // never again while it stays true. So a trade stopped out mid-trend leaves the
 // rest of the move untaken. This arms the setup again after an exit: price has
 // to prove it is resuming by CLOSING beyond the exit candle itself.
-use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when a later candle CLOSES above the exit candle's HIGH (for longs) or below its LOW (for shorts). No fresh transition needed — price simply has to clear the bar you were knocked out on.", group=grp_entry)
+use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when the setup is valid AND a candle CLOSES beyond the reference level. The reference is the close of whichever candle came last: the one the trade exited on, or the one that made the setup invalid.", group=grp_entry)
 reentry_needs_base = input.bool(true, "  Setup Must Still Hold", tooltip="Only re-enter while the entry condition is still true. Off means price clearing the exit candle is enough on its own, even if the layers have since fallen out of agreement.", group=grp_entry)
-reentry_reset = input.bool(true, "  Raise Bar On Setup Break", tooltip="If the condition fails before price clears the exit candle, move the re-entry trigger to the most recent swing point instead of dropping it. The trigger only ever moves in the trade's favour, so a stall cannot make getting back in easier. Off: the trigger stays at the exit candle's extreme however long the setup is broken.", group=grp_entry)
 gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
 
 // Full Alignment definition — v6-faithful ("Confirmed") or one-bar-earlier ("Immediate")
@@ -411,17 +410,19 @@ var bool   be_moved    = false
 var bool   tp1_taken   = false
 var int    bad_bars    = 0     // consecutive bars the alignment has been broken
 var float  peak_r      = 0.0   // best R reached, for the give-back exit
-var float  rearm_high  = na    // exit candle's high — long re-entry trigger
-var float  rearm_low   = na    // exit candle's low  — short re-entry trigger
+var float  rearm_high  = na    // re-entry level, long  — a close must beat it
+var float  rearm_low   = na    // re-entry level, short — a close must beat it
 
 // Drop an armed re-entry once the setup itself has gone
-// The armed re-entry is never dropped. If the setup breaks, the trigger moves
-// up to the most recent swing point (down, for a short) and stays there - it
-// ratchets one way only, so a sideways stretch cannot lower the bar.
-if reentry_reset and not na(rearm_high) and not all_bull
-    rearm_high := math.max(rearm_high, sw_high_lvl)
-if reentry_reset and not na(rearm_low) and not all_bear
-    rearm_low := math.min(rearm_low, sw_low_lvl)
+// RE-ENTRY REFERENCE LEVEL
+// The level to beat is the CLOSE of whichever candle came last: the one the
+// trade exited on, or the one that made the setup invalid. When the setup
+// breaks, the level moves to that breaking candle's close. It is not dropped
+// and it is not carried over - the most recent event simply sets it.
+if not na(rearm_high) and all_bull[1] and not all_bull
+    rearm_high := rawC
+if not na(rearm_low) and all_bear[1] and not all_bear
+    rearm_low := rawC
 
 // Re-entry: price CLOSES beyond the exit candle, setup optionally still required
 re_long  = use_reentry and not na(rearm_high) and rawC > rearm_high and (not reentry_needs_base or all_bull)
@@ -520,7 +521,7 @@ if pos_dir == "long" and not na(stop_level)
         exit_reason := _stop_hit ? "STOP" : "EXIT"
         if _stop_hit
             stopped_from := "long"
-        rearm_high := rawH
+        rearm_high := rawC
         rearm_low := na
         bad_bars := 0
         peak_r := 0.0
@@ -570,7 +571,7 @@ else if pos_dir == "short" and not na(stop_level)
         exit_reason := _stop_hit ? "STOP" : "EXIT"
         if _stop_hit
             stopped_from := "short"
-        rearm_low := rawL
+        rearm_low := rawC
         rearm_high := na
         bad_bars := 0
         peak_r := 0.0
