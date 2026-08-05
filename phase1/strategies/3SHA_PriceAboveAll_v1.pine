@@ -742,7 +742,8 @@ if pos_dir == "long" and not na(stop_level)
         _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
         did_exit := true
-        exit_reason := _stop_hit ? "STOP" : "EXIT"
+        _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
+        exit_reason := _stop_hit ? (_moved ? "TRAIL" : "STOP") : "EXIT"
         if _stop_hit
             stopped_from := "long"
         rearm_high := rawC
@@ -798,7 +799,8 @@ else if pos_dir == "short" and not na(stop_level)
         _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
         did_exit := true
-        exit_reason := _stop_hit ? "STOP" : "EXIT"
+        _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
+        exit_reason := _stop_hit ? (_moved ? "TRAIL" : "STOP") : "EXIT"
         if _stop_hit
             stopped_from := "short"
         rearm_low := rawC
@@ -926,7 +928,7 @@ plotshape(show_markers and did_enter and pos_dir == "short" ? rawH : na, title="
 
 // Exit markers — ✕ at the exit, colored by reason (stop vs alignment break)
 plotshape(show_markers and did_exit ? rawC : na, title="Exit", style=shape.xcross, location=location.absolute,
-     color = exit_reason == "STOP" ? col_stop : col_exit, size=size.tiny)
+     color = (exit_reason == "STOP" or exit_reason == "TRAIL") ? col_stop : col_exit, size=size.tiny)
 
 // ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
 // Held clear of the candle by a percentage of price, so the gap looks the same
@@ -946,7 +948,7 @@ if show_price_labels and did_exit
          text = exit_reason + " " + str.tostring(rawC, format.mintick)
                 + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
-         color = exit_reason == "STOP" ? color.new(col_stop, 15) : color.new(col_exit, 15),
+         color = (exit_reason == "STOP" or exit_reason == "TRAIL") ? color.new(col_stop, 15) : color.new(col_exit, 15),
          textcolor = color.white, size = _lbl_size)
 
 
