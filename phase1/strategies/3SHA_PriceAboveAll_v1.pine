@@ -549,6 +549,8 @@ grp_disp = "⑧ ━━━ DISPLAY ━━━"
 show_markers = input.bool(true, "Entry / Exit Markers", group=grp_disp)
 show_price_labels = input.bool(true, "Entry / Exit Price Labels", tooltip="Shows the actual fill price at each entry and exit, in a label held clear of the candle.", group=grp_disp)
 label_offset_pct = input.float(0.30, "  Label Distance (%)", minval=0.0, step=0.05, tooltip="How far the label sits from the candle, as a percentage of price. Raise it if labels overlap the bars.", group=grp_disp)
+label_size = input.string("Small", "  Label Size", options=["Tiny","Small","Normal","Large","Huge"], tooltip="Text size for the entry and exit price labels.", group=grp_disp)
+_lbl_size = label_size == "Tiny" ? size.tiny : label_size == "Small" ? size.small : label_size == "Normal" ? size.normal : label_size == "Large" ? size.large : size.huge
 show_stop_line = input.bool(true, "Active Stop Line", group=grp_disp)
 col_bull = input.color(color.new(#2962FF, 0), "Bull / Long", inline="lc", group=grp_disp)
 col_bear = input.color(color.new(#F23645, 0), "Bear / Short", inline="lc", group=grp_disp)
@@ -911,7 +913,7 @@ if show_price_labels and did_enter
          text = (_up ? "LONG " : "SHORT ") + str.tostring(entry_price, format.mintick),
          style = _up ? label.style_label_up : label.style_label_down,
          color = _up ? color.new(col_bull, 15) : color.new(col_bear, 15),
-         textcolor = color.white, size = size.small)
+         textcolor = color.white, size = _lbl_size)
 
 if show_price_labels and did_exit
     _wasup = pos_dir_prev == "long"
@@ -920,7 +922,7 @@ if show_price_labels and did_exit
                 + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
          color = exit_reason == "STOP" ? color.new(col_stop, 15) : color.new(col_exit, 15),
-         textcolor = color.white, size = size.small)
+         textcolor = color.white, size = _lbl_size)
 
 
 // Active stop line
