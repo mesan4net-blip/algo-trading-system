@@ -714,8 +714,8 @@ col_init = input.color(color.new(#000000, 0), "Initial Stop", inline="lc", group
 
 plotshape(show_marks and fire_entry_long,  title="Long entry",  style=shape.triangleup,   location=location.belowbar, color=col_bull,  size=size.small, text="PAA")
 plotshape(show_marks and fire_entry_short, title="Short entry", style=shape.triangledown, location=location.abovebar, color=col_bear, size=size.small, text="PAA")
-plotshape(show_marks and fire_align_break, title="Align break", style=shape.xcross, location=location.absolute, color=col_exit, size=size.tiny)
-plotshape(show_marks and fire_stop_hit,    title="Stop hit",    style=shape.xcross, location=location.absolute, color=col_stop, size=size.tiny)
+plotshape(show_marks and fire_align_break ? rawC : na, title="Exit signal", style=shape.xcross, location=location.absolute, color=col_exit, size=size.tiny)
+plotshape(show_marks and fire_stop_hit ? rawC : na,    title="Stop hit",    style=shape.xcross, location=location.absolute, color=col_stop, size=size.tiny)
 
 // ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
 // Held clear of the candle by a percentage of price, so the gap looks the same
@@ -731,7 +731,8 @@ if show_price_labels and (fire_entry_long or fire_entry_short)
 
 if show_price_labels and (fire_stop_hit or fire_align_break)
     _wasup = pos_dir_prev == "long"
-    _why   = fire_stop_hit ? "STOP" : "EXIT"
+    _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
+    _why   = fire_stop_hit ? (_moved ? "TRAIL" : "STOP") : "EXIT"
     label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
          text = _why + " " + str.tostring(rawC, format.mintick)
                 + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
