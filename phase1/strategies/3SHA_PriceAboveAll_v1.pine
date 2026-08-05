@@ -166,6 +166,7 @@ pa_layers = input.string("All three", "Price Must Clear", options=["All three","
 confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): fires the bar AFTER price completes the condition. One bar of confirmation lag.\nImmediate: fires on the bar price completes it. Earlier, slightly noisier.", group=grp_entry)
 allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
 allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
+entry_needs_dir = input.bool(true, "Entry Candle Must Match Direction", tooltip="Longs only open on a bull candle (close above open), shorts only on a bear candle. A candle that closes exactly at its open is neither, so it takes no trade. Applies to every entry, including re-entries and stop reversals.", group=grp_entry)
 // ── RE-ENTRY AFTER AN EXIT ─────────────────────────────────────────────────
 // The entry signal fires once, on the FIRST breakout into the condition, and
 // never again while it stays true. So a trade stopped out mid-trend leaves the
@@ -604,8 +605,8 @@ re_short = use_reentry and (reentry_style == "Two-candle pattern" ? pat_short : 
 // Gap skip: block only the entry that fires on a gapped daily open (not the whole day).
 is_new_day = ta.change(time("1D")) != 0
 gap_block  = gap_thresh > 0 and is_new_day and gap_pct > gap_thresh
-long_signal  = allow_longs  and (pa_bull_raw or re_long)  and in_date and not gap_block and not eod_entry_block
-short_signal = allow_shorts and (pa_bear_raw or re_short) and in_date and not gap_block and not eod_entry_block
+long_signal  = allow_longs  and (pa_bull_raw or re_long)  and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull)
+short_signal = allow_shorts and (pa_bear_raw or re_short) and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear)
 
 // Per-bar event flags (for markers)
 // Entry price has to be captured before the exit block clears it, or the exit
@@ -794,8 +795,8 @@ else if pos_dir == "short" and not na(stop_level)
 // ── REVERSE ON STOP ────────────────────────────────────────────────────────
 // Flip only if the opposite side is FULLY ALIGNED at this moment, its direction
 // is permitted, and the gap filter passes. It does not require a fresh signal.
-rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and in_date and not gap_block and not eod_entry_block
-rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and in_date and not gap_block and not eod_entry_block
+rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull)
+rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear)
 
 // ───────────────────────────────── ENTRIES ────────────────────────────────
 // Only when flat (possibly just made flat above → same-bar flip).
