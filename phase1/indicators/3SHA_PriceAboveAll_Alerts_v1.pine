@@ -705,6 +705,7 @@ _lbl_size = label_size == "Tiny" ? size.tiny : label_size == "Small" ? size.smal
 show_stop  = input.bool(true, "Show active stop line", group=grp_disp)
 show_init_stop = input.bool(true, "Show initial stop", tooltip="Marks the stop as first placed, so you can see how far break-even and trailing have moved it since.", group=grp_disp)
 show_panel = input.bool(true, "Show status panel", group=grp_disp)
+hud_pos = input.string("Top Right", "  Panel Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_disp)
 col_bull = input.color(color.new(#2962FF, 0), "Bull / Long", inline="lc", group=grp_disp)
 col_bear = input.color(color.new(#F23645, 0), "Bear / Short", inline="lc", group=grp_disp)
 col_stop = input.color(color.new(#FF9800, 0), "Stop", inline="lc", group=grp_disp)
@@ -742,20 +743,41 @@ if show_price_labels and (fire_stop_hit or fire_align_break)
 plot(show_stop and pos_dir != "flat" ? stop_level : na, "Active stop", color=color.new(col_stop, 20), style=plot.style_stepline, linewidth=1)
 plot(show_init_stop and pos_dir != "flat" ? init_stop : na, "Initial stop", color=col_init, style=plot.style_circles, linewidth=1)
 
+var table hud = na
 if show_panel and barstate.islast
-    var table tb = table.new(position.top_right, 2, 5, border_width=1)
-    _dir = pos_dir == "flat" ? "—" : str.upper(pos_dir)
-    _col = pos_dir == "long" ? col_bull : pos_dir == "short" ? col_bear : color.gray
-    table.cell(tb, 0, 0, "3SHA-PA", text_color=color.white, bgcolor=color.new(color.black, 20), text_size=size.small)
-    table.cell(tb, 1, 0, _dir, text_color=color.white, bgcolor=_col, text_size=size.small)
-    table.cell(tb, 0, 1, "Base",  text_size=size.small, text_color=color.gray)
-    table.cell(tb, 1, 1, base_bull_bar ? "bull" : "bear", text_size=size.small, text_color=base_bull_bar ? col_bull : col_bear)
-    table.cell(tb, 0, 2, "HTF1",  text_size=size.small, text_color=color.gray)
-    table.cell(tb, 1, 2, htf1_bull_bar ? "bull" : "bear", text_size=size.small, text_color=htf1_bull_bar ? col_bull : col_bear)
-    table.cell(tb, 0, 3, "HTF2",  text_size=size.small, text_color=color.gray)
-    table.cell(tb, 1, 3, htf2_bull_bar ? "bull" : "bear", text_size=size.small, text_color=htf2_bull_bar ? col_bull : col_bear)
-    table.cell(tb, 0, 4, "Stop",  text_size=size.small, text_color=color.gray)
-    table.cell(tb, 1, 4, pos_dir == "flat" ? "—" : str.tostring(stop_level, format.mintick), text_size=size.small, text_color=color.white)
+    _hp = hud_pos == "Top Left" ? position.top_left : hud_pos == "Top Right" ? position.top_right : hud_pos == "Bottom Left" ? position.bottom_left : position.bottom_right
+    hud := table.new(_hp, 2, 8, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
+    _bg = color.new(#1A1A1A, 10)
+    _hd = col_bull
+    table.cell(hud, 0, 0, "3SHA PRICE ABOVE", text_color=color.white, bgcolor=_hd, text_size=size.small)
+    table.cell(hud, 1, 0, confirm_mode == "Immediate" ? "IMMEDIATE" : "CONFIRMED", text_color=color.white, bgcolor=_hd, text_size=size.small)
+
+    _align_txt = all_bull ? "▲ ABOVE ALL" : all_bear ? "▼ BELOW ALL" : "◇ MIXED"
+    _align_col = all_bull ? col_bull : all_bear ? col_bear : color.new(#888888, 0)
+    table.cell(hud, 0, 1, "Price vs SHA", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 1, _align_txt, text_color=color.white, bgcolor=_align_col, text_size=size.small)
+
+    table.cell(hud, 0, 2, "Layers B/1/2", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 2, (base_bull_bar?"▲":"▼")+" "+(htf1_bull_bar?"▲":"▼")+" "+(htf2_bull_bar?"▲":"▼"), text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    _pos_txt = pos_dir == "long" ? "LONG" : pos_dir == "short" ? "SHORT" : "FLAT"
+    _pos_col = pos_dir == "long" ? col_bull : pos_dir == "short" ? col_bear : color.new(#444444, 0)
+    table.cell(hud, 0, 3, "Position", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 3, _pos_txt, text_color=color.white, bgcolor=_pos_col, text_size=size.small)
+
+    _rr_now = pos_dir == "long" and risk_unit > 0 ? (rawC - entry_price)/risk_unit : pos_dir == "short" and risk_unit > 0 ? (entry_price - rawC)/risk_unit : na
+    table.cell(hud, 0, 4, "Open R", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 4, na(_rr_now) ? "—" : str.tostring(_rr_now, "0.00")+"R", text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    table.cell(hud, 0, 5, "Entry", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 5, na(entry_price) ? "—" : str.tostring(entry_price, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    table.cell(hud, 0, 6, "Stop"+(be_moved?" (BE+)":""), text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 6, na(stop_level) ? "—" : str.tostring(stop_level, format.mintick), text_color=color.white, bgcolor=_bg, text_size=size.small)
+
+    table.cell(hud, 0, 7, "Eligible B/1/2", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 7, (elig_b?"●":"○")+" "+(elig_1?"●":"○")+" "+(elig_2?"●":"○"), text_color=color.white, bgcolor=_bg, text_size=size.small)
+
 
 // ============================================================================
 // SHA CANDLES  (identical to the strategy - derived, do not edit by hand)
