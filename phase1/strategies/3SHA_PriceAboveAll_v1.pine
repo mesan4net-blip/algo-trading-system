@@ -977,7 +977,7 @@ plot(pos_dir == "long" ? 1 : pos_dir == "short" ? -1 : 0, "Position", display=di
 var table hud = na
 if show_hud and barstate.islast
     _hp = hud_pos == "Top Left" ? position.top_left : hud_pos == "Top Right" ? position.top_right : hud_pos == "Bottom Left" ? position.bottom_left : position.bottom_right
-    hud := table.new(_hp, 2, 9, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
+    hud := table.new(_hp, 2, 10, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
     _hd = col_bull
     table.cell(hud, 0, 0, "3SHA PRICE ABOVE", text_color=color.white, bgcolor=_hd, text_size=size.small)
@@ -1009,8 +1009,13 @@ if show_hud and barstate.islast
     table.cell(hud, 0, 7, "Eligible B/1/2", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 7, (elig_b?"●":"○")+" "+(elig_1?"●":"○")+" "+(elig_2?"●":"○"), text_color=color.white, bgcolor=_bg, text_size=size.small)
 
-    table.cell(hud, 0, 8, "Instrument", text_color=color.white, bgcolor=_bg, text_size=size.small)
-    table.cell(hud, 1, 8, instrument_type, text_color=color.white, bgcolor=_bg, text_size=size.small)
+    _rawdir = rawC > rawO ? "▲ BULL" : rawC < rawO ? "▼ BEAR" : "◇ FLAT"
+    _rawcol = rawC > rawO ? col_bull : rawC < rawO ? col_bear : color.new(#888888, 0)
+    table.cell(hud, 0, 8, "Raw Candle", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 8, _rawdir, text_color=color.white, bgcolor=_rawcol, text_size=size.small)
+
+    table.cell(hud, 0, 9, "Instrument", text_color=color.white, bgcolor=_bg, text_size=size.small)
+    table.cell(hud, 1, 9, instrument_type, text_color=color.white, bgcolor=_bg, text_size=size.small)
 
 // ============================================================================
 // ALERTS
