@@ -550,6 +550,10 @@ show_markers = input.bool(true, "Entry / Exit Markers", group=grp_disp)
 show_price_labels = input.bool(true, "Entry / Exit Price Labels", tooltip="Shows the actual fill price at each entry and exit, in a label held clear of the candle.", group=grp_disp)
 label_offset_pct = input.float(0.30, "  Label Distance (%)", minval=0.0, step=0.05, tooltip="How far the label sits from the candle, as a percentage of price. Raise it if labels overlap the bars.", group=grp_disp)
 show_stop_line = input.bool(true, "Active Stop Line", group=grp_disp)
+col_bull = input.color(color.new(#2962FF, 0), "Bull / Long", inline="lc", group=grp_disp)
+col_bear = input.color(color.new(#F23645, 0), "Bear / Short", inline="lc", group=grp_disp)
+col_stop = input.color(color.new(#FF9800, 0), "Stop", inline="lc", group=grp_disp)
+col_exit = input.color(color.new(#FF9800, 0), "Other Exit", inline="lc", group=grp_disp)
 show_hud = input.bool(true, "State HUD", group=grp_disp)
 hud_pos = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_disp)
 
@@ -890,12 +894,12 @@ plotcandle(base_ready and base_show ? bO : na, base_ready and base_show ? base_p
            bordercolor=base_ready and base_show ? base_brdr_col : na)
 
 // Entry markers — filled arrows (▲▼), carried over from v6
-plotshape(show_markers and did_enter and pos_dir == "long"  ? rawL  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=color.new(#2962FF, 0), size=size.small, text="▲")
-plotshape(show_markers and did_enter and pos_dir == "short" ? rawH : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=color.new(#F23645, 0), size=size.small, text="▼")
+plotshape(show_markers and did_enter and pos_dir == "long"  ? rawL  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=col_bull, size=size.small, text="▲")
+plotshape(show_markers and did_enter and pos_dir == "short" ? rawH : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=col_bear, size=size.small, text="▼")
 
 // Exit markers — ✕ at the exit, colored by reason (stop vs alignment break)
 plotshape(show_markers and did_exit ? rawC : na, title="Exit", style=shape.xcross, location=location.absolute,
-     color = exit_reason == "STOP" ? color.new(#8B0000, 0) : color.new(#000000, 0), size=size.tiny)
+     color = exit_reason == "STOP" ? col_stop : col_exit, size=size.tiny)
 
 // ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
 // Held clear of the candle by a percentage of price, so the gap looks the same
@@ -906,7 +910,7 @@ if show_price_labels and did_enter
     label.new(bar_index, _up ? rawL - _lbl_off : rawH + _lbl_off,
          text = (_up ? "LONG " : "SHORT ") + str.tostring(entry_price, format.mintick),
          style = _up ? label.style_label_up : label.style_label_down,
-         color = _up ? color.new(#2962FF, 15) : color.new(#F23645, 15),
+         color = _up ? color.new(col_bull, 15) : color.new(col_bear, 15),
          textcolor = color.white, size = size.small)
 
 if show_price_labels and did_exit
@@ -915,12 +919,12 @@ if show_price_labels and did_exit
          text = exit_reason + " " + str.tostring(rawC, format.mintick)
                 + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
-         color = exit_reason == "STOP" ? color.new(#F23645, 15) : color.new(#FF9800, 15),
+         color = exit_reason == "STOP" ? color.new(col_stop, 15) : color.new(col_exit, 15),
          textcolor = color.white, size = size.small)
 
 
 // Active stop line
-plot(show_stop_line and pos_dir != "flat" ? stop_level : na, title="Active Stop", color=color.new(#8B0000, 0), style=plot.style_linebr, linewidth=1)
+plot(show_stop_line and pos_dir != "flat" ? stop_level : na, title="Active Stop", color=col_stop, style=plot.style_linebr, linewidth=1)
 
 // Data Window telemetry
 plot(base_bull_bar ? 1 : -1, "Base Dir",  display=display.data_window)
@@ -937,12 +941,12 @@ if show_hud and barstate.islast
     _hp = hud_pos == "Top Left" ? position.top_left : hud_pos == "Top Right" ? position.top_right : hud_pos == "Bottom Left" ? position.bottom_left : position.bottom_right
     hud := table.new(_hp, 2, 9, border_width=1, frame_color=color.new(#000000, 40), frame_width=1)
     _bg = color.new(#1A1A1A, 10)
-    _hd = color.new(#2962FF, 0)
+    _hd = col_bull
     table.cell(hud, 0, 0, "3SHA PRICE ABOVE", text_color=color.white, bgcolor=_hd, text_size=size.small)
     table.cell(hud, 1, 0, confirm_mode == "Immediate" ? "IMMEDIATE" : "CONFIRMED", text_color=color.white, bgcolor=_hd, text_size=size.small)
 
     _align_txt = all_bull ? "▲ ABOVE ALL" : all_bear ? "▼ BELOW ALL" : "◇ MIXED"
-    _align_col = all_bull ? color.new(#2962FF, 0) : all_bear ? color.new(#F23645, 0) : color.new(#888888, 0)
+    _align_col = all_bull ? col_bull : all_bear ? col_bear : color.new(#888888, 0)
     table.cell(hud, 0, 1, "Price vs SHA", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 1, _align_txt, text_color=color.white, bgcolor=_align_col, text_size=size.small)
 
@@ -950,7 +954,7 @@ if show_hud and barstate.islast
     table.cell(hud, 1, 2, (base_bull_bar?"▲":"▼")+" "+(htf1_bull_bar?"▲":"▼")+" "+(htf2_bull_bar?"▲":"▼"), text_color=color.white, bgcolor=_bg, text_size=size.small)
 
     _pos_txt = pos_dir == "long" ? "LONG" : pos_dir == "short" ? "SHORT" : "FLAT"
-    _pos_col = pos_dir == "long" ? color.new(#1B5E20, 0) : pos_dir == "short" ? color.new(#8B0000, 0) : color.new(#444444, 0)
+    _pos_col = pos_dir == "long" ? col_bull : pos_dir == "short" ? col_bear : color.new(#444444, 0)
     table.cell(hud, 0, 3, "Position", text_color=color.white, bgcolor=_bg, text_size=size.small)
     table.cell(hud, 1, 3, _pos_txt, text_color=color.white, bgcolor=_pos_col, text_size=size.small)
 
