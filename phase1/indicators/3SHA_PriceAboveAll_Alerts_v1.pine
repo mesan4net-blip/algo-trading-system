@@ -458,6 +458,12 @@ align_broken_short = align_break_level == "Base Flips"      ? flip_b_short
    : align_break_level == "Any Layer Flips" ? (n_flip_shrt > 0)
    :                                          (n_elig > 0 and n_flip_shrt == n_elig)
 
+// Held for the labels: the exit block clears entry_price and flips pos_dir to
+// "flat" before either can be read.
+var float  lbl_entry_px = na
+var string pos_dir_prev = "flat"
+pos_dir_prev := pos_dir
+
 ev_entry_long  = false
 ev_entry_short = false
 ev_stop_hit    = false
@@ -593,6 +599,7 @@ if pos_dir == "flat" and (long_signal or rev_long)
         arm_2  := htf2_bull_bar
         pos_dir := "long"
         entry_price := rawC
+        lbl_entry_px := rawC
         stop_level := _s
         risk_unit := rawC - _s
         be_moved := false
@@ -614,6 +621,7 @@ else if pos_dir == "flat" and (short_signal or rev_short)
         arm_2  := not htf2_bull_bar
         pos_dir := "short"
         entry_price := rawC
+        lbl_entry_px := rawC
         stop_level := _s
         risk_unit := _s - rawC
         be_moved := false
@@ -655,6 +663,8 @@ alertcondition(fire_any_exit,    "Any exit",  "3SHA-PA exit on {{ticker}} {{inte
 // ============================================================================
 grp_disp = "⑧ ━━━ DISPLAY ━━━"
 show_marks = input.bool(true, "Show entry/exit markers", group=grp_disp)
+show_price_labels = input.bool(true, "Show entry/exit price labels", tooltip="Shows the fill price at each entry and exit, in a label held clear of the candle.", group=grp_disp)
+label_offset_pct = input.float(0.30, "  Label distance (%)", minval=0.0, step=0.05, tooltip="How far the label sits from the candle, as a percentage of price. Raise it if labels overlap the bars.", group=grp_disp)
 show_stop  = input.bool(true, "Show active stop line", group=grp_disp)
 show_panel = input.bool(true, "Show status panel", group=grp_disp)
 col_long   = input.color(color.new(#2962FF, 0), "Long", inline="c", group=grp_disp)
@@ -665,6 +675,29 @@ plotshape(show_marks and fire_entry_long,  title="Long entry",  style=shape.tria
 plotshape(show_marks and fire_entry_short, title="Short entry", style=shape.triangledown, location=location.abovebar, color=col_short, size=size.small, text="PAA")
 plotshape(show_marks and fire_align_break, title="Align break", style=shape.xcross, location=location.absolute, color=col_exit, size=size.tiny)
 plotshape(show_marks and fire_stop_hit,    title="Stop hit",    style=shape.xcross, location=location.absolute, color=col_short, size=size.tiny)
+
+// ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
+// Held clear of the candle by a percentage of price, so the gap looks the same
+// on a $20 stock and a $600 one.
+_lbl_off = rawC * label_offset_pct / 100.0
+if show_price_labels and (fire_entry_long or fire_entry_short)
+    _up = fire_entry_long
+    label.new(bar_index, _up ? rawL - _lbl_off : rawH + _lbl_off,
+         text = (_up ? "LONG " : "SHORT ") + str.tostring(rawC, format.mintick),
+         style = _up ? label.style_label_up : label.style_label_down,
+         color = _up ? color.new(#2962FF, 15) : color.new(#F23645, 15),
+         textcolor = color.white, size = size.small)
+
+if show_price_labels and (fire_stop_hit or fire_align_break)
+    _wasup = pos_dir_prev == "long"
+    _why   = fire_stop_hit ? "STOP" : "EXIT"
+    label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
+         text = _why + " " + str.tostring(rawC, format.mintick)
+                + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
+         style = _wasup ? label.style_label_down : label.style_label_up,
+         color = fire_stop_hit ? color.new(#F23645, 15) : color.new(#FF9800, 15),
+         textcolor = color.white, size = size.small)
+
 
 plot(show_stop and pos_dir != "flat" ? stop_level : na, "Active stop", color=color.new(color.gray, 20), style=plot.style_stepline, linewidth=1)
 
