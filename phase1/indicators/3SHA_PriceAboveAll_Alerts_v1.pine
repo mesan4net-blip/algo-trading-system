@@ -127,7 +127,6 @@ pa_layers = input.string("All three", "Price Must Clear", options=["All three","
 confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): fires the bar AFTER price completes the condition.\nImmediate: fires on the bar price completes it.", group=grp_entry)
 allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
 allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
-entry_wait = input.bool(true, "Wait For Matching Candle", tooltip="The entry signal fires once, on the bar the setup completes. If that bar closes the wrong way, the direction filter blocks it and the signal is spent - one bad bar can cost the whole move.\n\nON: the setup stays armed and enters on the first candle facing the right way, for as long as the setup holds.\nOFF: one shot only, as before.", group=grp_entry)
 entry_needs_dir = input.bool(true, "Entry Candle Must Match Direction", tooltip="Longs only open on a bull candle (close above open), shorts only on a bear candle. A candle that closes exactly at its open is neither, so it takes no trade. Applies to every entry, including re-entries and stop reversals.", group=grp_entry)
 use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when the setup is valid AND a candle CLOSES beyond the reference level. The reference is the close of whichever candle came last: the one the trade exited on, or the one that made the setup invalid.", group=grp_entry)
 reentry_needs_base = input.bool(true, "  Setup Must Still Hold", group=grp_entry)
@@ -591,9 +590,11 @@ re_short = use_reentry and (reentry_style == "Two-candle pattern" ? pat_short : 
 
 // ── ARMED ENTRY ─────────────────────────────────────────────────────────────
 // pa_bull_raw fires on a single bar. If the direction filter blocks that bar
-// the signal is gone for good, even though the setup may hold for hours. This
-// keeps it armed until a candle facing the right way turns up, and drops it the
-// moment the setup stops being valid.
+// the signal would be gone for good, even though the setup may hold for hours -
+// one bad bar could cost an entire move. So the setup ARMS the entry instead:
+// it stays armed until a candle facing the right way turns up, and is dropped
+// the moment the setup stops being valid. Always on; there is no case where
+// firing once and giving up is preferable.
 var bool pend_long  = false
 var bool pend_short = false
 if not all_bull
@@ -605,8 +606,8 @@ if not all_bear
 else if pa_bear_raw
     pend_short := true
 
-sig_long  = entry_wait ? pend_long  : pa_bull_raw
-sig_short = entry_wait ? pend_short : pa_bear_raw
+sig_long  = pend_long
+sig_short = pend_short
 
 long_signal  = allow_longs  and (sig_long or re_long)  and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull)
 short_signal = allow_shorts and (sig_short or re_short) and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear)
