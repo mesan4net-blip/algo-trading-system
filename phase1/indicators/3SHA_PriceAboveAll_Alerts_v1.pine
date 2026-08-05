@@ -665,6 +665,8 @@ grp_disp = "⑧ ━━━ DISPLAY ━━━"
 show_marks = input.bool(true, "Show entry/exit markers", group=grp_disp)
 show_price_labels = input.bool(true, "Show entry/exit price labels", tooltip="Shows the fill price at each entry and exit, in a label held clear of the candle.", group=grp_disp)
 label_offset_pct = input.float(0.30, "  Label distance (%)", minval=0.0, step=0.05, tooltip="How far the label sits from the candle, as a percentage of price. Raise it if labels overlap the bars.", group=grp_disp)
+label_size = input.string("Small", "  Label Size", options=["Tiny","Small","Normal","Large","Huge"], tooltip="Text size for the entry and exit price labels.", group=grp_disp)
+_lbl_size = label_size == "Tiny" ? size.tiny : label_size == "Small" ? size.small : label_size == "Normal" ? size.normal : label_size == "Large" ? size.large : size.huge
 show_stop  = input.bool(true, "Show active stop line", group=grp_disp)
 show_panel = input.bool(true, "Show status panel", group=grp_disp)
 col_bull = input.color(color.new(#2962FF, 0), "Bull / Long", inline="lc", group=grp_disp)
@@ -687,7 +689,7 @@ if show_price_labels and (fire_entry_long or fire_entry_short)
          text = (_up ? "LONG " : "SHORT ") + str.tostring(rawC, format.mintick),
          style = _up ? label.style_label_up : label.style_label_down,
          color = _up ? color.new(col_bull, 15) : color.new(col_bear, 15),
-         textcolor = color.white, size = size.small)
+         textcolor = color.white, size = _lbl_size)
 
 if show_price_labels and (fire_stop_hit or fire_align_break)
     _wasup = pos_dir_prev == "long"
@@ -697,7 +699,7 @@ if show_price_labels and (fire_stop_hit or fire_align_break)
                 + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
          color = fire_stop_hit ? color.new(col_stop, 15) : color.new(col_exit, 15),
-         textcolor = color.white, size = size.small)
+         textcolor = color.white, size = _lbl_size)
 
 
 plot(show_stop and pos_dir != "flat" ? stop_level : na, "Active stop", color=color.new(col_stop, 20), style=plot.style_stepline, linewidth=1)
