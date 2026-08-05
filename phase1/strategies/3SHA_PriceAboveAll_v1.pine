@@ -946,7 +946,7 @@ _lbl_off = rawC * label_offset_pct / 100.0
 if show_price_labels and did_enter
     _up = pos_dir == "long"
     label.new(bar_index, _up ? rawL - _lbl_off : rawH + _lbl_off,
-         text = "#" + str.tostring(trade_no) + " " + (_up ? "LONG " : "SHORT ") + str.tostring(entry_price, format.mintick),
+         text = "#" + str.tostring(trade_no) + " " + (_up ? "LONG " : "SHORT ") + "[" + (rawC > rawO ? "bull" : rawC < rawO ? "bear" : "flat") + "] " + str.tostring(entry_price, format.mintick),
          style = _up ? label.style_label_up : label.style_label_down,
          color = _up ? color.new(col_bull, 15) : color.new(col_bear, 15),
          textcolor = color.white, size = _lbl_size)
