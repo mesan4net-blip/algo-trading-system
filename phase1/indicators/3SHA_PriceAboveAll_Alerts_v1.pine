@@ -469,6 +469,7 @@ align_broken_short = align_break_level == "Base Flips"      ? flip_b_short
 var float  lbl_entry_px = na
 var int    trade_no     = 0    // increments on every entry, so an exit can name the trade it closed
 var int    exit_no      = 0    // the closing trade's number, captured before any same-bar entry
+var float  exit_from_px = na   // and its entry price, for the same reason
 var string pos_dir_prev = "flat"
 pos_dir_prev := pos_dir
 
@@ -506,6 +507,7 @@ if pos_dir == "long" and not na(stop_level)
         arm_1  := false
         arm_2  := false
         exit_no := trade_no
+        exit_from_px := lbl_entry_px
         entry_price := na
         stop_level := na
         init_stop := na
@@ -541,6 +543,7 @@ else if pos_dir == "short" and not na(stop_level)
         arm_1  := false
         arm_2  := false
         exit_no := trade_no
+        exit_from_px := lbl_entry_px
         entry_price := na
         stop_level := na
         init_stop := na
@@ -741,7 +744,7 @@ if show_price_labels and (fire_stop_hit or fire_align_break)
     _why   = fire_stop_hit ? (_moved ? "TRAIL" : "STOP") : "EXIT"
     label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
          text = "#" + str.tostring(exit_no) + " " + _why + " " + str.tostring(rawC, format.mintick)
-                + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
+                + (na(exit_from_px) ? "" : "  (from " + str.tostring(exit_from_px, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
          color = fire_stop_hit ? color.new(col_stop, 15) : color.new(col_exit, 15),
          textcolor = color.white, size = _lbl_size)
