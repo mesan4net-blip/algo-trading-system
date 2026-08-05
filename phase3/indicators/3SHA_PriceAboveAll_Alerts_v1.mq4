@@ -60,6 +60,37 @@
 //    8. STOP LINE. Pine plots plot.style_stepline. MT4 has no stepline, so
 //       the stop renders as a plain line and will slope between steps.
 //
+//  FOREX NOTES
+//    DISTANCE UNITS. The Pine expresses every distance as a percentage of
+//    price, which is the right normaliser for equities but not for FX: 0.10%
+//    is 6.5 pips on AUDUSD at 0.6500 and 15 pips on USDJPY at 150.00, while
+//    their daily ranges are nowhere near 2.3x apart. Set DistanceUnit = Pips
+//    to use pip-denominated stop buffer, min stop, break-even offset and
+//    trail buffer instead. Percent is the default so Pine parity is kept.
+//    A pip is auto-sized: 10 x Point on 5- and 3-digit brokers, Point
+//    otherwise, so 4-digit, 5-digit and JPY pairs all behave the same.
+//
+//    BID-ONLY CHARTS. MT4 draws BID. A short's stop executes on the ASK, so
+//    a short can be stopped out when ask crosses the level even though the
+//    bid high never touched it. Set ShortsPaySpread = true to test short
+//    stops against bid + spread. Default false, again for Pine parity.
+//    Entry fills and the R calculation stay bid-based, as in the Pine -
+//    only the stop-hit test is spread-aware. Note the live broker spread is
+//    applied to historical bars too, so for a repeatable historical
+//    comparison set SpreadPipsOverride to a fixed value.
+//
+//    THE GAP FILTER IS NEARLY INERT ON SPOT FX. It is 24/5, so the only real
+//    gap is the Sunday open. Worse, the daily boundary is your broker's
+//    server midnight, not any market close, and many brokers post a short
+//    Sunday D1 bar that both fakes a new day and distorts the gap maths.
+//    Treat GapThresh as a weekend filter or leave it at 0.
+//
+//    THE DAILY CUTOFF IS SERVER TIME AND DOES NOT FOLLOW DST. Most FX brokers
+//    shift their server offset with US daylight saving, so a fixed cutoff
+//    hour drifts an hour against London and New York twice a year. There is
+//    no exchange close on spot FX to anchor it to. Check the Experts log
+//    line this indicator prints on attach for the symbol's actual settings.
+//
 //  BUFFER MAP
 //    0/1 HTF2 body   2/3 HTF1 body   4/5 base body
 //    6   active stop line
@@ -162,6 +193,12 @@ enum EN_LBLSIZE
    LS_NORMAL=10,   // Normal
    LS_LARGE=13,    // Large
    LS_HUGE=16      // Huge
+  };
+
+enum EN_DIST_UNIT
+  {
+   DU_PERCENT=0,   // Percent of price
+   DU_PIPS         // Pips
   };
 
 //====================================================================
@@ -277,6 +314,15 @@ input int     MaxBars         = 5000;                        // Max chart bars t
 input int     WarmupBars      = 100;                         // Warmup bars before signals allowed
 input int     MaxMarkerBars   = 1500;                        // Only draw markers within N bars
 
+input string  s11 = "=== FOREX / INSTRUMENT ===";            // .
+input EN_DIST_UNIT DistanceUnit = DU_PERCENT;                // Distance Units
+input double  SlBufferPips    = 10.0;                        //   Stop Buffer (pips)
+input double  MinStopPips     = 0.0;                         //   Min Stop Distance (pips)
+input double  BeOffsetPips    = 0.0;                         //   Break-Even Offset (pips)
+input double  TrailBufferPips = 10.0;                        //   Trail Buffer (pips)
+input bool    ShortsPaySpread = false;                       // Short stops tested on ASK
+input double  SpreadPipsOverride = 0.0;                      //   Fixed spread (pips, 0 = live)
+
 //====================================================================
 // BUFFERS
 //====================================================================
@@ -335,6 +381,29 @@ bool     g_firstPass   = true;
 // SMALL HELPERS
 //====================================================================
 bool OK(double v) { return(v!=EMPTY_VALUE && v!=NA && v!=0.0); }
+
+//  One pip. 10 x Point on 5-digit and 3-digit (JPY) brokers, Point otherwise,
+//  so 4-digit, 5-digit and JPY pairs all take the same pip input.
+double PipSize()
+  {
+   return((Digits==3 || Digits==5) ? Point*10.0 : Point);
+  }
+
+//  Distance in price terms, from whichever unit the user chose.
+double DistRaw(double pctVal,double pipVal,double px)
+  {
+   if(DistanceUnit==DU_PIPS) return(pipVal*PipSize());
+   return(px*pctVal/100.0);
+  }
+
+//  MT4 charts are BID. A short exits on the ASK, so the stop-hit test needs
+//  the spread added back. Override beats live spread for repeatable history.
+double SpreadRaw()
+  {
+   if(!ShortsPaySpread) return(0.0);
+   if(SpreadPipsOverride>0.0) return(SpreadPipsOverride*PipSize());
+   return(MarketInfo(Symbol(),MODE_SPREAD)*Point);
+  }
 
 double LowestWickAt(int start,int count)
   {
@@ -570,6 +639,9 @@ int OnInit()
    ArraySetAsSeries(h2L,true); ArraySetAsSeries(h2C,true);
 
    IndicatorShortName("3SHA-PA Alerts");
+   PrintFormat("3SHA-PA attached: %s  Digits=%d  Point=%s  Pip=%s  spread=%d pts  server=%s",
+               Symbol(),Digits,DoubleToString(Point,8),DoubleToString(PipSize(),8),
+               (int)MarketInfo(Symbol(),MODE_SPREAD),TimeToString(TimeCurrent(),TIME_DATE|TIME_SECONDS));
    ClearObjects();
    ResetState();
    h1Stamp=0; h2Stamp=0; h1Count=0; h2Count=0;
@@ -732,8 +804,10 @@ void ProcessBar(int i,bool live)
    double swHighLvl  = slBody?HighestBodyAt(i,SlLookback):HighestWickAt(i,SlLookback);
    double trigLowLvl = slBody?MathMin(rawO,rawC):rawL;
    double trigHighLvl= slBody?MathMax(rawO,rawC):rawH;
-   double slBufRaw   = rawC*SlBufferPct/100.0;
-   double minStopRaw = rawC*MinStopPct/100.0;
+   double slBufRaw   = DistRaw(SlBufferPct,SlBufferPips,rawC);
+   double minStopRaw = DistRaw(MinStopPct,MinStopPips,rawC);
+   double beOffRaw   = DistRaw(BeOffsetPct,BeOffsetPips,rawC);
+   double spreadRaw  = SpreadRaw();
 
    //--- trail anchors
    bool trBody = (TrailPriceBasis==BS_BODY);
@@ -750,7 +824,7 @@ void ProcessBar(int i,bool live)
       case TR_EL_MID:  trLowAnchor=rkMidL;   trHighAnchor=rkMidS;    break;
       default:         trLowAnchor=rkFarL;   trHighAnchor=rkFarS;    break;
      }
-   double trBufRaw = rawC*TrailBufferPct/100.0;
+   double trBufRaw = DistRaw(TrailBufferPct,TrailBufferPips,rawC);
    double trLowRef  = OK(trLowAnchor) ? trLowAnchor - trBufRaw : NA;
    double trHighRef = OK(trHighAnchor)? trHighAnchor + trBufRaw: NA;
 
@@ -787,7 +861,7 @@ void ProcessBar(int i,bool live)
      {
       double _r = (g_riskUnit>0.0) ? (rawC-g_entryPrice)/g_riskUnit : 0.0;
       if(UseBE && !g_beMoved && _r>=BeTriggerR)
-        { g_stopLevel=MathMax(g_stopLevel,g_entryPrice+rawC*BeOffsetPct/100.0); g_beMoved=true; }
+        { g_stopLevel=MathMax(g_stopLevel,g_entryPrice+beOffRaw); g_beMoved=true; }
       if(UseTrail && _r>=TrailStartR && OK(trLowRef))
          g_stopLevel=MathMax(g_stopLevel,trLowRef);
       g_peakR = MathMax(g_peakR,_r);
@@ -819,7 +893,7 @@ void ProcessBar(int i,bool live)
      {
       double _r = (g_riskUnit>0.0) ? (g_entryPrice-rawC)/g_riskUnit : 0.0;
       if(UseBE && !g_beMoved && _r>=BeTriggerR)
-        { g_stopLevel=MathMin(g_stopLevel,g_entryPrice-rawC*BeOffsetPct/100.0); g_beMoved=true; }
+        { g_stopLevel=MathMin(g_stopLevel,g_entryPrice-beOffRaw); g_beMoved=true; }
       if(UseTrail && _r>=TrailStartR && OK(trHighRef))
          g_stopLevel=MathMin(g_stopLevel,trHighRef);
       g_peakR = MathMax(g_peakR,_r);
@@ -832,7 +906,9 @@ void ProcessBar(int i,bool live)
                   || (UseGiveback && g_peakR>=GivebackMinR && _r<=g_peakR*(1.0-GivebackPct/100.0))
                   || (UseTimeStop && g_entryAbs>=0 && (g_absBar-g_entryAbs)>=TimeStopBars && _r<TimeStopMinR)
                   || (UseCrossExit && crossUp)) || pastCutoff;
-      bool stopHit2 = UseHardStop ? (rawH>=g_stopLevel) : (rawC>=g_stopLevel);
+      //  bid + spread = ask, which is what actually fills a short's stop
+      bool stopHit2 = UseHardStop ? (rawH+spreadRaw>=g_stopLevel)
+                                  : (rawC+spreadRaw>=g_stopLevel);
 
       if(stopHit2 || other2)
         {
