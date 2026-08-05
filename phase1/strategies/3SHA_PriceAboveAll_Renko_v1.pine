@@ -709,6 +709,8 @@ eod_entry_block = past_cutoff and eod_block_entries
 // ============================================================================
 grp_disp = "⑧ ━━━ DISPLAY ━━━"
 show_markers = input.bool(true, "Entry / Exit Markers", group=grp_disp)
+show_price_labels = input.bool(true, "Entry / Exit Price Labels", tooltip="Shows the actual fill price at each entry and exit, in a label held clear of the candle.", group=grp_disp)
+label_offset_pct = input.float(0.30, "  Label Distance (%)", minval=0.0, step=0.05, tooltip="How far the label sits from the candle, as a percentage of price. Raise it if labels overlap the bars.", group=grp_disp)
 show_stop_line = input.bool(true, "Active Stop Line", group=grp_disp)
 show_hud = input.bool(true, "State HUD", group=grp_disp)
 hud_pos = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_disp)
@@ -769,6 +771,12 @@ long_signal  = allow_longs  and (pa_bull_raw or re_long)  and in_date and not ga
 short_signal = allow_shorts and (pa_bear_raw or re_short) and in_date and not gap_block and rk_ok_short and not eod_entry_block
 
 // Per-bar event flags (for markers)
+// Entry price has to be captured before the exit block clears it, or the exit
+// label has nothing to report.
+var float lbl_entry_px = na
+var string pos_dir_prev = "flat"
+pos_dir_prev := pos_dir
+
 did_exit  = false
 did_enter = false
 stopped_from = ""   // "long"/"short" when a STOP (not another exit) closed a trade this bar
@@ -958,6 +966,7 @@ if pos_dir == "flat" and (long_signal or rev_long)
     _stop = f_long_stop(ik_near_L, ik_mid_L, ik_far_L)
     if not na(_stop) and _stop < close
         entry_price := close
+        lbl_entry_px := close
         init_stop   := _stop
         stop_level  := _stop
         risk_unit   := close - _stop
@@ -982,6 +991,7 @@ if pos_dir == "flat" and (short_signal or rev_short)
     _stop = f_short_stop(ik_near_S, ik_mid_S, ik_far_S)
     if not na(_stop) and _stop > close
         entry_price := close
+        lbl_entry_px := close
         init_stop   := _stop
         stop_level  := _stop
         risk_unit   := _stop - close
@@ -1048,6 +1058,28 @@ plotshape(show_markers and did_enter and pos_dir == "short" ? high : na, title="
 // Exit markers — ✕ at the exit, colored by reason (stop vs alignment break)
 plotshape(show_markers and did_exit ? close : na, title="Exit", style=shape.xcross, location=location.absolute,
      color = exit_reason == "STOP" ? color.new(#8B0000, 0) : color.new(#000000, 0), size=size.tiny)
+
+// ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
+// Held clear of the candle by a percentage of price, so the gap looks the same
+// on a $20 stock and a $600 one.
+_lbl_off = close * label_offset_pct / 100.0
+if show_price_labels and did_enter
+    _up = pos_dir == "long"
+    label.new(bar_index, _up ? low - _lbl_off : high + _lbl_off,
+         text = (_up ? "LONG " : "SHORT ") + str.tostring(entry_price, format.mintick),
+         style = _up ? label.style_label_up : label.style_label_down,
+         color = _up ? color.new(#2962FF, 15) : color.new(#F23645, 15),
+         textcolor = color.white, size = size.small)
+
+if show_price_labels and did_exit
+    _wasup = pos_dir_prev == "long"
+    label.new(bar_index, _wasup ? high + _lbl_off : low - _lbl_off,
+         text = exit_reason + " " + str.tostring(close, format.mintick)
+                + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
+         style = _wasup ? label.style_label_down : label.style_label_up,
+         color = exit_reason == "STOP" ? color.new(#F23645, 15) : color.new(#FF9800, 15),
+         textcolor = color.white, size = size.small)
+
 
 // Active stop line
 plot(show_stop_line and pos_dir != "flat" ? stop_level : na, title="Active Stop", color=color.new(#8B0000, 0), style=plot.style_linebr, linewidth=1)
