@@ -639,6 +639,8 @@ short_signal = allow_shorts and (sig_short or re_short) and in_date and not gap_
 // Entry price has to be captured before the exit block clears it, or the exit
 // label has nothing to report.
 var float lbl_entry_px = na
+var int    trade_no     = 0    // increments on every entry, so an exit can name the trade it closed
+var int    exit_no      = 0    // the closing trade's number, captured before any same-bar entry
 var string pos_dir_prev = "flat"
 pos_dir_prev := pos_dir
 
@@ -751,6 +753,7 @@ if pos_dir == "long" and not na(stop_level)
         bad_bars := 0
         peak_r := 0.0
         pos_dir := "flat"
+        exit_no := trade_no
         entry_price := na
         init_stop := na
         stop_level := na
@@ -808,6 +811,7 @@ else if pos_dir == "short" and not na(stop_level)
         bad_bars := 0
         peak_r := 0.0
         pos_dir := "flat"
+        exit_no := trade_no
         entry_price := na
         init_stop := na
         stop_level := na
@@ -834,6 +838,7 @@ if pos_dir == "flat" and (long_signal or rev_long)
     if not na(_stop) and _stop < rawC
         entry_price := rawC
         lbl_entry_px := rawC
+        trade_no := trade_no + 1
         init_stop   := _stop
         stop_level  := _stop
         risk_unit   := rawC - _stop
@@ -861,6 +866,7 @@ if pos_dir == "flat" and (short_signal or rev_short)
     if not na(_stop) and _stop > rawC
         entry_price := rawC
         lbl_entry_px := rawC
+        trade_no := trade_no + 1
         init_stop   := _stop
         stop_level  := _stop
         risk_unit   := _stop - rawC
@@ -937,7 +943,7 @@ _lbl_off = rawC * label_offset_pct / 100.0
 if show_price_labels and did_enter
     _up = pos_dir == "long"
     label.new(bar_index, _up ? rawL - _lbl_off : rawH + _lbl_off,
-         text = (_up ? "LONG " : "SHORT ") + str.tostring(entry_price, format.mintick),
+         text = "#" + str.tostring(trade_no) + " " + (_up ? "LONG " : "SHORT ") + str.tostring(entry_price, format.mintick),
          style = _up ? label.style_label_up : label.style_label_down,
          color = _up ? color.new(col_bull, 15) : color.new(col_bear, 15),
          textcolor = color.white, size = _lbl_size)
@@ -945,7 +951,7 @@ if show_price_labels and did_enter
 if show_price_labels and did_exit
     _wasup = pos_dir_prev == "long"
     label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
-         text = exit_reason + " " + str.tostring(rawC, format.mintick)
+         text = "#" + str.tostring(exit_no) + " " + exit_reason + " " + str.tostring(rawC, format.mintick)
                 + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
          color = (exit_reason == "STOP" or exit_reason == "TRAIL") ? color.new(col_stop, 15) : color.new(col_exit, 15),
