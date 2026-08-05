@@ -127,6 +127,7 @@ pa_layers = input.string("All three", "Price Must Clear", options=["All three","
 confirm_mode = input.string("Confirmed (1-bar)", "Confirmation Mode", options=["Confirmed (1-bar)","Immediate"], tooltip="Confirmed (1-bar): fires the bar AFTER price completes the condition.\nImmediate: fires on the bar price completes it.", group=grp_entry)
 allow_longs  = input.bool(true, "Allow Longs", group=grp_entry)
 allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
+entry_needs_dir = input.bool(true, "Entry Candle Must Match Direction", tooltip="Longs only open on a bull candle (close above open), shorts only on a bear candle. A candle that closes exactly at its open is neither, so it takes no trade. Applies to every entry, including re-entries and stop reversals.", group=grp_entry)
 use_reentry = input.bool(false, "Re-Enter After Exit", tooltip="After a trade closes, arm the setup again. It fires when the setup is valid AND a candle CLOSES beyond the reference level. The reference is the close of whichever candle came last: the one the trade exited on, or the one that made the setup invalid.", group=grp_entry)
 reentry_needs_base = input.bool(true, "  Setup Must Still Hold", group=grp_entry)
 reentry_style = input.string("Two-candle pattern", "  Re-Entry Style", options=["Two-candle pattern","Close beyond reference"], tooltip="Two-candle pattern: after the setup is valid again, wait for a candle that closes beyond the SHA layer body below (the trigger candle), then enter at the close of a later candle that closes beyond the TRIGGER CANDLE'S low (short) or high (long).\n\nClose beyond reference: the simpler rule - enter on any close beyond the close of the candle the trade exited on, or of the candle that made the setup invalid, whichever came last.", group=grp_entry)
@@ -583,10 +584,10 @@ ref_short = not na(rearm_low)  and rawC < rearm_low  and (not reentry_needs_base
 re_long  = use_reentry and (reentry_style == "Two-candle pattern" ? pat_long  : ref_long)
 re_short = use_reentry and (reentry_style == "Two-candle pattern" ? pat_short : ref_short)
 
-long_signal  = allow_longs  and (pa_bull_raw or re_long)  and not gap_block and not eod_entry_block
-short_signal = allow_shorts and (pa_bear_raw or re_short) and not gap_block and not eod_entry_block
-rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and not gap_block and not eod_entry_block
-rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and not gap_block and not eod_entry_block
+long_signal  = allow_longs  and (pa_bull_raw or re_long)  and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull)
+short_signal = allow_shorts and (pa_bear_raw or re_short) and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear)
+rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull)
+rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear)
 
 if pos_dir == "flat" and (long_signal or rev_long)
     _s = f_long_stop(ik_near_L, ik_mid_L, ik_far_L)
@@ -641,8 +642,8 @@ al_exit   = input.bool(true, "Exit-signal alerts (any enabled exit)", group=grp_
 al_stop   = input.bool(true, "Stop-hit alerts", group=grp_al)
 al_signal_only = input.bool(false, "Signal-only mode (ignore position state)", tooltip="OFF: entry alerts fire only when flat, matching the strategy.\nON: every Full Alignment fires, even while a hypothetical trade is already open.", group=grp_al)
 
-raw_long  = allow_longs  and (pa_bull_raw or re_long)  and not gap_block
-raw_short = allow_shorts and (pa_bear_raw or re_short) and not gap_block
+raw_long  = allow_longs  and (pa_bull_raw or re_long)  and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull)
+raw_short = allow_shorts and (pa_bear_raw or re_short) and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear)
 
 fire_entry_long  = al_entry and (al_signal_only ? raw_long  : ev_entry_long)
 fire_entry_short = al_entry and (al_signal_only ? raw_short : ev_entry_short)
