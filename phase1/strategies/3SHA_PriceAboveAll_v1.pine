@@ -641,6 +641,7 @@ short_signal = allow_shorts and (sig_short or re_short) and in_date and not gap_
 var float lbl_entry_px = na
 var int    trade_no     = 0    // increments on every entry, so an exit can name the trade it closed
 var int    exit_no      = 0    // the closing trade's number, captured before any same-bar entry
+var float  exit_from_px = na   // and its entry price, for the same reason
 var string pos_dir_prev = "flat"
 pos_dir_prev := pos_dir
 
@@ -754,6 +755,7 @@ if pos_dir == "long" and not na(stop_level)
         peak_r := 0.0
         pos_dir := "flat"
         exit_no := trade_no
+        exit_from_px := lbl_entry_px
         entry_price := na
         init_stop := na
         stop_level := na
@@ -812,6 +814,7 @@ else if pos_dir == "short" and not na(stop_level)
         peak_r := 0.0
         pos_dir := "flat"
         exit_no := trade_no
+        exit_from_px := lbl_entry_px
         entry_price := na
         init_stop := na
         stop_level := na
@@ -952,7 +955,7 @@ if show_price_labels and did_exit
     _wasup = pos_dir_prev == "long"
     label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
          text = "#" + str.tostring(exit_no) + " " + exit_reason + " " + str.tostring(rawC, format.mintick)
-                + (na(lbl_entry_px) ? "" : "  (from " + str.tostring(lbl_entry_px, format.mintick) + ")"),
+                + (na(exit_from_px) ? "" : "  (from " + str.tostring(exit_from_px, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
          color = (exit_reason == "STOP" or exit_reason == "TRAIL") ? color.new(col_stop, 15) : color.new(col_exit, 15),
          textcolor = color.white, size = _lbl_size)
