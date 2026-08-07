@@ -751,7 +751,8 @@ if show_price_labels and (fire_stop_hit or fire_align_break)
     _wasup = pos_dir_prev == "long"
     _pl = na(exit_from_px) ? na : (_wasup ? rawC - exit_from_px : exit_from_px - rawC)
     label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
-         text = "#" + str.tostring(exit_no) + (na(_pl) ? "" : " " + (_pl >= 0 ? "+" : "") + str.tostring(_pl, format.mintick)),
+         text = "#" + str.tostring(exit_no) + " " + str.tostring(rawC, format.mintick)
+                + (na(_pl) ? "" : "  (" + (_pl >= 0 ? "+" : "") + str.tostring(_pl, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
          color = na(_pl) ? color.new(col_exit, 15) : (_pl >= 0 ? color.new(col_win, 15) : color.new(col_lose, 15)),
          textcolor = color.white, size = _lbl_size)
