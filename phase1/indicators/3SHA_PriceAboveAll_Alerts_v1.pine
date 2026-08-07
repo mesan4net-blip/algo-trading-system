@@ -720,11 +720,15 @@ col_bear = input.color(color.new(#F23645, 0), "Bear / Short", inline="lc", group
 col_stop = input.color(color.new(#FF9800, 0), "Stop", inline="lc", group=grp_disp)
 col_exit = input.color(color.new(#FF9800, 0), "Other Exit", inline="lc", group=grp_disp)
 col_init = input.color(color.new(#000000, 0), "Initial Stop", inline="lc", group=grp_disp)
+marker_offset_pct = input.float(0.15, "Marker Distance (%)", minval=0.0, step=0.05, tooltip="How far the exit arrows sit from the candle, as a percentage of price. Raise it if they overlap the bars or the price labels.", group=grp_disp)
 
 plotshape(show_marks and fire_entry_long,  title="Long entry",  style=shape.triangleup,   location=location.belowbar, color=col_bull,  size=size.small, text="PAA")
 plotshape(show_marks and fire_entry_short, title="Short entry", style=shape.triangledown, location=location.abovebar, color=col_bear, size=size.small, text="PAA")
-plotshape(show_marks and fire_align_break ? rawC : na, title="Exit signal", style=shape.xcross, location=location.absolute, color=col_exit, size=size.tiny)
-plotshape(show_marks and fire_stop_hit ? rawC : na,    title="Stop hit",    style=shape.xcross, location=location.absolute, color=col_stop, size=size.tiny)
+// Exit arrows sit clear of the candle - on the side opposite the entry marker,
+// so an exit can never be mistaken for an entry on the same bar.
+_mk_off = rawC * marker_offset_pct / 100.0
+plotshape(show_marks and (fire_stop_hit or fire_align_break) and pos_dir_prev == "long" ? rawH + _mk_off : na, title="Exit Long", style=shape.arrowdown, location=location.absolute, color=fire_stop_hit ? col_stop : col_exit, size=size.small)
+plotshape(show_marks and (fire_stop_hit or fire_align_break) and pos_dir_prev == "short" ? rawL - _mk_off : na, title="Exit Short", style=shape.arrowup,  location=location.absolute, color=fire_stop_hit ? col_stop : col_exit, size=size.small)
 
 // ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
 // Held clear of the candle by a percentage of price, so the gap looks the same
