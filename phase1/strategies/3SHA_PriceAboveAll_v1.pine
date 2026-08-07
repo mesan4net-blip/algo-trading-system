@@ -559,6 +559,8 @@ col_exit = input.color(color.new(#FF9800, 0), "Other Exit", inline="lc", group=g
 show_hud = input.bool(true, "State HUD", group=grp_disp)
 hud_pos = input.string("Top Right", "HUD Position", options=["Top Left","Top Right","Bottom Left","Bottom Right"], group=grp_disp)
 marker_offset_pct = input.float(0.15, "Marker Distance (%)", minval=0.0, step=0.05, tooltip="How far the exit arrows sit from the candle, as a percentage of price. Raise it if they overlap the bars or the price labels.", group=grp_disp)
+col_win  = input.color(color.new(#1B5E20, 0), "Exit Ahead", inline="oc", tooltip="Colour for an exit that finished ahead, and one for an exit that did not. Applies to the exit arrow and the exit label together.", group=grp_disp)
+col_lose = input.color(color.new(#000000, 0), "Exit Behind", inline="oc", group=grp_disp)
 
 // Drop an armed re-entry once the setup itself has gone
 // RE-ENTRY REFERENCE LEVEL
@@ -940,8 +942,11 @@ plotshape(show_markers and did_enter and pos_dir == "short" ? rawH : na, title="
 // Exit arrows sit clear of the candle - on the side opposite the entry marker,
 // so an exit can never be mistaken for an entry on the same bar.
 _mk_off = rawC * marker_offset_pct / 100.0
-plotshape(show_markers and did_exit and pos_dir_prev == "long" ? rawH + _mk_off : na, title="Exit Long", style=shape.arrowdown, location=location.absolute, color=(exit_reason == "STOP" or exit_reason == "TRAIL") ? col_stop : col_exit, size=size.small)
-plotshape(show_markers and did_exit and pos_dir_prev == "short" ? rawL - _mk_off : na, title="Exit Short", style=shape.arrowup,  location=location.absolute, color=(exit_reason == "STOP" or exit_reason == "TRAIL") ? col_stop : col_exit, size=size.small)
+_mk_up  = pos_dir_prev == "long"
+_mk_pl  = na(exit_from_px) ? na : (_mk_up ? rawC - exit_from_px : exit_from_px - rawC)
+_mk_col = na(_mk_pl) ? col_exit : (_mk_pl >= 0 ? col_win : col_lose)
+plotshape(show_markers and did_exit and pos_dir_prev == "long" ? rawH + _mk_off : na, title="Exit Long", style=shape.arrowdown, location=location.absolute, color=_mk_col, size=size.small)
+plotshape(show_markers and did_exit and pos_dir_prev == "short" ? rawL - _mk_off : na, title="Exit Short", style=shape.arrowup,  location=location.absolute, color=_mk_col, size=size.small)
 
 // ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
 // Held clear of the candle by a percentage of price, so the gap looks the same
@@ -961,7 +966,7 @@ if show_price_labels and did_exit
     label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
          text = "#" + str.tostring(exit_no) + (na(_pl) ? "" : " " + (_pl >= 0 ? "+" : "") + str.tostring(_pl, format.mintick)),
          style = _wasup ? label.style_label_down : label.style_label_up,
-         color = (exit_reason == "STOP" or exit_reason == "TRAIL") ? color.new(col_stop, 15) : color.new(col_exit, 15),
+         color = na(_pl) ? color.new(col_exit, 15) : (_pl >= 0 ? color.new(col_win, 15) : color.new(col_lose, 15)),
          textcolor = color.white, size = _lbl_size)
 
 
