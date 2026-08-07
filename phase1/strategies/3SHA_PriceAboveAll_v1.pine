@@ -957,9 +957,9 @@ if show_price_labels and did_enter
 
 if show_price_labels and did_exit
     _wasup = pos_dir_prev == "long"
+    _pl = na(exit_from_px) ? na : (_wasup ? rawC - exit_from_px : exit_from_px - rawC)
     label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
-         text = "#" + str.tostring(exit_no) + " " + exit_reason + " " + str.tostring(rawC, format.mintick)
-                + (na(exit_from_px) ? "" : "  (from " + str.tostring(exit_from_px, format.mintick) + ")"),
+         text = "#" + str.tostring(exit_no) + (na(_pl) ? "" : " " + (_pl >= 0 ? "+" : "") + str.tostring(_pl, format.mintick)),
          style = _wasup ? label.style_label_down : label.style_label_up,
          color = (exit_reason == "STOP" or exit_reason == "TRAIL") ? color.new(col_stop, 15) : color.new(col_exit, 15),
          textcolor = color.white, size = _lbl_size)
