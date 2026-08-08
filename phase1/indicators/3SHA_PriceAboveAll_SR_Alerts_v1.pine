@@ -269,6 +269,38 @@ eod_entry_block = past_cutoff and eod_block_entries
 // ============================================================================
 // TRADE STATE  (declared here — eligibility, ranking and the trail all read
 // pos_dir before the management block runs)
+// ── SUPPORT / RESISTANCE FILTER ─────────────────────────────────────────────
+// Reads levels from a SEPARATE indicator on the same chart. Point the two
+// sources at that indicator's resistance and support plots; nothing is
+// computed here and no third-party code is copied.
+//
+// The levels lag by design. A pivot needs its right-hand bars before it can be
+// confirmed, so the level in force on any bar was established well before it.
+// The other script draws its lines shifted BACK to the pivot, which makes them
+// look present earlier than they were known - so do not judge this filter by
+// eye off the chart. It is honest, it just knows less than the drawing implies.
+grp_sr = "⑨ ━━━ S/R FILTER ━━━"
+use_sr = input.bool(false, "Avoid Entries Near S/R", tooltip="Hold a long while resistance sits just above, and a short while support sits just below. OFF by default: it does nothing until both sources below are pointed at a support/resistance indicator on this chart.", group=grp_sr)
+sr_res_src = input.source(close, "  Resistance Source", tooltip="Pick the resistance plot from your support/resistance indicator. Leaving this on close makes the filter meaningless, so it is ignored unless it differs from price.", group=grp_sr)
+sr_sup_src = input.source(close, "  Support Source", tooltip="Pick the support plot from the same indicator.", group=grp_sr)
+sr_band_pct = input.float(0.30, "  Keep Clear By (%)", minval=0.0, step=0.05, tooltip="How close price has to be to the level before entries are held, as a percentage of price. 0.30 on a $600 instrument is about $1.80.", group=grp_sr)
+use_sr_exit = input.bool(false, "  Exit When S/R Is Close", tooltip="Close a long when resistance comes within the distance below, and a short when support does. Independent of the entry filter above - either can be used without the other.", group=grp_sr)
+sr_exit_band_pct = input.float(0.30, "  Exit Distance (%)", minval=0.0, step=0.05, tooltip="How close the level has to get before the trade is closed, as a percentage of price. Separate from the entry distance, since holding off an entry and abandoning an open trade are different decisions.", group=grp_sr)
+
+// A level only counts on the side it is actually on: resistance ABOVE price,
+// support BELOW it. A pivot high that price has already cleared is acting as
+// support, and holding longs on it would be backwards.
+_sr_band  = rawC * sr_band_pct / 100.0
+_sr_ready = sr_res_src != rawC and sr_sup_src != rawC   // both sources actually pointed at something
+_sr_armed = use_sr and _sr_ready
+sr_hold_long  = _sr_armed and not na(sr_res_src) and sr_res_src > rawC and (sr_res_src - rawC) <= _sr_band
+sr_hold_short = _sr_armed and not na(sr_sup_src) and sr_sup_src < rawC and (rawC - sr_sup_src) <= _sr_band
+
+// Same geometry as the entry filter, but its own distance and its own switch.
+_sr_xband = rawC * sr_exit_band_pct / 100.0
+sr_exit_long  = use_sr_exit and _sr_ready and not na(sr_res_src) and sr_res_src > rawC and (sr_res_src - rawC) <= _sr_xband
+sr_exit_short = use_sr_exit and _sr_ready and not na(sr_sup_src) and sr_sup_src < rawC and (rawC - sr_sup_src) <= _sr_xband
+
 // ============================================================================
 var string pos_dir     = "flat"
 var float  entry_price = na
@@ -490,7 +522,7 @@ if pos_dir == "long" and not na(stop_level)
     peak_r := math.max(peak_r, _r)
     bad_bars := align_broken_long ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _other = (_align_out or (use_sha_break and rawC < shab_bot) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_dn)) or past_cutoff
+    _other = (_align_out or (use_sha_break and rawC < shab_bot) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_dn)) or past_cutoff or sr_exit_long
     _stop_hit  = use_hard_stop ? (rawL <= stop_level) : (rawC <= stop_level)
     if _stop_hit or _other
         ev_stop_hit    := _stop_hit
@@ -526,7 +558,7 @@ else if pos_dir == "short" and not na(stop_level)
     peak_r := math.max(peak_r, _r)
     bad_bars := align_broken_short ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _other = (_align_out or (use_sha_break and rawC > shab_top) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_up)) or past_cutoff
+    _other = (_align_out or (use_sha_break and rawC > shab_top) or (use_target and _r >= target_r) or (use_giveback and peak_r >= giveback_min_r and _r <= peak_r * (1.0 - giveback_pct / 100.0)) or (use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _r < time_stop_min_r) or (use_cross_exit and cross_up)) or past_cutoff or sr_exit_short
     _stop_hit  = use_hard_stop ? (rawH >= stop_level) : (rawC >= stop_level)
     if _stop_hit or _other
         ev_stop_hit    := _stop_hit
@@ -597,30 +629,6 @@ ref_short = not na(rearm_low)  and rawC < rearm_low  and (not reentry_needs_base
 
 re_long  = use_reentry and (reentry_style == "Two-candle pattern" ? pat_long  : ref_long)
 re_short = use_reentry and (reentry_style == "Two-candle pattern" ? pat_short : ref_short)
-
-// ── SUPPORT / RESISTANCE FILTER ─────────────────────────────────────────────
-// Reads levels from a SEPARATE indicator on the same chart. Point the two
-// sources at that indicator's resistance and support plots; nothing is
-// computed here and no third-party code is copied.
-//
-// The levels lag by design. A pivot needs its right-hand bars before it can be
-// confirmed, so the level in force on any bar was established well before it.
-// The other script draws its lines shifted BACK to the pivot, which makes them
-// look present earlier than they were known - so do not judge this filter by
-// eye off the chart. It is honest, it just knows less than the drawing implies.
-grp_sr = "⑨ ━━━ S/R FILTER ━━━"
-use_sr = input.bool(false, "Avoid Entries Near S/R", tooltip="Hold a long while resistance sits just above, and a short while support sits just below. OFF by default: it does nothing until both sources below are pointed at a support/resistance indicator on this chart.", group=grp_sr)
-sr_res_src = input.source(close, "  Resistance Source", tooltip="Pick the resistance plot from your support/resistance indicator. Leaving this on close makes the filter meaningless, so it is ignored unless it differs from price.", group=grp_sr)
-sr_sup_src = input.source(close, "  Support Source", tooltip="Pick the support plot from the same indicator.", group=grp_sr)
-sr_band_pct = input.float(0.30, "  Keep Clear By (%)", minval=0.0, step=0.05, tooltip="How close price has to be to the level before entries are held, as a percentage of price. 0.30 on a $600 instrument is about $1.80.", group=grp_sr)
-
-// A level only counts on the side it is actually on: resistance ABOVE price,
-// support BELOW it. A pivot high that price has already cleared is acting as
-// support, and holding longs on it would be backwards.
-_sr_band  = rawC * sr_band_pct / 100.0
-_sr_armed = use_sr and sr_res_src != rawC and sr_sup_src != rawC
-sr_hold_long  = _sr_armed and not na(sr_res_src) and sr_res_src > rawC and (sr_res_src - rawC) <= _sr_band
-sr_hold_short = _sr_armed and not na(sr_sup_src) and sr_sup_src < rawC and (rawC - sr_sup_src) <= _sr_band
 
 // ── ARMED ENTRY ─────────────────────────────────────────────────────────────
 // pa_bull_raw fires on a single bar. If the direction filter blocks that bar
