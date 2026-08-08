@@ -177,6 +177,7 @@ reentry_needs_base = input.bool(true, "  Setup Must Still Hold", tooltip="Only r
 reentry_style = input.string("Two-candle pattern", "  Re-Entry Style", options=["Two-candle pattern","Close beyond reference"], tooltip="Two-candle pattern: after the setup is valid again, wait for a candle that closes beyond the SHA layer body below (the trigger candle), then enter at the close of a later candle that closes beyond the TRIGGER CANDLE'S low (short) or high (long).\n\nClose beyond reference: the simpler rule - enter on any close beyond the close of the candle the trade exited on, or of the candle that made the setup invalid, whichever came last.", group=grp_entry)
 reentry_layer = input.string("Base", "  Re-Entry Trigger Layer", options=["Base","HTF1","HTF2"], tooltip="Which SHA layer's body the trigger candle has to close beyond. This applies to RE-ENTRY ONLY - it does not change what the first entry requires.", group=grp_entry)
 gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
+min_layer_gap_pct = input.float(0.0, "Minimum Layer Gap (%)", minval=0.0, step=0.05, tooltip="How far apart the HTF1 and HTF2 SHA bodies have to be before an entry is allowed, as a percentage of price. Bunched layers mean no trend, which is where price crosses back and forth and trades go nowhere. 0 = off. Try 0.20 to start.\n\nIt releases slowly after a flat stretch, since the layers need time to spread again, so the first part of some real moves will be missed.", group=grp_entry)
 
 // ============================================================================
 // ④ INITIAL STOP  (invalidation level + sizing anchor)
@@ -614,6 +615,19 @@ re_short = use_reentry and (reentry_style == "Two-candle pattern" ? pat_short : 
 // Gap skip: block only the entry that fires on a gapped daily open (not the whole day).
 is_new_day = ta.change(time("1D")) != 0
 gap_block  = gap_thresh > 0 and is_new_day and gap_pct > gap_thresh
+// ── LAYER SEPARATION GATE ───────────────────────────────────────────────────
+// In a trend the SHA layers spread apart and stack in order. In a sideways
+// market they bunch together, because all three are averaging much the same
+// price - and that is where price oscillates across them, crossing and
+// re-crossing, producing entries that go nowhere.
+//
+// This measures the vertical gap between the HTF1 and HTF2 bodies. Positive
+// means they are clear of each other; negative means they overlap. Entries are
+// held until the gap is wide enough to say a trend exists.
+layer_gap = math.max(sha_bot_1 - sha_top_2, sha_bot_2 - sha_top_1)
+min_gap_abs = rawC * min_layer_gap_pct / 100.0
+gap_block_entry = min_layer_gap_pct > 0 and (na(layer_gap) or layer_gap < min_gap_abs)
+
 // ── ARMED ENTRY ─────────────────────────────────────────────────────────────
 // pa_bull_raw fires on a single bar. If the direction filter blocks that bar
 // the signal would be gone for good, even though the setup may hold for hours -
@@ -635,8 +649,8 @@ else if pa_bear_raw
 sig_long  = pend_long
 sig_short = pend_short
 
-long_signal  = allow_longs  and (sig_long or re_long)  and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull)
-short_signal = allow_shorts and (sig_short or re_short) and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear)
+long_signal  = allow_longs  and (sig_long or re_long)  and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull) and not gap_block_entry
+short_signal = allow_shorts and (sig_short or re_short) and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear) and not gap_block_entry
 
 // Per-bar event flags (for markers)
 // Entry price has to be captured before the exit block clears it, or the exit
@@ -834,8 +848,8 @@ else if pos_dir == "short" and not na(stop_level)
 // ── REVERSE ON STOP ────────────────────────────────────────────────────────
 // Flip only if the opposite side is FULLY ALIGNED at this moment, its direction
 // is permitted, and the gap filter passes. It does not require a fresh signal.
-rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull)
-rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear)
+rev_long  = reverse_on_stop and stopped_from == "short" and all_bull and allow_longs  and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull) and not gap_block_entry
+rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_shorts and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear) and not gap_block_entry
 
 // ───────────────────────────────── ENTRIES ────────────────────────────────
 // Only when flat (possibly just made flat above → same-bar flip).
