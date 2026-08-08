@@ -629,14 +629,22 @@ use_sr = input.bool(false, "Avoid Entries Near S/R", tooltip="Hold a long while 
 sr_res_src = input.source(close, "  Resistance Source", tooltip="Pick the resistance plot from your support/resistance indicator. Leaving this on close makes the filter meaningless, so it is ignored unless it differs from price.", group=grp_sr)
 sr_sup_src = input.source(close, "  Support Source", tooltip="Pick the support plot from the same indicator.", group=grp_sr)
 sr_band_pct = input.float(0.30, "  Keep Clear By (%)", minval=0.0, step=0.05, tooltip="How close price has to be to the level before entries are held, as a percentage of price. 0.30 on a $600 instrument is about $1.80.", group=grp_sr)
+use_sr_exit = input.bool(false, "  Exit When S/R Is Close", tooltip="Close a long when resistance comes within the distance below, and a short when support does. Independent of the entry filter above - either can be used without the other.", group=grp_sr)
+sr_exit_band_pct = input.float(0.30, "  Exit Distance (%)", minval=0.0, step=0.05, tooltip="How close the level has to get before the trade is closed, as a percentage of price. Separate from the entry distance, since holding off an entry and abandoning an open trade are different decisions.", group=grp_sr)
 
 // A level only counts on the side it is actually on: resistance ABOVE price,
 // support BELOW it. A pivot high that price has already cleared is acting as
 // support, and holding longs on it would be backwards.
 _sr_band  = rawC * sr_band_pct / 100.0
-_sr_armed = use_sr and sr_res_src != rawC and sr_sup_src != rawC
+_sr_ready = sr_res_src != rawC and sr_sup_src != rawC   // both sources actually pointed at something
+_sr_armed = use_sr and _sr_ready
 sr_hold_long  = _sr_armed and not na(sr_res_src) and sr_res_src > rawC and (sr_res_src - rawC) <= _sr_band
 sr_hold_short = _sr_armed and not na(sr_sup_src) and sr_sup_src < rawC and (rawC - sr_sup_src) <= _sr_band
+
+// Same geometry as the entry filter, but its own distance and its own switch.
+_sr_xband = rawC * sr_exit_band_pct / 100.0
+sr_exit_long  = use_sr_exit and _sr_ready and not na(sr_res_src) and sr_res_src > rawC and (sr_res_src - rawC) <= _sr_xband
+sr_exit_short = use_sr_exit and _sr_ready and not na(sr_sup_src) and sr_sup_src < rawC and (rawC - sr_sup_src) <= _sr_xband
 
 // ── ARMED ENTRY ─────────────────────────────────────────────────────────────
 // pa_bull_raw fires on a single bar. If the direction filter blocks that bar
@@ -764,12 +772,12 @@ if pos_dir == "long" and not na(stop_level)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
     _cross_out = use_cross_exit and cross_dn
     _eod_out   = past_cutoff
-    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
+    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out or sr_exit_long
     _stop_hit  = (not use_hard_stop) and (rawC <= stop_level)
     if use_hard_stop and not _other_out
         strategy.exit("PAASR-stop", from_entry="PAASR", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
-        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
+        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : sr_exit_long ? "S/R" : "SHA Cross"
         strategy.close_all(comment = _why)
         did_exit := true
         _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
@@ -823,12 +831,12 @@ else if pos_dir == "short" and not na(stop_level)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
     _cross_out = use_cross_exit and cross_up
     _eod_out   = past_cutoff
-    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
+    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out or sr_exit_short
     _stop_hit  = (not use_hard_stop) and (rawC >= stop_level)
     if use_hard_stop and not _other_out
         strategy.exit("PAASR-stop", from_entry="PAASR", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
-        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
+        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : sr_exit_short ? "S/R" : "SHA Cross"
         strategy.close_all(comment = _why)
         did_exit := true
         _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
