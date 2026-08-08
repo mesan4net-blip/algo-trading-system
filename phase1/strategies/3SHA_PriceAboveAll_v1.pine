@@ -562,6 +562,7 @@ hud_pos = input.string("Top Right", "HUD Position", options=["Top Left","Top Rig
 marker_offset_pct = input.float(0.15, "Marker Distance (%)", minval=0.0, step=0.05, tooltip="How far the exit arrows sit from the candle, as a percentage of price. Raise it if they overlap the bars or the price labels.", group=grp_disp)
 col_win  = input.color(color.new(#1B5E20, 0), "Exit Ahead", inline="oc", tooltip="Colour for an exit that finished ahead, and one for an exit that did not. Applies to the exit arrow and the exit label together.", group=grp_disp)
 col_lose = input.color(color.new(#000000, 0), "Exit Behind", inline="oc", group=grp_disp)
+dbg = input.bool(false, "Entry Diagnostics (Data Window)", tooltip="Publishes the entry decision chain to the Data Window, so a bar that took no trade can be explained. Hover the bar with the Data Window open; the first 0 down the list is what stopped it.", group=grp_disp)
 
 // Drop an armed re-entry once the setup itself has gone
 // RE-ENTRY REFERENCE LEVEL
@@ -649,6 +650,8 @@ else if pa_bear_raw
 sig_long  = pend_long
 sig_short = pend_short
 
+var float dbg_stop_lvl = na
+var float dbg_stop_ok  = na
 long_signal  = allow_longs  and (sig_long or re_long)  and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bull) and not gap_block_entry
 short_signal = allow_shorts and (sig_short or re_short) and in_date and not gap_block and not eod_entry_block and (not entry_needs_dir or raw_is_bear) and not gap_block_entry
 
@@ -855,6 +858,8 @@ rev_short = reverse_on_stop and stopped_from == "long"  and all_bear and allow_s
 // Only when flat (possibly just made flat above → same-bar flip).
 if pos_dir == "flat" and (long_signal or rev_long)
     _stop = f_long_stop(ik_near_L, ik_mid_L, ik_far_L)
+    dbg_stop_lvl := _stop
+    dbg_stop_ok  := _stop < rawC ? 1 : 0
     if not na(_stop) and _stop < rawC
         entry_price := rawC
         lbl_entry_px := rawC
@@ -883,6 +888,8 @@ if pos_dir == "flat" and (long_signal or rev_long)
 
 if pos_dir == "flat" and (short_signal or rev_short)
     _stop = f_short_stop(ik_near_S, ik_mid_S, ik_far_S)
+    dbg_stop_lvl := _stop
+    dbg_stop_ok  := _stop > rawC ? 1 : 0
     if not na(_stop) and _stop > rawC
         entry_price := rawC
         lbl_entry_px := rawC
@@ -1047,3 +1054,33 @@ if show_hud and barstate.islast
 alertcondition(did_enter and pos_dir == "long",  "PAA Long Entry",  "3SHA Price Above All — LONG entry")
 alertcondition(did_enter and pos_dir == "short", "PAA Short Entry", "3SHA Price Above All — SHORT entry")
 alertcondition(did_exit, "PAA Exit", "3SHA Price Above All — position closed")
+
+// ── ENTRY DIAGNOSTICS ───────────────────────────────────────────────────────
+// Hover any bar with the Data Window open and read the chain top to bottom.
+// The first 0 is what stopped the entry on that bar. 1 = true.
+//   setup      - price is beyond the required layers on this bar
+//   transition - the bar the setup BECAME true; entries arm here, not later
+//   armed      - setup completed and still waiting for a bar to fire on
+//   candle ok  - raw candle closes the trade's way, or that filter is off
+//   date / gap / cutoff / layergap - the four blocking filters
+//   signal     - everything above passed
+//   flat       - no position open, so an entry is possible at all
+//   stop ok    - the computed stop sits the right side of price. If this is 0
+//                the entry was REJECTED silently, with no marker drawn.
+plot(dbg ? (all_bull ? 1 : 0) : na, "dbg setup L", display=display.data_window)
+plot(dbg ? (all_bear ? 1 : 0) : na, "dbg setup S", display=display.data_window)
+plot(dbg ? (pa_bull_raw ? 1 : 0) : na, "dbg transition L", display=display.data_window)
+plot(dbg ? (pa_bear_raw ? 1 : 0) : na, "dbg transition S", display=display.data_window)
+plot(dbg ? (pend_long ? 1 : 0) : na, "dbg armed L", display=display.data_window)
+plot(dbg ? (pend_short ? 1 : 0) : na, "dbg armed S", display=display.data_window)
+plot(dbg ? ((not entry_needs_dir or raw_is_bull) ? 1 : 0) : na, "dbg candle ok L", display=display.data_window)
+plot(dbg ? ((not entry_needs_dir or raw_is_bear) ? 1 : 0) : na, "dbg candle ok S", display=display.data_window)
+plot(dbg ? (in_date ? 1 : 0) : na, "dbg date ok", display=display.data_window)
+plot(dbg ? (gap_block ? 0 : 1) : na, "dbg gap ok", display=display.data_window)
+plot(dbg ? (eod_entry_block ? 0 : 1) : na, "dbg cutoff ok", display=display.data_window)
+plot(dbg ? (gap_block_entry ? 0 : 1) : na, "dbg layergap ok", display=display.data_window)
+plot(dbg ? (long_signal ? 1 : 0) : na, "dbg signal L", display=display.data_window)
+plot(dbg ? (short_signal ? 1 : 0) : na, "dbg signal S", display=display.data_window)
+plot(dbg ? (pos_dir == "flat" ? 1 : 0) : na, "dbg flat", display=display.data_window)
+plot(dbg ? dbg_stop_ok : na, "dbg stop ok", display=display.data_window)
+plot(dbg ? dbg_stop_lvl : na, "dbg stop level", display=display.data_window)
