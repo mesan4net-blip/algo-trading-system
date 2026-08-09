@@ -47,7 +47,7 @@
 strategy("3SHA Price Above All v2", shorttitle="3SHA-PAA2", overlay=true,
      initial_capital=100000, currency=currency.USD,
      default_qty_type=strategy.percent_of_equity, default_qty_value=10,
-     calc_on_every_tick=false, process_orders_on_close=true, pyramiding=0,
+     calc_on_every_tick=false, process_orders_on_close=false, pyramiding=0,
      max_bars_back=5000, max_labels_count=500, max_lines_count=500,
      commission_type=strategy.commission.percent, commission_value=0.0,
      slippage=0)
