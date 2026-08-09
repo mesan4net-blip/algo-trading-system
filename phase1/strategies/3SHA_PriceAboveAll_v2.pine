@@ -169,7 +169,8 @@ allow_shorts = input.bool(true, "Allow Shorts", group=grp_entry)
 buy_ref  = input.string("High", "Buy Reference", options=["High","Body Top","Close","Open","Body Bottom","Low","Mid (H+L)","Mid (O+C)"], tooltip="Which point of the TRIGGER candle a buy waits for. High is a breakout - price must rise past the trigger. Low is a pullback - price must fall back into the trigger candle. They are different systems, not degrees of the same one.", group=grp_entry)
 sell_ref = input.string("Low", "Sell Reference", options=["High","Body Top","Close","Open","Body Bottom","Low","Mid (H+L)","Mid (O+C)"], tooltip="Which point of the TRIGGER candle a sell waits for. Separate from the buy side so the two can be set independently.", group=grp_entry)
 nbar_len = input.int(10, "Trigger Must Beat Last N Bars", minval=0, tooltip="How many bars back the trigger candle has to beat. This is PART OF what makes a candle a trigger, not a filter on top: a trigger closes beyond the required SHA layers AND breaks out over the last N bars. Setting it to 0 removes the breakout requirement, so any candle closing beyond the layers becomes a trigger - which lets each new trigger sit lower than the last after an exit. The trigger candle must break out over the last N bars for a buy, or break down for a sell for a sell. 0 = off, so a setup that simply took time to develop is still honoured. Turn it on to demand a genuine breakout.", group=grp_entry)
-nbar_test = input.string("Close beyond N-bar high", "  Breakout Test", options=["Close beyond N-bar high","High beyond N-bar high","Close beyond N-bar close"], tooltip="What the trigger candle has to do to count as a breakout.\n\nClose beyond N-bar high: the close must clear the highest HIGH of the last N bars. A real breakout.\nHigh beyond N-bar high: only the wick has to reach it, so a candle can poke through and close back inside.\nClose beyond N-bar close: close against close, ignoring wicks on both sides. Strictest and most like-for-like.\n\nMirrored for sells.", group=grp_entry)
+buy_brk  = input.string("Close beyond N-bar high", "  Buy Breakout Test", options=["Close beyond N-bar high","High beyond N-bar high","Close beyond N-bar close"], tooltip="What a BUY trigger candle has to do over the last N bars.\n\nClose beyond N-bar high: the close must clear the highest high. A real breakout.\nHigh beyond N-bar high: only the wick has to reach it, so a candle can poke through and close back inside.\nClose beyond N-bar close: close against close, ignoring wicks on both sides.", group=grp_entry)
+sell_brk = input.string("Close beyond N-bar low", "  Sell Breakout Test", options=["Close beyond N-bar low","Low beyond N-bar low","Close beyond N-bar close"], tooltip="What a SELL trigger candle has to do over the last N bars. Set independently of the buy side.\n\nClose beyond N-bar low: the close must clear the lowest low.\nLow beyond N-bar low: only the wick has to reach it.\nClose beyond N-bar close: close against close, ignoring wicks.", group=grp_entry)
 // The entry signal fires once, on the FIRST breakout into the condition, and
 // never again while it stays true. So a trade stopped out mid-trend leaves the
 // rest of the move untaken. This arms the setup again after an exit: price has
@@ -610,11 +611,11 @@ _nb_hi_h = ta.highest(rawH, _nb)[1]
 _nb_lo_l = ta.lowest(rawL,  _nb)[1]
 _nb_hi_c = ta.highest(rawC, _nb)[1]
 _nb_lo_c = ta.lowest(rawC,  _nb)[1]
-brk_ok_long  = nbar_len <= 0 or (nbar_test == "Close beyond N-bar high" ? rawC >= _nb_hi_h
-   : nbar_test == "High beyond N-bar high"  ? rawH >= _nb_hi_h
+brk_ok_long  = nbar_len <= 0 or (buy_brk  == "Close beyond N-bar high" ? rawC >= _nb_hi_h
+   : buy_brk  == "High beyond N-bar high"   ? rawH >= _nb_hi_h
    :                                          rawC >= _nb_hi_c)
-brk_ok_short = nbar_len <= 0 or (nbar_test == "Close beyond N-bar high" ? rawC <= _nb_lo_l
-   : nbar_test == "High beyond N-bar high"  ? rawL <= _nb_lo_l
+brk_ok_short = nbar_len <= 0 or (sell_brk == "Close beyond N-bar low"  ? rawC <= _nb_lo_l
+   : sell_brk == "Low beyond N-bar low"     ? rawL <= _nb_lo_l
    :                                          rawC <= _nb_lo_c)
 
 var int   trg_dir = 0        // 1 long, -1 short, 0 none
