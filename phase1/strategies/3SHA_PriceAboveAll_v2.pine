@@ -637,14 +637,21 @@ else if trg_dir == 0 and all_bear and brk_ok_short and allow_shorts
 
 entry_level = trg_dir == 0 ? na : f_ref(trg_o, trg_h, trg_l, trg_c, trg_dir == 1 ? buy_ref : sell_ref)
 
+// ── LAYER SEPARATION GATE ───────────────────────────────────────────────────
+// In a trend the layers spread apart and stack in order. Sideways they bunch
+// together, and that is where price crosses back and forth across them.
+// Positive gap means the bodies are clear of each other; negative means they
+// overlap. 0 = off.
+layer_gap = math.max(sha_bot_1 - sha_top_2, sha_bot_2 - sha_top_1)
+min_gap_abs = rawC * min_layer_gap_pct / 100.0
+gap_block_entry = min_layer_gap_pct > 0 and (na(layer_gap) or layer_gap < min_gap_abs)
+
 gates_ok = in_date and not gap_block and not eod_entry_block and not gap_block_entry
 long_signal  = trg_dir ==  1 and not na(entry_level) and gates_ok and allow_longs
 short_signal = trg_dir == -1 and not na(entry_level) and gates_ok and allow_shorts
 
 var float dbg_stop_lvl = na
 var float dbg_stop_ok  = na
-long_signal  = allow_longs  and (sig_long or re_long)  and in_date and not gap_block and not eod_entry_block and not gap_block_entry
-short_signal = allow_shorts and (sig_short or re_short) and in_date and not gap_block and not eod_entry_block and not gap_block_entry
 
 // Per-bar event flags (for markers)
 // Entry price has to be captured before the exit block clears it, or the exit
