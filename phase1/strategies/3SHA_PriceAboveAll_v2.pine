@@ -914,8 +914,14 @@ else if pos_dir == "short" and not na(stop_level)
 // does the waiting and the filling, so a gap through the level fills at the
 // open exactly as it would live. The order is replaced each bar the trigger is
 // still valid and cancelled the moment it is not.
-_lvl_above_L = not na(entry_level) and entry_level > trg_c
-_lvl_above_S = not na(entry_level) and entry_level > trg_c
+// Stop or limit is decided against the price NOW, not the trigger candle's
+// close. The order is placed on later bars, by which time price has moved - and
+// a buy stop placed BELOW current price triggers instantly and fills at market,
+// which is exactly how entries ended up on the close.
+//   level above price -> stop  (price must rise into it)
+//   level below price -> limit (price must fall into it)
+_lvl_above_L = not na(entry_level) and entry_level > rawC
+_lvl_above_S = not na(entry_level) and entry_level > rawC
 
 // Long and short use separate order IDs. Pine refuses to change the direction
 // of a pending order under one ID, and a resting order on the far side is
