@@ -960,18 +960,31 @@ plotcandle(base_ready and base_show ? bO : na, base_ready and base_show ? base_p
            bordercolor=base_ready and base_show ? base_brdr_col : na)
 
 // Entry markers — filled arrows (▲▼), carried over from v6
-plotshape(show_markers and did_enter and pos_dir == "long"  ? rawL  : na, title="Entry Long",  style=shape.triangleup,   location=location.belowbar, color=col_bull, size=size.small, text="▲")
-plotshape(show_markers and did_enter and pos_dir == "short" ? rawH : na, title="Entry Short", style=shape.triangledown, location=location.abovebar, color=col_bear, size=size.small, text="▼")
 
 // Exit markers — ✕ at the exit, colored by reason (stop vs alignment break)
 // Exit arrows sit clear of the candle - on the side opposite the entry marker,
 // so an exit can never be mistaken for an entry on the same bar.
 _mk_off = rawC * marker_offset_pct / 100.0
+// Markers are drawn as labels, not plotshape. plotshape can only draw on the
+// CURRENT bar, but a fill is not visible until the bar after it happens - so a
+// plotted marker landed one bar away from its own label. A label can be placed
+// at an explicit bar index, which keeps the pair together.
 _mk_up  = exit_wasup
 _mk_pl  = na(exit_from_px) or na(exit_px) ? na : (_mk_up ? exit_px - exit_from_px : exit_from_px - exit_px)
 _mk_col = na(_mk_pl) ? col_exit : (_mk_pl >= 0 ? col_win : col_lose)
-plotshape(show_markers and did_exit and exit_wasup ? rawH + _mk_off : na, title="Exit Long", style=shape.arrowdown, location=location.absolute, color=_mk_col, size=size.small)
-plotshape(show_markers and did_exit and not exit_wasup ? rawL - _mk_off : na, title="Exit Short", style=shape.arrowup,  location=location.absolute, color=_mk_col, size=size.small)
+
+if show_markers and did_enter
+    _b  = na(entry_bar) ? bar_index : entry_bar
+    _up = pos_dir == "long"
+    label.new(_b, _up ? low[bar_index - _b] - _mk_off : high[bar_index - _b] + _mk_off,
+         text = "", style = _up ? label.style_triangleup : label.style_triangledown,
+         color = _up ? col_bull : col_bear, size = size.small)
+
+if show_markers and did_exit
+    _b = na(exit_bar) ? bar_index : exit_bar
+    label.new(_b, _mk_up ? high[bar_index - _b] + _mk_off : low[bar_index - _b] - _mk_off,
+         text = "", style = _mk_up ? label.style_arrowdown : label.style_arrowup,
+         color = _mk_col, size = size.small)
 
 // ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
 // Held clear of the candle by a percentage of price, so the gap looks the same
