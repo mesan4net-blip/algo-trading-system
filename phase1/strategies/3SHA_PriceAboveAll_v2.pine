@@ -601,8 +601,11 @@ f_ref(_o, _h, _l, _c, _sel) =>
 
 // Breakout filter. 0 = off, so a setup that simply took time to develop is
 // still honoured. When on, the trigger must make a new extreme over N bars.
-brk_ok_long  = nbar_len <= 0 or rawH >= ta.highest(rawH, nbar_len)[1]
-brk_ok_short = nbar_len <= 0 or rawL <= ta.lowest(rawL,  nbar_len)[1]
+// ta.* functions are evaluated on every bar whatever the surrounding logic
+// does, so the length has to be valid even when the filter is switched off.
+_nb = math.max(1, nbar_len)
+brk_ok_long  = nbar_len <= 0 or rawH >= ta.highest(rawH, _nb)[1]
+brk_ok_short = nbar_len <= 0 or rawL <= ta.lowest(rawL,  _nb)[1]
 
 var int   trg_dir = 0        // 1 long, -1 short, 0 none
 var float trg_o = na
