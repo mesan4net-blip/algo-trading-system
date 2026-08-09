@@ -660,8 +660,13 @@ min_gap_abs = rawC * min_layer_gap_pct / 100.0
 gap_block_entry = min_layer_gap_pct > 0 and (na(layer_gap) or layer_gap < min_gap_abs)
 
 gates_ok = in_date and not gap_block and not eod_entry_block and not gap_block_entry
-long_signal  = trg_dir ==  1 and not na(entry_level) and gates_ok and allow_longs
-short_signal = trg_dir == -1 and not na(entry_level) and gates_ok and allow_shorts
+// The trigger candle and the trade candle are two DIFFERENT candles. Orders are
+// only placed from the bar AFTER the trigger, because process_orders_on_close
+// fills on the bar an order is placed - so a reference at or below the trigger's
+// close would fill on the trigger candle itself and collapse the two into one.
+_past_trigger = not na(trg_bar) and bar_index > trg_bar
+long_signal  = trg_dir ==  1 and not na(entry_level) and _past_trigger and gates_ok and allow_longs
+short_signal = trg_dir == -1 and not na(entry_level) and _past_trigger and gates_ok and allow_shorts
 
 var float dbg_stop_lvl = na
 var float dbg_stop_ok  = na
