@@ -707,24 +707,65 @@ align_broken_short = align_break_level == "Base Flips"      ? flip_b_short
 // ───────────────────────────── MANAGE OPEN POSITION ────────────────────────
 // Runs before entries so a same-bar reversal (exit then opposite entry) works.
 
-// Reconcile: if a HARD stop order filled, the engine closed the position but our
-// manual state is still "in a trade" — detect (flat book, non-flat state) and reset.
-if pos_dir != "flat" and strategy.position_size == 0 and not na(entry_bar) and bar_index > entry_bar
-    did_exit := true
-    exit_reason := "STOP"
-    pos_dir := "flat"
-    entry_price := na
-    init_stop := na
-    stop_level := na
-    risk_unit := na
-    be_moved := false
-    tp1_taken := false
+// ── POSITION STATE ──────────────────────────────────────────────────────────
+// Pine's order engine is the single source of truth. v2 rests orders at the
+// reference level and lets the engine fill them, so a parallel hand-kept copy
+// of the position drifts a bar behind and produces phantom entries and double
+// exits. Everything below is READ from the engine, never assumed.
+_ps  = strategy.position_size
+_ot  = strategy.opentrades
+pos_dir := _ps > 0 ? "long" : _ps < 0 ? "short" : "flat"
+
+_e_bar = _ot > 0 ? strategy.opentrades.entry_bar_index(_ot - 1) : na
+_e_px  = _ot > 0 ? strategy.opentrades.entry_price(_ot - 1)     : na
+_fresh = _ot > 0 and (na(entry_bar) or _e_bar != entry_bar)
+
+// A trade that has closed: the engine is flat but our per-trade state is not.
+if _ot == 0 and not na(entry_bar)
+    exit_no      := trade_no
+    exit_from_px := lbl_entry_px
+    did_exit     := true
+    entry_bar    := na
+    entry_price  := na
+    init_stop    := na
+    stop_level   := na
+    risk_unit    := na
+    be_moved     := false
+    tp1_taken    := false
+    bad_bars     := 0
+    peak_r       := 0.0
     elig_b := false
     elig_1 := false
     elig_2 := false
     arm_b  := false
     arm_1  := false
     arm_2  := false
+
+// A trade that has just opened, at the price the engine actually paid.
+if _fresh
+    _is_long = _ps > 0
+    _stop = _is_long ? f_long_stop(ik_near_L, ik_mid_L, ik_far_L) : f_short_stop(ik_near_S, ik_mid_S, ik_far_S)
+    dbg_stop_lvl := _stop
+    dbg_stop_ok  := (_is_long ? _stop < _e_px : _stop > _e_px) ? 1 : 0
+    entry_bar    := _e_bar
+    entry_price  := _e_px
+    lbl_entry_px := _e_px
+    trade_no     := trade_no + 1
+    init_stop    := _stop
+    stop_level   := _stop
+    risk_unit    := math.abs(_e_px - _stop)
+    be_moved     := false
+    tp1_taken    := false
+    bad_bars     := 0
+    peak_r       := 0.0
+    elig_b := _is_long ? inst_el_b_long : inst_el_b_short
+    elig_1 := _is_long ? inst_el_1_long : inst_el_1_short
+    elig_2 := _is_long ? inst_el_2_long : inst_el_2_short
+    arm_b  := _is_long ? base_bull_bar : not base_bull_bar
+    arm_1  := _is_long ? htf1_bull_bar : not htf1_bull_bar
+    arm_2  := _is_long ? htf2_bull_bar : not htf2_bull_bar
+    did_enter    := true
+    trg_dir      := 0
 
 if pos_dir == "long" and not na(stop_level)
     _rr = risk_unit > 0 ? (rawC - entry_price) / risk_unit : 0.0
@@ -764,18 +805,10 @@ if pos_dir == "long" and not na(stop_level)
     if _stop_hit or _other_out
         _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
-        did_exit := true
         _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
         exit_reason := _stop_hit ? (_moved ? "TRAIL" : "STOP") : "EXIT"
         bad_bars := 0
         peak_r := 0.0
-        pos_dir := "flat"
-        exit_no := trade_no
-        exit_from_px := lbl_entry_px
-        entry_price := na
-        init_stop := na
-        stop_level := na
-        risk_unit := na
         be_moved := false
         tp1_taken := false
         elig_b := false
@@ -819,18 +852,10 @@ else if pos_dir == "short" and not na(stop_level)
     if _stop_hit or _other_out
         _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
-        did_exit := true
         _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
         exit_reason := _stop_hit ? (_moved ? "TRAIL" : "STOP") : "EXIT"
         bad_bars := 0
         peak_r := 0.0
-        pos_dir := "flat"
-        exit_no := trade_no
-        exit_from_px := lbl_entry_px
-        entry_price := na
-        init_stop := na
-        stop_level := na
-        risk_unit := na
         be_moved := false
         tp1_taken := false
         elig_b := false
@@ -872,38 +897,6 @@ else if short_signal and (pos_dir == "flat" or (use_flip and pos_dir == "long"))
 else
     strategy.cancel("PAA2-L")
     strategy.cancel("PAA2-S")
-
-// Pine owns the fill, so the manual state machine reads the result back rather
-// than assuming it. strategy.position_avg_price is the price actually paid.
-_now_long  = strategy.position_size > 0
-_now_short = strategy.position_size < 0
-_opened    = (_now_long and pos_dir != "long") or (_now_short and pos_dir != "short")
-
-if _opened
-    _fill = strategy.position_avg_price
-    _stop = _now_long ? f_long_stop(ik_near_L, ik_mid_L, ik_far_L) : f_short_stop(ik_near_S, ik_mid_S, ik_far_S)
-    dbg_stop_lvl := _stop
-    dbg_stop_ok  := (_now_long ? _stop < _fill : _stop > _fill) ? 1 : 0
-    entry_price  := _fill
-    lbl_entry_px := _fill
-    trade_no     := trade_no + 1
-    init_stop    := _stop
-    stop_level   := _stop
-    risk_unit    := math.abs(_fill - _stop)
-    entry_bar    := bar_index
-    be_moved     := false
-    bad_bars     := 0
-    peak_r       := 0.0
-    elig_b := _now_long ? inst_el_b_long : inst_el_b_short
-    elig_1 := _now_long ? inst_el_1_long : inst_el_1_short
-    elig_2 := _now_long ? inst_el_2_long : inst_el_2_short
-    arm_b  := _now_long ? base_bull_bar : not base_bull_bar
-    arm_1  := _now_long ? htf1_bull_bar : not htf1_bull_bar
-    arm_2  := _now_long ? htf2_bull_bar : not htf2_bull_bar
-    pos_dir      := _now_long ? "long" : "short"
-    did_enter    := true
-    trg_dir      := 0
-
 // VISUALS
 // ============================================================================
 // SHA CANDLES — all three layers, drawn back-to-front (HTF2 → HTF1 → Base) with
