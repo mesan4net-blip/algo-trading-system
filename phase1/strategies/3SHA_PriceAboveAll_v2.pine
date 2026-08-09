@@ -795,7 +795,16 @@ if _fresh
     arm_1  := _is_long ? htf1_bull_bar : not htf1_bull_bar
     arm_2  := _is_long ? htf2_bull_bar : not htf2_bull_bar
     did_enter    := true
+    // The trigger is consumed. Clear ALL of it, not just the direction - a
+    // leftover trg_bar or trg_h reads as a live trigger to anything that does
+    // not also test trg_dir, which is how 'bars since trigger' kept counting
+    // from a trigger that no longer existed.
     trg_dir      := 0
+    trg_o        := na
+    trg_h        := na
+    trg_l        := na
+    trg_c        := na
+    trg_bar      := na
 
 if pos_dir == "long" and not na(stop_level)
     _rr = risk_unit > 0 ? (rawC - entry_price) / risk_unit : 0.0
@@ -1122,9 +1131,9 @@ plot(dbg ? (brk_ok_long ? 1 : 0) : na, "dbg breakout L", display=display.data_wi
 plot(dbg ? (brk_ok_short ? 1 : 0) : na, "dbg breakout S", display=display.data_window)
 plot(dbg ? _nb_hi_h : na, "dbg N-bar high", display=display.data_window)
 plot(dbg ? _nb_lo_l : na, "dbg N-bar low", display=display.data_window)
-plot(dbg ? (na(trg_bar) ? na : bar_index - trg_bar) : na, "dbg bars since trigger", display=display.data_window)
-plot(dbg ? trg_h : na, "dbg trigger high", display=display.data_window)
-plot(dbg ? trg_l : na, "dbg trigger low", display=display.data_window)
+plot(dbg ? (trg_dir == 0 or na(trg_bar) ? na : bar_index - trg_bar) : na, "dbg bars since trigger", display=display.data_window)
+plot(dbg ? (trg_dir == 0 ? na : trg_h) : na, "dbg trigger high", display=display.data_window)
+plot(dbg ? (trg_dir == 0 ? na : trg_l) : na, "dbg trigger low", display=display.data_window)
 plot(dbg ? (trg_dir == 1 ? 1 : 0) : na, "dbg trigger L", display=display.data_window)
 plot(dbg ? (trg_dir == -1 ? 1 : 0) : na, "dbg trigger S", display=display.data_window)
 plot(dbg ? entry_level : na, "dbg entry level", display=display.data_window)
