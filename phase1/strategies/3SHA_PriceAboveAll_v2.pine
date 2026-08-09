@@ -634,21 +634,6 @@ if _setup_gone
     trg_c := na
     trg_bar := na
 
-// A standing trigger is REPLACED by a later candle that also qualifies and is
-// better placed - a higher high for a long, a lower low for a short. Without
-// this the first trigger latches for as long as the setup holds, price runs
-// away from its reference, and the resting order is stranded on the wrong side
-// of the market while every later candidate is locked out.
-// It only ever moves in the trade's favour, so a pullback cannot drag it back.
-_better_L = trg_dir == 1 and all_bull and brk_ok_long  and rawH > trg_h
-_better_S = trg_dir == -1 and all_bear and brk_ok_short and rawL < trg_l
-if _better_L or _better_S
-    trg_o := rawO
-    trg_h := rawH
-    trg_l := rawL
-    trg_c := rawC
-    trg_bar := bar_index
-
 if trg_dir == 0 and all_bull and brk_ok_long and allow_longs
     trg_dir := 1
     trg_o := rawO
