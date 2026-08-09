@@ -634,14 +634,21 @@ if _setup_gone
     trg_c := na
     trg_bar := na
 
-if trg_dir == 0 and all_bull and brk_ok_long and allow_longs
+// A trigger only forms while FLAT. Formed during an open trade it would freeze
+// its reference at that bar's price and sit there for the rest of the trade -
+// so by the time the position closed and the order could be used, the market
+// had often moved far away and the order rested on the wrong side of price.
+// Flip is unaffected: an opposite entry closes and reverses in one order, and
+// the position is flat by the time the next trigger can form.
+_flat_now = strategy.position_size == 0
+if _flat_now and trg_dir == 0 and all_bull and brk_ok_long and allow_longs
     trg_dir := 1
     trg_o := rawO
     trg_h := rawH
     trg_l := rawL
     trg_c := rawC
     trg_bar := bar_index
-else if trg_dir == 0 and all_bear and brk_ok_short and allow_shorts
+else if _flat_now and trg_dir == 0 and all_bear and brk_ok_short and allow_shorts
     trg_dir := -1
     trg_o := rawO
     trg_h := rawH
