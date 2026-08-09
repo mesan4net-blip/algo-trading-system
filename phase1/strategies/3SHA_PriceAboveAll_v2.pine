@@ -664,8 +664,10 @@ var float lbl_entry_px = na
 var int    trade_no     = 0    // increments on every entry, so an exit can name the trade it closed
 var int    exit_no      = 0    // the closing trade's number, captured before any same-bar entry
 var float  exit_from_px = na   // and its entry price, for the same reason
-var string pos_dir_prev = "flat"
-pos_dir_prev := pos_dir
+var float  exit_px      = na   // the price the engine actually closed at
+var int    exit_bar     = na   // and the bar it closed on
+var bool   exit_wasup   = false
+var bool   lbl_dir_long = false
 
 did_exit  = false
 did_enter = false
@@ -723,8 +725,12 @@ _fresh = _ot > 0 and (na(entry_bar) or _e_bar != entry_bar)
 
 // A trade that has closed: the engine is flat but our per-trade state is not.
 if _ot == 0 and not na(entry_bar)
+    _ct = strategy.closedtrades
     exit_no      := trade_no
     exit_from_px := lbl_entry_px
+    exit_px      := _ct > 0 ? strategy.closedtrades.exit_price(_ct - 1)     : rawC
+    exit_bar     := _ct > 0 ? strategy.closedtrades.exit_bar_index(_ct - 1) : bar_index
+    exit_wasup   := lbl_dir_long
     did_exit     := true
     entry_bar    := na
     entry_price  := na
@@ -751,6 +757,7 @@ if _fresh
     entry_bar    := _e_bar
     entry_price  := _e_px
     lbl_entry_px := _e_px
+    lbl_dir_long := _is_long
     trade_no     := trade_no + 1
     init_stop    := _stop
     stop_level   := _stop
@@ -960,11 +967,11 @@ plotshape(show_markers and did_enter and pos_dir == "short" ? rawH : na, title="
 // Exit arrows sit clear of the candle - on the side opposite the entry marker,
 // so an exit can never be mistaken for an entry on the same bar.
 _mk_off = rawC * marker_offset_pct / 100.0
-_mk_up  = pos_dir_prev == "long"
-_mk_pl  = na(exit_from_px) ? na : (_mk_up ? rawC - exit_from_px : exit_from_px - rawC)
+_mk_up  = exit_wasup
+_mk_pl  = na(exit_from_px) or na(exit_px) ? na : (_mk_up ? exit_px - exit_from_px : exit_from_px - exit_px)
 _mk_col = na(_mk_pl) ? col_exit : (_mk_pl >= 0 ? col_win : col_lose)
-plotshape(show_markers and did_exit and pos_dir_prev == "long" ? rawH + _mk_off : na, title="Exit Long", style=shape.arrowdown, location=location.absolute, color=_mk_col, size=size.small)
-plotshape(show_markers and did_exit and pos_dir_prev == "short" ? rawL - _mk_off : na, title="Exit Short", style=shape.arrowup,  location=location.absolute, color=_mk_col, size=size.small)
+plotshape(show_markers and did_exit and exit_wasup ? rawH + _mk_off : na, title="Exit Long", style=shape.arrowdown, location=location.absolute, color=_mk_col, size=size.small)
+plotshape(show_markers and did_exit and not exit_wasup ? rawL - _mk_off : na, title="Exit Short", style=shape.arrowup,  location=location.absolute, color=_mk_col, size=size.small)
 
 // ── ENTRY / EXIT PRICE LABELS ───────────────────────────────────────────────
 // Held clear of the candle by a percentage of price, so the gap looks the same
@@ -972,17 +979,19 @@ plotshape(show_markers and did_exit and pos_dir_prev == "short" ? rawL - _mk_off
 _lbl_off = rawC * label_offset_pct / 100.0
 if show_price_labels and did_enter
     _up = pos_dir == "long"
-    label.new(bar_index, _up ? rawL - _lbl_off : rawH + _lbl_off,
-         text = "#" + str.tostring(trade_no) + " " + (_up ? "LONG " : "SHORT ") + "[" + (rawC > rawO ? "bull" : rawC < rawO ? "bear" : "flat") + "] " + str.tostring(entry_price, format.mintick),
+    _eb = na(entry_bar) ? bar_index : entry_bar
+    label.new(_eb, _up ? low[bar_index - _eb] - _lbl_off : high[bar_index - _eb] + _lbl_off,
+         text = "#" + str.tostring(trade_no) + " " + (_up ? "LONG " : "SHORT ") + str.tostring(entry_price, format.mintick),
          style = _up ? label.style_label_up : label.style_label_down,
          color = _up ? color.new(col_bull, 15) : color.new(col_bear, 15),
          textcolor = color.white, size = _lbl_size)
 
 if show_price_labels and did_exit
-    _wasup = pos_dir_prev == "long"
-    _pl = na(exit_from_px) ? na : (_wasup ? rawC - exit_from_px : exit_from_px - rawC)
-    label.new(bar_index, _wasup ? rawH + _lbl_off : rawL - _lbl_off,
-         text = "#" + str.tostring(exit_no) + " " + str.tostring(rawC, format.mintick)
+    _wasup = exit_wasup
+    _pl = na(exit_from_px) or na(exit_px) ? na : (_wasup ? exit_px - exit_from_px : exit_from_px - exit_px)
+    _xb = na(exit_bar) ? bar_index : exit_bar
+    label.new(_xb, _wasup ? high[bar_index - _xb] + _lbl_off : low[bar_index - _xb] - _lbl_off,
+         text = "#" + str.tostring(exit_no) + " " + str.tostring(exit_px, format.mintick)
                 + (na(_pl) ? "" : "  (" + (_pl >= 0 ? "+" : "") + str.tostring(_pl, format.mintick) + ")"),
          style = _wasup ? label.style_label_down : label.style_label_up,
          color = na(_pl) ? color.new(col_exit, 15) : (_pl >= 0 ? color.new(col_win, 15) : color.new(col_lose, 15)),
