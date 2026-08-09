@@ -492,6 +492,7 @@ align_confirm_bars = input.int(1, "  Flip Must Hold (bars)", minval=1, maxval=20
 
 use_sha_break = input.bool(false, "Exit: Price Back Through SHA", tooltip="Close when price closes back through the chosen SHA body — for a long, below its lower edge. Different from that layer FLIPPING: the trend line can still point up while price collapses back through it, so this is an earlier warning.", group=grp_mgmt)
 sha_break_layer = input.string("HTF1", "  Which Layer", options=["Base","HTF1","HTF2"], group=grp_mgmt)
+sha_break_trig = input.string("Close Beyond", "  Trigger On", options=["Close Beyond","Touch"], tooltip="Close Beyond: the trade ends only when a candle CLOSES past the layer body edge. Touch: it ends as soon as any part of a candle reaches that edge, so a wick is enough.\n\nNote the exit still executes at the bar close either way - Touch changes what counts as a break, not where the fill lands.", group=grp_mgmt)
 
 use_target = input.bool(false, "Exit: Profit Target", tooltip="Close the WHOLE position at a multiple of the initial risk. Caps winners — usually costly for a trend system, but may suit markets that grind rather than run.", group=grp_mgmt)
 target_r = input.float(3.0, "  Target (R)", minval=0.5, step=0.5, group=grp_mgmt)
@@ -792,7 +793,7 @@ if pos_dir == "long" and not na(stop_level)
     peak_r := math.max(peak_r, _rr)
     bad_bars := align_broken_long ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _sha_out   = use_sha_break and rawC < shab_bot
+    _sha_out   = use_sha_break and (sha_break_trig == "Touch" ? rawL <= shab_bot : rawC < shab_bot)
     _tgt_out   = use_target and _rr >= target_r
     _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
@@ -839,7 +840,7 @@ else if pos_dir == "short" and not na(stop_level)
     peak_r := math.max(peak_r, _rr)
     bad_bars := align_broken_short ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
-    _sha_out   = use_sha_break and rawC > shab_top
+    _sha_out   = use_sha_break and (sha_break_trig == "Touch" ? rawH >= shab_top : rawC > shab_top)
     _tgt_out   = use_target and _rr >= target_r
     _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
