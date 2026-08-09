@@ -731,7 +731,7 @@ if pos_dir == "long" and not na(stop_level)
 
     // 1. Partial take-profit
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("PAA2", qty_percent=tp1_pct, comment="TP1")
+        strategy.close("PAA2-L", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.max(stop_level, entry_price + be_offset_raw)
@@ -760,7 +760,7 @@ if pos_dir == "long" and not na(stop_level)
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
     _stop_hit  = (not use_hard_stop) and (rawC <= stop_level)
     if use_hard_stop and not _other_out
-        strategy.exit("PAA2-stop", from_entry="PAA2", stop=stop_level)   // real intra-bar, gap-safe
+        strategy.exit("PAA2-stop", from_entry="PAA2-L", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
         _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
@@ -789,7 +789,7 @@ else if pos_dir == "short" and not na(stop_level)
     _rr = risk_unit > 0 ? (entry_price - rawC) / risk_unit : 0.0
 
     if use_tp1 and not tp1_taken and _rr >= tp1_r
-        strategy.close("PAA2", qty_percent=tp1_pct, comment="TP1")
+        strategy.close("PAA2-S", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.min(stop_level, entry_price - be_offset_raw)
@@ -815,7 +815,7 @@ else if pos_dir == "short" and not na(stop_level)
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
     _stop_hit  = (not use_hard_stop) and (rawC >= stop_level)
     if use_hard_stop and not _other_out
-        strategy.exit("PAA2-stop", from_entry="PAA2", stop=stop_level)   // real intra-bar, gap-safe
+        strategy.exit("PAA2-stop", from_entry="PAA2-S", stop=stop_level)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
         _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
@@ -854,18 +854,24 @@ else if pos_dir == "short" and not na(stop_level)
 _lvl_above_L = not na(entry_level) and entry_level > trg_c
 _lvl_above_S = not na(entry_level) and entry_level > trg_c
 
+// Long and short use separate order IDs. Pine refuses to change the direction
+// of a pending order under one ID, and a resting order on the far side is
+// exactly what a flip needs to replace.
 if long_signal and (pos_dir == "flat" or (use_flip and pos_dir == "short"))
+    strategy.cancel("PAA2-S")
     if _lvl_above_L
-        strategy.entry("PAA2", strategy.long, stop=entry_level)
+        strategy.entry("PAA2-L", strategy.long, stop=entry_level)
     else
-        strategy.entry("PAA2", strategy.long, limit=entry_level)
+        strategy.entry("PAA2-L", strategy.long, limit=entry_level)
 else if short_signal and (pos_dir == "flat" or (use_flip and pos_dir == "long"))
+    strategy.cancel("PAA2-L")
     if _lvl_above_S
-        strategy.entry("PAA2", strategy.short, limit=entry_level)
+        strategy.entry("PAA2-S", strategy.short, limit=entry_level)
     else
-        strategy.entry("PAA2", strategy.short, stop=entry_level)
+        strategy.entry("PAA2-S", strategy.short, stop=entry_level)
 else
-    strategy.cancel("PAA2")
+    strategy.cancel("PAA2-L")
+    strategy.cancel("PAA2-S")
 
 // Pine owns the fill, so the manual state machine reads the result back rather
 // than assuming it. strategy.position_avg_price is the price actually paid.
