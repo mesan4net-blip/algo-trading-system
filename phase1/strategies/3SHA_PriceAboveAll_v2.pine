@@ -834,30 +834,36 @@ if pos_dir == "long" and not na(stop_level)
             stop_level := trail_low_ref
 
     // 4 & 5. Exits — align-break is always close-based; the stop is hard or mental
-    peak_r := math.max(peak_r, _rr)
+    // The peak is how far price actually TRAVELLED, not the best close.
+    _r_ext = risk_unit > 0 ? (rawH - entry_price) / risk_unit : 0.0
+    peak_r := math.max(peak_r, _r_ext)
     bad_bars := align_broken_long ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
     _sha_touch = use_sha_break and sha_break_trig == "Touch"
     _sha_out   = use_sha_break and sha_break_trig == "Close Beyond" and rawC < shab_bot
-    _tgt_out   = use_target and _rr >= target_r
-    _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
     _cross_out = use_cross_exit and cross_dn
     _eod_out   = past_cutoff
-    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
+    _other_out = _align_out or _sha_out or _time_out or _cross_out or _eod_out
     _other_out := _other_out and _can_exit
     _stop_hit  = (not use_hard_stop) and (rawC <= stop_level)
     // Resting exit orders. Anything that must fill AT a price rather than at
     // the bar close has to be a real order - a market close would give the
     // close, not the level. Where both a hard stop and a Touch-mode SHA break
     // are active, the one price reaches FIRST is used.
+    // Every exit whose level is a computable PRICE now rests as a real order,
+    // so it fills where it says rather than at the next bar's open. Give-back
+    // qualifies: peak_r is known, so the give-back price is known too.
     _rest_sl  = use_hard_stop and not na(stop_level) ? stop_level : na
     _rest_sha = _sha_touch and _can_exit and not na(shab_bot) ? shab_bot : na
+    _rest_gb  = use_giveback and _can_exit and peak_r >= giveback_min_r and risk_unit > 0 ? entry_price + risk_unit * peak_r * (1.0 - giveback_pct / 100.0) : na
     _rest_lvl = na(_rest_sl) ? _rest_sha : na(_rest_sha) ? _rest_sl : math.max(_rest_sl, _rest_sha)
-    if not na(_rest_lvl) and not _other_out
-        strategy.exit("PAA2-stop", from_entry="PAA2-L", stop=_rest_lvl)   // real intra-bar, gap-safe
+    _rest_lvl := na(_rest_lvl) ? _rest_gb : na(_rest_gb) ? _rest_lvl : math.max(_rest_lvl, _rest_gb)
+    _tgt_lvl  = use_target and _can_exit and risk_unit > 0 ? entry_price + risk_unit * target_r : na
+    if (not na(_rest_lvl) or not na(_tgt_lvl)) and not _other_out
+        strategy.exit("PAA2-stop", from_entry="PAA2-L", stop=_rest_lvl, limit=_tgt_lvl)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
-        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
+        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
         _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
         exit_reason := _stop_hit ? (_moved ? "TRAIL" : "STOP") : "EXIT"
@@ -890,30 +896,38 @@ else if pos_dir == "short" and not na(stop_level)
         if trail_high_ref < stop_level
             stop_level := trail_high_ref
 
-    peak_r := math.max(peak_r, _rr)
+    // The peak is how far price actually TRAVELLED, not the best close. A
+    // give-back computed from closes ignores the part of the move that
+    // happened inside the bar.
+    _r_ext = risk_unit > 0 ? (entry_price - rawL) / risk_unit : 0.0
+    peak_r := math.max(peak_r, _r_ext)
     bad_bars := align_broken_short ? bad_bars + 1 : 0
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
     _sha_touch = use_sha_break and sha_break_trig == "Touch"
     _sha_out   = use_sha_break and sha_break_trig == "Close Beyond" and rawC > shab_top
-    _tgt_out   = use_target and _rr >= target_r
-    _give_out  = use_giveback and peak_r >= giveback_min_r and _rr <= peak_r * (1.0 - giveback_pct / 100.0)
     _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
     _cross_out = use_cross_exit and cross_up
     _eod_out   = past_cutoff
-    _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
+    _other_out = _align_out or _sha_out or _time_out or _cross_out or _eod_out
     _other_out := _other_out and _can_exit
     _stop_hit  = (not use_hard_stop) and (rawC >= stop_level)
     // Resting exit orders. Anything that must fill AT a price rather than at
     // the bar close has to be a real order - a market close would give the
     // close, not the level. Where both a hard stop and a Touch-mode SHA break
     // are active, the one price reaches FIRST is used.
+    // Every exit whose level is a computable PRICE now rests as a real order,
+    // so it fills where it says rather than at the next bar's open. Give-back
+    // qualifies: peak_r is known, so the give-back price is known too.
     _rest_sl  = use_hard_stop and not na(stop_level) ? stop_level : na
     _rest_sha = _sha_touch and _can_exit and not na(shab_top) ? shab_top : na
+    _rest_gb  = use_giveback and _can_exit and peak_r >= giveback_min_r and risk_unit > 0 ? entry_price - risk_unit * peak_r * (1.0 - giveback_pct / 100.0) : na
     _rest_lvl = na(_rest_sl) ? _rest_sha : na(_rest_sha) ? _rest_sl : math.min(_rest_sl, _rest_sha)
-    if not na(_rest_lvl) and not _other_out
-        strategy.exit("PAA2-stop", from_entry="PAA2-S", stop=_rest_lvl)   // real intra-bar, gap-safe
+    _rest_lvl := na(_rest_lvl) ? _rest_gb : na(_rest_gb) ? _rest_lvl : math.min(_rest_lvl, _rest_gb)
+    _tgt_lvl  = use_target and _can_exit and risk_unit > 0 ? entry_price - risk_unit * target_r : na
+    if (not na(_rest_lvl) or not na(_tgt_lvl)) and not _other_out
+        strategy.exit("PAA2-stop", from_entry="PAA2-S", stop=_rest_lvl, limit=_tgt_lvl)   // real intra-bar, gap-safe
     if _stop_hit or _other_out
-        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _tgt_out ? "Target" : _give_out ? "Give-Back" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
+        _why = _stop_hit ? "Stop" : _align_out ? "Layer Flip" : _sha_out ? "SHA Break" : _time_out ? "Time" : _eod_out ? "Daily Cutoff" : "SHA Cross"
         strategy.close_all(comment = _why)
         _moved = not na(init_stop) and not na(stop_level) and stop_level != init_stop
         exit_reason := _stop_hit ? (_moved ? "TRAIL" : "STOP") : "EXIT"
