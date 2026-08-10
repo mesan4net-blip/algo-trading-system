@@ -191,6 +191,7 @@ sl_buffer_raw = rawC * sl_buffer_pct / 100
 min_stop_pct = input.float(0.00, "Min Stop Distance (%)", minval=0.0, step=0.01, tooltip="Floor on stop distance, as a percentage of price. The stop is never placed closer to entry than this. 0 = off.", group=grp_sl)
 min_stop_raw = rawC * min_stop_pct / 100
 use_hard_stop = input.bool(false, "Hard Stop (intra-bar + gap protection)", tooltip="OFF (default): the stop is CLOSE-based (mental) — it fires only when a candle CLOSES beyond the stop. ON: the stop is a REAL order that fires the instant price TOUCHES it intra-bar, and protects against overnight/weekend gaps (important for stocks like QQQ). Break-even and trailing still ratchet the stop; this only changes how it is enforced. The alignment-break exit stays close-based either way.", group=grp_sl)
+no_exit_entry_bar = input.bool(true, "No Exit On Entry Candle", tooltip="Blocks the exits from firing on the same candle the trade opened on. With Touch-mode entries and exits both live, price can reach the entry level and an exit level within one bar and close the trade before it has begun.\n\nThe STOP is deliberately exempt - blocking it would leave the entry candle unprotected, and a gap through the stop is exactly when protection matters most.", group=grp_mgmt)
 sl_skip_gap = input.bool(true, "Skip Pre-Gap Bars", tooltip="Bars from before a session-opening gap sit far from price and drag the swing stop out with them. On: the stop anchor only looks at the gap bar and later.", group=grp_sl)
 
 // ── ENTRY CONDITION: WHERE PRICE SITS, NOT WHICH WAY EACH LAYER POINTS ─────
@@ -807,6 +808,10 @@ if _fresh
     trg_c        := na
     trg_bar      := na
 
+// Exits are held off on the entry candle itself when asked. The stop is not
+// gated by this - see the input tooltip.
+_can_exit = not no_exit_entry_bar or na(entry_bar) or bar_index > entry_bar
+
 if pos_dir == "long" and not na(stop_level)
     _rr = risk_unit > 0 ? (rawC - entry_price) / risk_unit : 0.0
 
@@ -840,13 +845,14 @@ if pos_dir == "long" and not na(stop_level)
     _cross_out = use_cross_exit and cross_dn
     _eod_out   = past_cutoff
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
+    _other_out := _other_out and _can_exit
     _stop_hit  = (not use_hard_stop) and (rawC <= stop_level)
     // Resting exit orders. Anything that must fill AT a price rather than at
     // the bar close has to be a real order - a market close would give the
     // close, not the level. Where both a hard stop and a Touch-mode SHA break
     // are active, the one price reaches FIRST is used.
     _rest_sl  = use_hard_stop and not na(stop_level) ? stop_level : na
-    _rest_sha = _sha_touch and not na(shab_bot) ? shab_bot : na
+    _rest_sha = _sha_touch and _can_exit and not na(shab_bot) ? shab_bot : na
     _rest_lvl = na(_rest_sl) ? _rest_sha : na(_rest_sha) ? _rest_sl : math.max(_rest_sl, _rest_sha)
     if not na(_rest_lvl) and not _other_out
         strategy.exit("PAA2-stop", from_entry="PAA2-L", stop=_rest_lvl)   // real intra-bar, gap-safe
@@ -895,13 +901,14 @@ else if pos_dir == "short" and not na(stop_level)
     _cross_out = use_cross_exit and cross_up
     _eod_out   = past_cutoff
     _other_out = _align_out or _sha_out or _tgt_out or _give_out or _time_out or _cross_out or _eod_out
+    _other_out := _other_out and _can_exit
     _stop_hit  = (not use_hard_stop) and (rawC >= stop_level)
     // Resting exit orders. Anything that must fill AT a price rather than at
     // the bar close has to be a real order - a market close would give the
     // close, not the level. Where both a hard stop and a Touch-mode SHA break
     // are active, the one price reaches FIRST is used.
     _rest_sl  = use_hard_stop and not na(stop_level) ? stop_level : na
-    _rest_sha = _sha_touch and not na(shab_top) ? shab_top : na
+    _rest_sha = _sha_touch and _can_exit and not na(shab_top) ? shab_top : na
     _rest_lvl = na(_rest_sl) ? _rest_sha : na(_rest_sha) ? _rest_sl : math.min(_rest_sl, _rest_sha)
     if not na(_rest_lvl) and not _other_out
         strategy.exit("PAA2-stop", from_entry="PAA2-S", stop=_rest_lvl)   // real intra-bar, gap-safe
