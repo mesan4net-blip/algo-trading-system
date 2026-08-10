@@ -544,12 +544,17 @@ in_date = not use_date or (time >= date_start and time <= date_end)
 // market the instrument trades on. On a 24-hour instrument there is no session
 // close, so set the time to whichever close matters (e.g. the NY close).
 use_eod    = input.bool(false, "Daily Cutoff", tooltip="Close any open trade at the cutoff time and take no new trades until the next day. Off by default.", group=grp_date)
-eod_hour   = input.int(15, "  Cutoff Hour (exchange time, 0-23)", minval=0, maxval=23, tooltip="24-hour clock in the exchange's own time zone. 15 = 3 PM. For a US stock, 15:55 is five minutes before the close.", group=grp_date)
+eod_hour   = input.int(15, "  Cutoff Hour (exchange time, 0-23)", minval=0, maxval=23, tooltip="24-hour clock in the EXCHANGE's own time zone, which is usually not the one your chart displays. Measured against each bar's CLOSE time, so the cutoff fires on the bar containing it. 15 = 3 PM. For a US stock, 15:55 is five minutes before the close.", group=grp_date)
 eod_minute = input.int(55, "  Cutoff Minute", minval=0, maxval=59, group=grp_date)
 eod_block_entries = input.bool(true, "  Block New Entries After Cutoff", tooltip="Stops new trades opening in the minutes after the cutoff only to be closed straight away. Leave on unless you specifically want late entries.", group=grp_date)
 
 // Minutes since midnight, exchange time, compared against the cutoff.
-_now_min = hour(time, syminfo.timezone) * 60 + minute(time, syminfo.timezone)
+// Measured on the bar's CLOSE time, not its open. Pine's `time` is the open, so
+// on a 15m chart the final session bar reports 15:45 and a 15:55 cutoff never
+// matched anything - the feature sat inert. time_close reports 16:00 for that
+// same bar, so the cutoff fires on the bar CONTAINING the time, whatever the
+// chart timeframe.
+_now_min = hour(time_close, syminfo.timezone) * 60 + minute(time_close, syminfo.timezone)
 _eod_min = eod_hour * 60 + eod_minute
 past_cutoff = use_eod and _now_min >= _eod_min
 eod_entry_block = past_cutoff and eod_block_entries
