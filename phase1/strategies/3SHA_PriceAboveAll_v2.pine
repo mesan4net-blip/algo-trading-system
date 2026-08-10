@@ -84,7 +84,7 @@ grp_layers_disp = "② ━━━ SHA DISPLAY  [all layers] ━━━"
 show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_layers_disp)
 show_borders = input.bool(true,  "Show Borders (all layers)", group=grp_layers_disp)
 
-grp_base = "② ━━━ BASE SHA  [Chart TF] ━━━"
+grp_base = "② ━━━ BASE SHA ━━━"
 base_len1 = input.int(4, "Base Stage-1 EMA", minval=1, group=grp_base)
 base_len2 = input.int(8, "Base Stage-2 EMA", minval=1, group=grp_base)
 base_show = input.bool(true, "Show Base SHA Candles", group=grp_base)
@@ -93,6 +93,7 @@ base_bear = input.color(color.new(#FF9800, 0), "Bear Color", group=grp_base)
 base_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_base)
 base_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_base)
 base_opacity = input.int(0, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_base)
+base_tf = input.timeframe("", "Base Timeframe", tooltip="Leave blank to use the chart timeframe, which is how this has always worked. Set a timeframe to compute the Base SHA from those bars instead - so you can read 15m structure while executing on 1m bars. Resting orders then fill with 1m precision rather than 15m, and the daily cutoff can land inside the session instead of the next one.", group=grp_base)
 
 grp_htf1 = "② ━━━ HTF1 SHA  [Mid TF] ━━━"
 htf1_tf   = input.timeframe("60", "HTF1 Timeframe", group=grp_htf1)
@@ -132,7 +133,10 @@ tStd = ticker.standard(syminfo.tickerid)
 
 // ── Compute layers (HTF layers smoothed NATIVELY inside request.security,
 //    exactly as v6 — do NOT recompute HTF SHA on the chart TF) ──────────────
-[bO, bH, bL, bC]  = f_sha(base_len1, base_len2, rawO, rawH, rawL, rawC)
+// Fetched exactly as HTF1 and HTF2 are. With base_tf blank request.security
+// uses the chart timeframe, which reproduces the previous behaviour - one
+// code path rather than two that could drift apart.
+[bO, bH, bL, bC]  = request.security(tStd, base_tf, f_sha(base_len1, base_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 [h1O, h1H, h1L, h1C] = request.security(tStd, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 [h2O, h2H, h2L, h2C] = request.security(tStd, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 
