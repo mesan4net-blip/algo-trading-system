@@ -177,13 +177,14 @@ sell_brk = input.string("Close beyond N-bar low", "  Sell Breakout Test", option
 // to prove it is resuming by CLOSING beyond the exit candle itself.
 gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
 min_layer_gap_pct = input.float(0.0, "Minimum Layer Gap (%)", minval=0.0, step=0.05, tooltip="How far apart the HTF1 and HTF2 SHA bodies have to be before an entry is allowed, as a percentage of price. Bunched layers mean no trend, which is where price crosses back and forth and trades go nowhere. 0 = off. Try 0.20 to start.\n\nIt releases slowly after a flat stretch, since the layers need time to spread again, so the first part of some real moves will be missed.", group=grp_entry)
+entry_price_basis = input.string("Body (open/close)", "Setup Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Which part of each SHA candle the ENTRY test measures against. Body: the SHA body edge, open or close. Wick: the SHA candle's full extreme, high or low - a further level, so the setup is harder to satisfy.\n\nSeparate from the stop's Anchor Uses. Until now one setting drove both, so changing the stop anchor silently changed what 'price closed beyond the SHA' meant.", group=grp_entry)
 
 // ============================================================================
 // ④ INITIAL STOP  (invalidation level + sizing anchor)
 // ============================================================================
 grp_sl = "④ ━━━ INITIAL STOP ━━━"
 sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], tooltip="Closest / Middle / Furthest Eligible SHA: rank the SHA layers that price has CLOSED beyond during this trade, by distance from price, and anchor on the chosen rung. Recomputed every bar. With two eligible layers Middle resolves to Furthest; with one, all three rungs resolve to it; with none, the anchor falls back to Swing.\n\nLast Bar Beyond ... : the most recent bar that sat entirely past the SHA's far edge (below it for a long, above it for a short) — the last place price was genuinely on the wrong side of the trend. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher SHA layer is closer to price. No lookback limit.\n\nTrigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
-sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
+sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to the STOP anchors only - the entry test has its own Setup Uses setting. Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
 sl_buffer_pct = input.float(0.10, "Stop Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the anchor the stop sits, as a percentage of price. 0.10 means one tenth of one percent. Percent rather than a fixed amount so the same setting is meaningful on any instrument.", group=grp_sl)
 sl_buffer_raw = rawC * sl_buffer_pct / 100
@@ -195,9 +196,9 @@ sl_skip_gap = input.bool(true, "Skip Pre-Gap Bars", tooltip="Bars from before a 
 // ── ENTRY CONDITION: WHERE PRICE SITS, NOT WHICH WAY EACH LAYER POINTS ─────
 // Which edge counts follows the Anchor Uses setting, so Body ignores wicks on
 // both sides — the same convention the stop anchors use. This block sits below
-// the stop inputs because it reads sl_price_basis, and Pine requires an input
+// the entry inputs because it reads entry_price_basis, and Pine requires an input
 // to be declared before it is used.
-_pa_body = sl_price_basis == "Body (open/close)"
+_pa_body = entry_price_basis == "Body (open/close)"
 pa_b_top = _pa_body ? math.max(bO, bC)  : bH
 pa_b_bot = _pa_body ? math.min(bO, bC)  : bL
 pa_1_top = _pa_body ? math.max(h1O,h1C) : h1H
