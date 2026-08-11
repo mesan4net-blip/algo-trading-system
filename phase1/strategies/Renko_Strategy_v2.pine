@@ -66,7 +66,8 @@ strategy("Renko Strategy v2", shorttitle="RENKO-S2", overlay=true,
      default_qty_value     = 100,
      pyramiding            = 0,
      calc_on_every_tick    = false,
-     process_orders_on_close = true)
+     process_orders_on_close = true,
+     max_labels_count      = 500)
 
 // ============================================================================
 // RENKO SETTINGS
@@ -107,6 +108,11 @@ grp_trade = "━━━ TRADES ━━━"
 allow_longs   = input.bool(true,  "Allow Longs",  group=grp_trade)
 allow_shorts  = input.bool(true,  "Allow Shorts", group=grp_trade)
 close_on_flip = input.bool(true,  "Close On Renko Flip", tooltip="On a flip, close the open trade. With the opposite direction also allowed, the position reverses on the same bar. With this OFF the only exit left is the daily cut-off.", group=grp_trade)
+show_labels   = input.bool(true, "Show Entry Price Labels", tooltip="Prints the fill price on the chart at each entry. Blue for longs, red for shorts. TradingView caps a script at 500 labels, so on a long history only the most recent 500 remain - earlier trades are still in the Strategy Tester, just not labelled.", group=grp_trade)
+label_size    = input.string("Small", "  Label Size", options=["Tiny", "Small", "Normal", "Large"], group=grp_trade)
+long_col      = input.color(color.new(#2962FF, 0), "  Long Label", group=grp_trade)
+short_col     = input.color(color.new(#F23645, 0), "  Short Label", group=grp_trade)
+show_exit_labels = input.bool(false, "  Also Label Exits", tooltip="Adds a grey label at each exit showing the fill price and the reason - Flip or Cut-Off. Off by default because entry and exit labels on adjacent bars overlap and become hard to read.", group=grp_trade)
 show_diag     = input.bool(true, "Show Diagnostics Panel", tooltip="Shows every gate an entry has to pass, with its live value, so a strategy taking no trades tells you WHICH condition is stopping it instead of leaving you to guess.", group=grp_trade)
 use_reentry_confirm = input.bool(true, "Confirm Re-Entry With A Push", tooltip="Applies to entries that follow an exit, not the first entry of the chart. A long then needs the bar to CLOSE above the previous bar's high, and a short to close below the previous bar's low - price actually pushing, not merely the renko still pointing that way. It can fire on the exit bar itself if that bar already closes beyond.", group=grp_trade)
 reenter_same  = input.bool(false, "Re-Enter The Same Swing", tooltip="OFF (default): one entry per renko swing. Once a swing has been traded and exited - by the cut-off, say - it waits for the next turn rather than climbing back in. ON: it may re-open the same swing.", group=grp_trade)
@@ -388,24 +394,37 @@ var int   entry_bar = na
 var bool  had_exit   = false
 bool      exited_now = false
 
+// Flags for the chart labels. Set where the orders are actually placed, so a
+// label can never appear on a bar that did not trade.
+bool   dg_entered_long  = false
+bool   dg_entered_short = false
+bool   dg_exited        = false
+string dg_exit_why      = ""
+
 // ── EXITS ──────────────────────────────────────────────────────────────────
 // Two, and only two: the renko turning back, and the daily cut-off. Nothing
 // else can close a position.
 if strategy.position_size > 0 and close_on_flip and flip_down
     strategy.close("L", comment="Flip")
-    exited_now := true
+    dg_exited   := true
+    dg_exit_why := "Flip"
+    exited_now  := true
     had_exit   := true
 
 if strategy.position_size < 0 and close_on_flip and flip_up
     strategy.close("S", comment="Flip")
-    exited_now := true
+    dg_exited   := true
+    dg_exit_why := "Flip"
+    exited_now  := true
     had_exit   := true
 
 // Unconditional. It ignores the renko entirely. Skipped only if this bar has
 // already exited, so the same bar cannot close the position twice.
 if past_cut and strategy.position_size != 0 and not exited_now
     strategy.close_all(comment="Cut-Off")
-    exited_now := true
+    dg_exited   := true
+    dg_exit_why := "Cut-Off"
+    exited_now  := true
     had_exit   := true
 
 // ── ENTRIES ────────────────────────────────────────────────────────────────
@@ -421,14 +440,37 @@ confirm_short = not use_reentry_confirm or not had_exit or close < low[1]
 if (strategy.position_size == 0 or exited_now) and not cut_blocks and not na(rk_box) and rk_box > 0
     if go_long and confirm_long
         strategy.entry("L", strategy.long)
+        dg_entered_long := true
         entry_px   := close
         entry_bar  := bar_index
         traded_dir := 1
     else if go_short and confirm_short
         strategy.entry("S", strategy.short)
+        dg_entered_short := true
         entry_px   := close
         entry_bar  := bar_index
         traded_dir := -1
+
+// ── ENTRY AND EXIT LABELS ──────────────────────────────────────────────────
+// label.style_label_up / _down are used deliberately: the plain circle and
+// triangle styles ignore the y coordinate, which would pin every label to the
+// same height instead of placing it at the fill price.
+_lsz = label_size == "Tiny" ? size.tiny : label_size == "Normal" ? size.normal : label_size == "Large" ? size.large : size.small
+
+if show_labels and dg_entered_long
+    label.new(bar_index, low, str.tostring(close, format.mintick),
+         style=label.style_label_up, color=long_col, textcolor=color.white,
+         size=_lsz, yloc=yloc.belowbar)
+
+if show_labels and dg_entered_short
+    label.new(bar_index, high, str.tostring(close, format.mintick),
+         style=label.style_label_down, color=short_col, textcolor=color.white,
+         size=_lsz, yloc=yloc.abovebar)
+
+if show_labels and show_exit_labels and dg_exited
+    label.new(bar_index, close, str.tostring(close, format.mintick) + "  " + dg_exit_why,
+         style=label.style_label_left, color=color.new(#888888, 20),
+         textcolor=color.white, size=_lsz, yloc=yloc.price)
 
 // ── ACTIVITY COUNTERS ──────────────────────────────────────────────────────
 // Bricks and flips since the chart began. If flips is 0 or 1 the renko is not
