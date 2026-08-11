@@ -511,7 +511,8 @@ be_offset_pct = input.float(0.00, "  Break-Even Offset (%)", minval=0.0, step=0.
 be_offset_raw = rawC * be_offset_pct / 100
 use_trail = input.bool(true, "Trailing Stop", tooltip="Once in profit, ratchet the stop toward the chosen anchor. Never loosens. Close-based — only triggers when a candle CLOSES beyond it.", group=grp_mgmt)
 trail_mode = input.string("Swing (Prev N Bars)", "  Trail Anchor", options=["Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], tooltip="Same anchor choices as the initial stop, except Trigger Candle (a fixed entry bar can't trail).\nSwing: recent swing low/high.\nHTF1 SHA Body: trail the mid-TF trend body.\nHTF2 SHA Body: trail the high-TF trend body (loosest, rides longest).", group=grp_mgmt)
-trail_price_basis = input.string("Body (open/close)", "  Trail Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="For the Swing trail anchor: Body = body edge (tighter), Wick = full extreme (wider).", group=grp_mgmt)
+trail_buy_pt  = input.string("Body Bottom", "  Trail Buy Uses", options=["Body Bottom","Body Top","Wick Low","Wick High"], tooltip="Which exact point of the trail anchor a BUY trails at. Same four choices as the initial stop, set separately - a trail is often wanted at a different point from where the stop started.", group=grp_mgmt)
+trail_sell_pt = input.string("Body Top", "  Trail Sell Uses", options=["Body Bottom","Body Top","Wick Low","Wick High"], tooltip="The same choice for a SELL, set independently of the buy side.", group=grp_mgmt)
 trail_start_r = input.float(1.0, "  Trail Activates At (R)", minval=0.1, step=0.1, group=grp_mgmt)
 trail_lookback = input.int(6, "  Trail Lookback (bars)", minval=1, maxval=100, group=grp_mgmt)
 trail_buffer_pct = input.float(0.10, "  Trail Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the trail anchor the trailing stop sits, as a percentage of price.", group=grp_mgmt)
@@ -549,12 +550,23 @@ trail_sw_low_wick  = ta.lowest(rawL,  trail_lookback)
 trail_sw_low_body  = ta.lowest(body_low,  trail_lookback)
 trail_sw_high_wick = ta.highest(rawH, trail_lookback)
 trail_sw_high_body = ta.highest(body_high, trail_lookback)
-trail_use_body = trail_price_basis == "Body (open/close)"
-trail_sw_low  = trail_use_body ? trail_sw_low_body  : trail_sw_low_wick
-trail_sw_high = trail_use_body ? trail_sw_high_body : trail_sw_high_wick
+// Same explicit treatment as the initial stop: the point is named, not implied.
+_tbuy_body  = trail_buy_pt  == "Body Bottom" or trail_buy_pt  == "Body Top"
+_tsell_body = trail_sell_pt == "Body Bottom" or trail_sell_pt == "Body Top"
+_tbuy_hi    = trail_buy_pt  == "Body Top"    or trail_buy_pt  == "Wick High"
+_tsell_hi   = trail_sell_pt == "Body Top"    or trail_sell_pt == "Wick High"
+trail_sw_low  = _tbuy_body  ? (_tbuy_hi  ? trail_sw_high_body : trail_sw_low_body)  : (_tbuy_hi  ? trail_sw_high_wick : trail_sw_low_wick)
+trail_sw_high = _tsell_body ? (_tsell_hi ? trail_sw_high_body : trail_sw_low_body)  : (_tsell_hi ? trail_sw_high_wick : trail_sw_low_wick)
 
-trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "Base SHA Body" ? sha_bot_0 : trail_mode == "HTF1 SHA Body" ? sha_bot_1 : trail_mode == "HTF2 SHA Body" ? sha_bot_2 : trail_mode == "Closest Eligible SHA" ? rk_near_L : trail_mode == "Middle Eligible SHA" ? rk_mid_L : rk_far_L
-trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "Base SHA Body" ? sha_top_0 : trail_mode == "HTF1 SHA Body" ? sha_top_1 : trail_mode == "HTF2 SHA Body" ? sha_top_2 : trail_mode == "Closest Eligible SHA" ? rk_near_S : trail_mode == "Middle Eligible SHA" ? rk_mid_S : rk_far_S
+trl_buy_0  = f_pt(bO,  bH,  bL,  bC,  trail_buy_pt)
+trl_buy_1  = f_pt(h1O, h1H, h1L, h1C, trail_buy_pt)
+trl_buy_2  = f_pt(h2O, h2H, h2L, h2C, trail_buy_pt)
+trl_sell_0 = f_pt(bO,  bH,  bL,  bC,  trail_sell_pt)
+trl_sell_1 = f_pt(h1O, h1H, h1L, h1C, trail_sell_pt)
+trl_sell_2 = f_pt(h2O, h2H, h2L, h2C, trail_sell_pt)
+
+trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "Base SHA Body" ? trl_buy_0 : trail_mode == "HTF1 SHA Body" ? trl_buy_1 : trail_mode == "HTF2 SHA Body" ? trl_buy_2 : trail_mode == "Closest Eligible SHA" ? rk_near_L : trail_mode == "Middle Eligible SHA" ? rk_mid_L : rk_far_L
+trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "Base SHA Body" ? trl_sell_0 : trail_mode == "HTF1 SHA Body" ? trl_sell_1 : trail_mode == "HTF2 SHA Body" ? trl_sell_2 : trail_mode == "Closest Eligible SHA" ? rk_near_S : trail_mode == "Middle Eligible SHA" ? rk_mid_S : rk_far_S
 trail_low_ref  = trail_low_anchor  - trail_buffer_raw
 trail_high_ref = trail_high_anchor + trail_buffer_raw
 
