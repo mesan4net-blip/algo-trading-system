@@ -188,7 +188,8 @@ min_layer_gap_pct = input.float(0.0, "Minimum Layer Gap (%)", minval=0.0, step=0
 // ============================================================================
 grp_sl = "④ ━━━ INITIAL STOP ━━━"
 sl_mode = input.string("Swing (Prev N Bars)", "Stop Anchor", options=["Trigger Candle","Swing (Prev N Bars)","Base SHA Body","HTF1 SHA Body","HTF2 SHA Body","Last Bar Beyond Nearest SHA","Last Bar Beyond Furthest SHA","Last SHA Bar Beyond Nearest SHA","Last SHA Bar Beyond Furthest SHA","Closest Eligible SHA","Middle Eligible SHA","Furthest Eligible SHA"], tooltip="Closest / Middle / Furthest Eligible SHA: rank the SHA layers that price has CLOSED beyond during this trade, by distance from price, and anchor on the chosen rung. Recomputed every bar. With two eligible layers Middle resolves to Furthest; with one, all three rungs resolve to it; with none, the anchor falls back to Swing.\n\nLast Bar Beyond ... : the most recent bar that sat entirely past the SHA's far edge (below it for a long, above it for a short) — the last place price was genuinely on the wrong side of the trend. 'SHA Bar' tests the smoothed candle instead of the raw one. Nearest/furthest is decided at entry by which higher SHA layer is closer to price. No lookback limit.\n\nTrigger Candle: the signal bar itself.\nSwing (Prev N Bars): lowest/highest over the lookback — structural, recommended for trend entries.\nHTF1 SHA Body: opposite edge of the mid-TF body — invalidation = mid-TF trend threatened.\nHTF2 SHA Body: opposite edge of the high-TF body — widest, high-TF invalidation.", group=grp_sl)
-sl_price_basis = input.string("Body (open/close)", "Anchor Uses", options=["Body (open/close)","Wick (high/low)"], tooltip="Applies to the STOP anchors only - the entry test has its own Setup Uses setting. Applies to Trigger Candle and Swing anchors.\nBody: the candle body edge (open/close) — tighter, ignores the shadow.\nWick: the full extreme (high/low) including the shadow — wider, harder to knock out.\n(HTF SHA-Body anchors always use the SHA body.)", group=grp_sl)
+buy_anchor_pt  = input.string("Body Bottom", "Buy Anchor Uses", options=["Body Bottom","Body Top","Wick Low","Wick High"], tooltip="Which exact point of the anchor the stop sits at for a BUY. Previously this was implied - a long always took the LOW side - so there was no way to place a long's stop at the TOP of an SHA candle.\n\nBody Bottom / Body Top: the min or max of the candle's open and close.\nWick Low / Wick High: its full low or high.\n\nApplies to the SHA Body anchors, the Trigger Candle and the Swing.", group=grp_sl)
+sell_anchor_pt = input.string("Body Top", "Sell Anchor Uses", options=["Body Bottom","Body Top","Wick Low","Wick High"], tooltip="The same choice for a SELL, set independently of the buy side.", group=grp_sl)
 sl_lookback = input.int(10, "Swing Lookback (bars)", minval=1, maxval=100, group=grp_sl)
 sl_buffer_pct = input.float(0.10, "Stop Buffer (%)", minval=0.0, step=0.01, tooltip="How far beyond the anchor the stop sits, as a percentage of price. 0.10 means one tenth of one percent. Percent rather than a fixed amount so the same setting is meaningful on any instrument.", group=grp_sl)
 sl_buffer_raw = rawC * sl_buffer_pct / 100
@@ -262,11 +263,35 @@ swing_high_wick = ta.highest(rawH, sl_span)
 swing_low_body  = ta.lowest(body_low,  sl_span)
 swing_high_body = ta.highest(body_high, sl_span)
 
-sl_use_body = sl_price_basis == "Body (open/close)"
-trig_low_lvl  = sl_use_body ? body_low  : rawL
-trig_high_lvl = sl_use_body ? body_high : rawH
-sw_low_lvl    = sl_use_body ? swing_low_body  : swing_low_wick
-sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
+// Each side names its own point explicitly, rather than the low being assumed
+// for longs and the high for shorts.
+f_pt(_o, _h, _l, _c, _sel) =>
+    _sel == "Body Bottom" ? math.min(_o, _c)
+      : _sel == "Body Top" ? math.max(_o, _c)
+      : _sel == "Wick Low" ? _l
+      :                      _h
+
+_buy_body  = buy_anchor_pt  == "Body Bottom" or buy_anchor_pt  == "Body Top"
+_sell_body = sell_anchor_pt == "Body Bottom" or sell_anchor_pt == "Body Top"
+_buy_hi    = buy_anchor_pt  == "Body Top"    or buy_anchor_pt  == "Wick High"
+_sell_hi   = sell_anchor_pt == "Body Top"    or sell_anchor_pt == "Wick High"
+
+// Trigger candle: the chosen point of the current raw candle.
+trig_low_lvl  = f_pt(rawO, rawH, rawL, rawC, buy_anchor_pt)
+trig_high_lvl = f_pt(rawO, rawH, rawL, rawC, sell_anchor_pt)
+
+// Swing: the extreme of the chosen measure over the lookback, on the side the
+// selection points at.
+sw_low_lvl    = _buy_body  ? (_buy_hi  ? swing_high_body : swing_low_body)  : (_buy_hi  ? swing_high_wick : swing_low_wick)
+sw_high_lvl   = _sell_body ? (_sell_hi ? swing_high_body : swing_low_body)  : (_sell_hi ? swing_high_wick : swing_low_wick)
+
+// SHA layer anchors, per side.
+sha_buy_0  = f_pt(bO,  bH,  bL,  bC,  buy_anchor_pt)
+sha_buy_1  = f_pt(h1O, h1H, h1L, h1C, buy_anchor_pt)
+sha_buy_2  = f_pt(h2O, h2H, h2L, h2C, buy_anchor_pt)
+sha_sell_0 = f_pt(bO,  bH,  bL,  bC,  sell_anchor_pt)
+sha_sell_1 = f_pt(h1O, h1H, h1L, h1C, sell_anchor_pt)
+sha_sell_2 = f_pt(h2O, h2H, h2L, h2C, sell_anchor_pt)
 
 // ── LAST-BAR-BEYOND ANCHORS ────────────────────────────────────────────────
 // NOT a crossing event — that is the entry signal. This is a POSITION: the most
@@ -280,14 +305,15 @@ sw_high_lvl   = sl_use_body ? swing_high_body : swing_high_wick
 // ignores wicks on both the candle and the SHA; Wick compares full extremes.
 // "Nearest / furthest" is decided at ENTRY time, by which of the two higher
 // SHA layers is closer to price right then.
-px_low_test  = sl_use_body ? body_low  : rawL
-px_high_test = sl_use_body ? body_high : rawH
-ha_low_test  = sl_use_body ? math.min(bO, bC) : bL
-ha_high_test = sl_use_body ? math.max(bO, bC) : bH
-h1_bot_edge  = sl_use_body ? sha_bot_1 : h1L
-h1_top_edge  = sl_use_body ? sha_top_1 : h1H
-h2_bot_edge  = sl_use_body ? sha_bot_2 : h2L
-h2_top_edge  = sl_use_body ? sha_top_2 : h2H
+_lbb_body = _buy_body
+px_low_test  = _lbb_body ? body_low  : rawL
+px_high_test = _lbb_body ? body_high : rawH
+ha_low_test  = _lbb_body ? math.min(bO, bC) : bL
+ha_high_test = _lbb_body ? math.max(bO, bC) : bH
+h1_bot_edge  = _lbb_body ? sha_bot_1 : h1L
+h1_top_edge  = _lbb_body ? sha_top_1 : h1H
+h2_bot_edge  = _lbb_body ? sha_bot_2 : h2L
+h2_top_edge  = _lbb_body ? sha_top_2 : h2H
 
 var float xl_px_h1 = na, var float xl_px_h2 = na
 var float xl_ha_h1 = na, var float xl_ha_h2 = na
@@ -413,9 +439,9 @@ f_long_stop(_kn, _km, _kf) =>
     _lchF = _near ? xl_ha_h2 : xl_ha_h1
     _lvl = sl_mode == "Trigger Candle"                  ? trig_low_lvl
       :    sl_mode == "Swing (Prev N Bars)"             ? sw_low_lvl
-      :    sl_mode == "Base SHA Body"                   ? sha_bot_0
-      :    sl_mode == "HTF1 SHA Body"                   ? sha_bot_1
-      :    sl_mode == "HTF2 SHA Body"                   ? sha_bot_2
+      :    sl_mode == "Base SHA Body"                   ? sha_buy_0
+      :    sl_mode == "HTF1 SHA Body"                   ? sha_buy_1
+      :    sl_mode == "HTF2 SHA Body"                   ? sha_buy_2
       :    sl_mode == "Last Bar Beyond Nearest SHA"  ? (na(_lcp)  ? sw_low_lvl : _lcp)
       :    sl_mode == "Last Bar Beyond Furthest SHA" ? (na(_lcpF) ? sw_low_lvl : _lcpF)
       :    sl_mode == "Last SHA Bar Beyond Nearest SHA"    ? (na(_lch)  ? sw_low_lvl : _lch)
@@ -435,9 +461,9 @@ f_short_stop(_kn, _km, _kf) =>
     _hchF = _near ? xh_ha_h2 : xh_ha_h1
     _lvl = sl_mode == "Trigger Candle"                  ? trig_high_lvl
       :    sl_mode == "Swing (Prev N Bars)"             ? sw_high_lvl
-      :    sl_mode == "Base SHA Body"                   ? sha_top_0
-      :    sl_mode == "HTF1 SHA Body"                   ? sha_top_1
-      :    sl_mode == "HTF2 SHA Body"                   ? sha_top_2
+      :    sl_mode == "Base SHA Body"                   ? sha_sell_0
+      :    sl_mode == "HTF1 SHA Body"                   ? sha_sell_1
+      :    sl_mode == "HTF2 SHA Body"                   ? sha_sell_2
       :    sl_mode == "Last Bar Beyond Nearest SHA"  ? (na(_hcp)  ? sw_high_lvl : _hcp)
       :    sl_mode == "Last Bar Beyond Furthest SHA" ? (na(_hcpF) ? sw_high_lvl : _hcpF)
       :    sl_mode == "Last SHA Bar Beyond Nearest SHA"    ? (na(_hch)  ? sw_high_lvl : _hch)
