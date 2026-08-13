@@ -746,3 +746,93 @@ for sf, inf, eng in pairs:
     if not ok_s:
         sys.exit("FAIL: pair mismatch")
 
+
+
+# ===========================================================================
+# FILE 3 — indicator v3 (display only; engine identical to v2)
+# ===========================================================================
+V3_HEADER = IND_HEADER.replace(
+    "// 3SHA — RENKO CHART  (v2)", "// 3SHA — RENKO CHART  (v3)"
+).replace(
+    'indicator("3SHA Renko Chart v2", shorttitle="3SHA-RK2", overlay=true)',
+    'indicator("3SHA Renko Chart v3", shorttitle="3SHA-RK3", overlay=true,\n     max_labels_count = 500)'
+).replace(
+    "// Companion picture for Renko_Strategy_v1.pine. v1 of this file is unchanged.",
+    """// Companion picture for Renko_Strategy_v2.pine.
+//
+// v3 IS A DISPLAY CHANGE ONLY. Its engine text is byte-identical to v2's, which
+// the builder asserts, so the bricks are the same bricks. It pairs with
+// Renko_Strategy_v2 exactly as v2 of this file does - the version numbers
+// differ here only because the DRAWING changed, not the signal.
+//
+// What is new: each renko turn is labelled with that candle's closing price,
+// and the marker size is adjustable.""")
+
+V3_MARKER_INPUTS = '''
+grp_mark       = "━━━ TURN MARKERS ━━━"
+turn_style     = input.string("Price Label", "Mark Turns With", options=["Price Label", "Arrow", "Both", "Off"], tooltip="Price Label prints the closing price of the candle where the renko turned. Arrow is the plain triangle. Both shows the triangle and the price, which can crowd a busy chart.", group=grp_mark)
+marker_size    = input.string("Small", "Marker Size", options=["Tiny", "Small", "Normal", "Large", "Huge"], tooltip="Applies to the arrows and the price labels alike.", group=grp_mark)
+turn_up_col    = input.color(color.new(#2962FF, 0), "Turned Up", group=grp_mark)
+turn_dn_col    = input.color(color.new(#F23645, 0), "Turned Down", group=grp_mark)
+turn_show_box  = input.bool(true, "Also Show Brick Size On The Label", tooltip="Appends the brick size in force at that turn, so a label reads price then size. Useful when the size resets monthly and you want to see which regime a turn belongs to.", group=grp_mark)
+
+'''
+
+V3_MARKERS = '''rk_flipped = rk_dir != rk_dir[1] and rk_dir != 0 and not na(rk_dir[1])
+
+// ── TURN MARKERS ───────────────────────────────────────────────────────────
+// Five fixed-size plotshape pairs rather than one call with a variable size.
+// plotshape wants a compile-time constant there, and feeding it an input would
+// be rejected. Verbose, but it compiles and costs nothing at runtime.
+_mk_arrow = turn_style == "Arrow" or turn_style == "Both"
+_up_mark  = rk_marks and rk_live and rk_flipped and rk_dir ==  1 and _mk_arrow
+_dn_mark  = rk_marks and rk_live and rk_flipped and rk_dir == -1 and _mk_arrow
+
+plotshape(_up_mark and marker_size == "Tiny",   "Turned Up (tiny)",     shape.triangleup,   location.belowbar, turn_up_col, size=size.tiny)
+plotshape(_up_mark and marker_size == "Small",  "Turned Up (small)",    shape.triangleup,   location.belowbar, turn_up_col, size=size.small)
+plotshape(_up_mark and marker_size == "Normal", "Turned Up (normal)",   shape.triangleup,   location.belowbar, turn_up_col, size=size.normal)
+plotshape(_up_mark and marker_size == "Large",  "Turned Up (large)",    shape.triangleup,   location.belowbar, turn_up_col, size=size.large)
+plotshape(_up_mark and marker_size == "Huge",   "Turned Up (huge)",     shape.triangleup,   location.belowbar, turn_up_col, size=size.huge)
+plotshape(_dn_mark and marker_size == "Tiny",   "Turned Down (tiny)",   shape.triangledown, location.abovebar, turn_dn_col, size=size.tiny)
+plotshape(_dn_mark and marker_size == "Small",  "Turned Down (small)",  shape.triangledown, location.abovebar, turn_dn_col, size=size.small)
+plotshape(_dn_mark and marker_size == "Normal", "Turned Down (normal)", shape.triangledown, location.abovebar, turn_dn_col, size=size.normal)
+plotshape(_dn_mark and marker_size == "Large",  "Turned Down (large)",  shape.triangledown, location.abovebar, turn_dn_col, size=size.large)
+plotshape(_dn_mark and marker_size == "Huge",   "Turned Down (huge)",   shape.triangledown, location.abovebar, turn_dn_col, size=size.huge)
+
+// Price labels. label.new DOES take a variable size, so one call each is enough.
+// style_label_up / _down are used deliberately: the plain styles ignore the y
+// coordinate and would stack every label at one height instead of at the price.
+_msz = marker_size == "Tiny" ? size.tiny : marker_size == "Normal" ? size.normal : marker_size == "Large" ? size.large : marker_size == "Huge" ? size.huge : size.small
+_mk_price = turn_style == "Price Label" or turn_style == "Both"
+
+if rk_marks and rk_live and rk_flipped and _mk_price
+    string _txt = str.tostring(close, format.mintick) + (turn_show_box and not na(rk_box) ? "  (" + str.tostring(rk_box, format.mintick) + ")" : "")
+    label.new(bar_index, rk_dir == 1 ? low : high, _txt,
+         style     = rk_dir == 1 ? label.style_label_up : label.style_label_down,
+         color     = rk_dir == 1 ? turn_up_col : turn_dn_col,
+         textcolor = color.white,
+         size      = _msz,
+         yloc      = rk_dir == 1 ? yloc.belowbar : yloc.abovebar)
+'''
+
+V3_DRAW = IND_DRAW.replace(
+    '''rk_flipped = rk_dir != rk_dir[1] and rk_dir != 0 and not na(rk_dir[1])
+plotshape(rk_marks and rk_live and rk_flipped and rk_dir == 1, "Renko Turned Up",
+          shape.triangleup, location.belowbar, color.new(#2962FF, 0), size=size.tiny)
+plotshape(rk_marks and rk_live and rk_flipped and rk_dir == -1, "Renko Turned Down",
+          shape.triangledown, location.abovebar, color.new(#F23645, 0), size=size.tiny)''',
+    V3_MARKERS.rstrip("\n")
+).replace('"3SHA RENKO v2"', '"3SHA RENKO v3"')
+
+ind3 = (V3_HEADER
+        + strict_inputs(True).replace(
+            'renko_show_hud = input.bool(true, "Show Renko Row In HUD", group=grp_renko)',
+            'renko_show_hud = input.bool(true, "Show Status Box", group=grp_renko)')
+        + IND_EXTRA_INPUTS + V3_MARKER_INPUTS + STRICT_ENGINE + DIAG + V3_DRAW)
+write(HERE / "3SHA_Renko_Chart_v3.pine", ind3)
+
+if STRICT_ENGINE not in ind3:
+    sys.exit("FAIL: v3 engine altered during assembly")
+v2s = (HERE / "Renko_Strategy_v2.pine").read_text()
+print(f"  pair check 3SHA_Renko_Chart_v3.pine <-> Renko_Strategy_v2.pine: "
+      f"{'ok - engine byte-identical' if STRICT_ENGINE in v2s else 'FAIL'}")
