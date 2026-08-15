@@ -1,0 +1,118 @@
+//@version=6
+// ============================================================================
+// 3SHA — FIRST CROSSOVER
+// ============================================================================
+// Marks the FIRST bar on which price closes beyond the SHA layers, and nothing
+// after it. No second mark until price has crossed to the other side and back.
+//
+// A neutral stretch does not re-arm anything. Price drifting back inside the
+// layers and out again on the SAME side stays silent - only a genuine flip to
+// the opposite side re-enables a mark.
+//
+// Deliberately nothing else here: no stops, no trail, no labels, no panel. Just
+// the crossings.
+// ============================================================================
+
+indicator("3SHA First Crossover", shorttitle="3SHA-FIRSTX", overlay=true)
+
+// ── SHA FUNCTION  (verbatim from the strategy) ──────────────────────────────
+f_sha(_len1, _len2, _o, _h, _l, _c) =>
+    o1  = ta.ema(_o, _len1)
+    h1  = ta.ema(_h, _len1)
+    l1  = ta.ema(_l, _len1)
+    c1  = ta.ema(_c, _len1)
+    haC = (o1 + h1 + l1 + c1) / 4.0
+    var float haO = na
+    haO := na(haO[1]) ? (o1 + c1) / 2.0 : (haO[1] + haC[1]) / 2.0
+    haH = math.max(h1, math.max(haO, haC))
+    haL = math.min(l1, math.min(haO, haC))
+    o2  = ta.ema(haO, _len2)
+    h2  = ta.ema(haH, _len2)
+    l2  = ta.ema(haL, _len2)
+    c2  = ta.ema(haC, _len2)
+    [o2, h2, l2, c2]
+
+// ── LAYERS ──────────────────────────────────────────────────────────────────
+grp_l = "① ━━━ SHA LAYERS ━━━"
+base_tf   = input.timeframe("",   "Base Timeframe",  tooltip="Blank uses the chart timeframe.", group=grp_l)
+base_len1 = input.int(4, "Base Stage-1 EMA", minval=1, group=grp_l)
+base_len2 = input.int(8, "Base Stage-2 EMA", minval=1, group=grp_l)
+htf1_tf   = input.timeframe("60",  "HTF1 Timeframe", group=grp_l)
+htf1_len1 = input.int(4, "HTF1 Stage-1 EMA", minval=1, group=grp_l)
+htf1_len2 = input.int(8, "HTF1 Stage-2 EMA", minval=1, group=grp_l)
+htf2_tf   = input.timeframe("240", "HTF2 Timeframe", group=grp_l)
+htf2_len1 = input.int(4, "HTF2 Stage-1 EMA", minval=1, group=grp_l)
+htf2_len2 = input.int(8, "HTF2 Stage-2 EMA", minval=1, group=grp_l)
+
+grp_s = "② ━━━ CROSSOVER ━━━"
+pa_layers = input.string("All three", "Price Must Clear", options=["All three","HTF1 + HTF2","Base + HTF1","Base + HTF2","HTF2 only","HTF1 only","Base only","Any two"], tooltip="Which SHA layers price has to close beyond for a crossing to count. Same choices as the strategy.", group=grp_s)
+sha_ref   = input.string("Body (open/close)", "SHA Reference", options=["Body (open/close)","Wick (high/low)"], tooltip="Which part of each SHA candle price is measured against. Body is the open/close edge; Wick is the full extreme, a further level and so harder to clear.", group=grp_s)
+col_up    = input.color(color.new(#2962FF, 0), "Up", inline="c", group=grp_s)
+col_dn    = input.color(color.new(#F23645, 0), "Down", inline="c", group=grp_s)
+
+// ── RAW CANDLE SOURCE ───────────────────────────────────────────────────────
+// Pine's open/high/low/close are whatever the CHART is showing, so on a Renko
+// or Heikin-Ashi chart the layers would be built from synthetic bars and shift
+// with the chart type. Sourced from a standard ticker instead.
+tStd = ticker.standard(syminfo.tickerid)
+[rawO, rawH, rawL, rawC] = request.security(tStd, timeframe.period, [open, high, low, close], barmerge.gaps_off, barmerge.lookahead_off)
+
+[bO, bH, bL, bC]     = request.security(tStd, base_tf, f_sha(base_len1, base_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+[h1O, h1H, h1L, h1C] = request.security(tStd, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+[h2O, h2H, h2L, h2C] = request.security(tStd, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
+
+all_ready = not na(bO) and not na(h1O) and not na(h2O)
+
+// ── WHERE PRICE SITS ────────────────────────────────────────────────────────
+_body = sha_ref == "Body (open/close)"
+b_top = _body ? math.max(bO, bC)  : bH
+b_bot = _body ? math.min(bO, bC)  : bL
+_1top = _body ? math.max(h1O,h1C) : h1H
+_1bot = _body ? math.min(h1O,h1C) : h1L
+_2top = _body ? math.max(h2O,h2C) : h2H
+_2bot = _body ? math.min(h2O,h2C) : h2L
+
+_ab = rawC > b_top
+_a1 = rawC > _1top
+_a2 = rawC > _2top
+_bb = rawC < b_bot
+_b1 = rawC < _1bot
+_b2 = rawC < _2bot
+_nA = (_ab ? 1 : 0) + (_a1 ? 1 : 0) + (_a2 ? 1 : 0)
+_nB = (_bb ? 1 : 0) + (_b1 ? 1 : 0) + (_b2 ? 1 : 0)
+
+up = all_ready and (pa_layers == "All three"   ? (_ab and _a1 and _a2)
+   : pa_layers == "HTF1 + HTF2" ? (_a1 and _a2)
+   : pa_layers == "Base + HTF1" ? (_ab and _a1)
+   : pa_layers == "Base + HTF2" ? (_ab and _a2)
+   : pa_layers == "HTF2 only"   ? _a2
+   : pa_layers == "HTF1 only"   ? _a1
+   : pa_layers == "Base only"   ? _ab
+   :                              _nA >= 2)
+dn = all_ready and (pa_layers == "All three"   ? (_bb and _b1 and _b2)
+   : pa_layers == "HTF1 + HTF2" ? (_b1 and _b2)
+   : pa_layers == "Base + HTF1" ? (_bb and _b1)
+   : pa_layers == "Base + HTF2" ? (_bb and _b2)
+   : pa_layers == "HTF2 only"   ? _b2
+   : pa_layers == "HTF1 only"   ? _b1
+   : pa_layers == "Base only"   ? _bb
+   :                              _nB >= 2)
+
+// ── FIRST CROSSING ONLY ─────────────────────────────────────────────────────
+// side remembers which way price last resolved. A mark fires only when the
+// current side differs from it - so the first bar of a run is marked and the
+// rest are silent. Neutral bars leave side untouched, which is what stops a
+// drift back inside the layers from re-arming the same direction.
+var int side = 0
+first_up = up and side != 1
+first_dn = dn and side != -1
+if up
+    side := 1
+else if dn
+    side := -1
+
+plotshape(first_up, title="First Up",   style=shape.triangleup,   location=location.belowbar, color=col_up, size=size.small)
+plotshape(first_dn, title="First Down", style=shape.triangledown, location=location.abovebar, color=col_dn, size=size.small)
+
+alertcondition(first_up, "First crossing up",   "3SHA first crossing UP on {{ticker}} {{interval}}")
+alertcondition(first_dn, "First crossing down", "3SHA first crossing DOWN on {{ticker}} {{interval}}")
