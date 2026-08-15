@@ -50,6 +50,30 @@ sha_ref   = input.string("Body (open/close)", "SHA Reference", options=["Body (o
 col_up    = input.color(color.new(#2962FF, 0), "Up", inline="c", group=grp_s)
 col_dn    = input.color(color.new(#F23645, 0), "Down", inline="c", group=grp_s)
 
+grp_disp = "③ ━━━ SHA CANDLES ━━━"
+show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_disp)
+show_borders = input.bool(true,  "Show Borders (all layers)", group=grp_disp)
+base_show = input.bool(true, "Show Base SHA Candles", group=grp_disp)
+base_bull = input.color(color.new(#2962FF, 0), "Bull Color", group=grp_disp)
+base_bear = input.color(color.new(#FF9800, 0), "Bear Color", group=grp_disp)
+base_border  = input.color(color.new(#000000, 0), "Border Color", group=grp_disp)
+base_wick    = input.color(color.new(#555555, 0), "Wick Color",   group=grp_disp)
+base_opacity = input.int(0, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_disp)
+htf1_show = input.bool(true, "Show HTF1 SHA Candles", group=grp_disp)
+htf1_bull = input.color(color.new(#2962FF, 0), "Bull Color", group=grp_disp)
+htf1_bear = input.color(color.new(#F23645, 0), "Bear Color", group=grp_disp)
+htf1_border_bull = input.color(color.new(#000000, 0), "Bull Border Color", group=grp_disp)
+htf1_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group=grp_disp)
+htf1_wick = input.color(color.new(#555555, 0), "Wick Color", group=grp_disp)
+htf1_opacity = input.int(25, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_disp)
+htf2_show = input.bool(true, "Show HTF2 SHA Candles", group=grp_disp)
+htf2_bull = input.color(color.new(#2962FF, 0), "Bull Color", group=grp_disp)
+htf2_bear = input.color(color.new(#F23645, 0), "Bear Color", group=grp_disp)
+htf2_border_bull = input.color(color.new(#000000, 0), "Bull Border Color", group=grp_disp)
+htf2_border_bear = input.color(color.new(#000000, 0), "Bear Border Color", group=grp_disp)
+htf2_wick = input.color(color.new(#555555, 0), "Wick Color", group=grp_disp)
+htf2_opacity = input.int(50, "Opacity (0=solid 100=invisible)", minval=0, maxval=100, group=grp_disp)
+
 // ── RAW CANDLE SOURCE ───────────────────────────────────────────────────────
 // Pine's open/high/low/close are whatever the CHART is showing, so on a Renko
 // or Heikin-Ashi chart the layers would be built from synthetic bars and shift
@@ -61,7 +85,10 @@ tStd = ticker.standard(syminfo.tickerid)
 [h1O, h1H, h1L, h1C] = request.security(tStd, htf1_tf, f_sha(htf1_len1, htf1_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 [h2O, h2H, h2L, h2C] = request.security(tStd, htf2_tf, f_sha(htf2_len1, htf2_len2, open, high, low, close), barmerge.gaps_off, barmerge.lookahead_off)
 
-all_ready = not na(bO) and not na(h1O) and not na(h2O)
+base_ready = not na(bO)  and not na(bC)
+htf1_ready = not na(h1O) and not na(h1C)
+htf2_ready = not na(h2O) and not na(h2C)
+all_ready  = base_ready and htf1_ready and htf2_ready
 
 // ── WHERE PRICE SITS ────────────────────────────────────────────────────────
 _body = sha_ref == "Body (open/close)"
@@ -116,3 +143,37 @@ plotshape(first_dn, title="First Down", style=shape.triangledown, location=locat
 
 alertcondition(first_up, "First crossing up",   "3SHA first crossing UP on {{ticker}} {{interval}}")
 alertcondition(first_dn, "First crossing down", "3SHA first crossing DOWN on {{ticker}} {{interval}}")
+
+// ── SHA CANDLES  (lifted verbatim from the v3 strategy) ─────────────────────
+htf2_body_col = h2C >= h2O ? color.new(htf2_bull, htf2_opacity) : color.new(htf2_bear, htf2_opacity)
+htf2_wick_col = show_wicks   ? color.new(htf2_wick, htf2_opacity) : na
+htf2_brdr_col = show_borders ? (h2C >= h2O ? color.new(htf2_border_bull, htf2_opacity) : color.new(htf2_border_bear, htf2_opacity)) : htf2_body_col
+htf2_pH       = show_wicks ? h2H : math.max(h2O, h2C)
+htf2_pL       = show_wicks ? h2L : math.min(h2O, h2C)
+plotcandle(htf2_ready and htf2_show ? h2O : na, htf2_ready and htf2_show ? htf2_pH : na,
+           htf2_ready and htf2_show ? htf2_pL : na, htf2_ready and htf2_show ? h2C : na,
+           title="HTF2 SHA", color=htf2_ready and htf2_show ? htf2_body_col : na,
+           wickcolor=htf2_ready and htf2_show ? htf2_wick_col : na,
+           bordercolor=htf2_ready and htf2_show ? htf2_brdr_col : na)
+
+htf1_body_col = h1C >= h1O ? color.new(htf1_bull, htf1_opacity) : color.new(htf1_bear, htf1_opacity)
+htf1_wick_col = show_wicks   ? color.new(htf1_wick, htf1_opacity) : na
+htf1_brdr_col = show_borders ? (h1C >= h1O ? color.new(htf1_border_bull, htf1_opacity) : color.new(htf1_border_bear, htf1_opacity)) : htf1_body_col
+htf1_pH       = show_wicks ? h1H : math.max(h1O, h1C)
+htf1_pL       = show_wicks ? h1L : math.min(h1O, h1C)
+plotcandle(htf1_ready and htf1_show ? h1O : na, htf1_ready and htf1_show ? htf1_pH : na,
+           htf1_ready and htf1_show ? htf1_pL : na, htf1_ready and htf1_show ? h1C : na,
+           title="HTF1 SHA", color=htf1_ready and htf1_show ? htf1_body_col : na,
+           wickcolor=htf1_ready and htf1_show ? htf1_wick_col : na,
+           bordercolor=htf1_ready and htf1_show ? htf1_brdr_col : na)
+
+base_body_col = bC >= bO ? color.new(base_bull, base_opacity) : color.new(base_bear, base_opacity)
+base_wick_col = show_wicks   ? color.new(base_wick, base_opacity) : na
+base_brdr_col = show_borders ? color.new(base_border, base_opacity) : base_body_col
+base_pH       = show_wicks ? bH : math.max(bO, bC)
+base_pL       = show_wicks ? bL : math.min(bO, bC)
+plotcandle(base_ready and base_show ? bO : na, base_ready and base_show ? base_pH : na,
+           base_ready and base_show ? base_pL : na, base_ready and base_show ? bC : na,
+           title="Base SHA", color=base_ready and base_show ? base_body_col : na,
+           wickcolor=base_ready and base_show ? base_wick_col : na,
+           bordercolor=base_ready and base_show ? base_brdr_col : na)
