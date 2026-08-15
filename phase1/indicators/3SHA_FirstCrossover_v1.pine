@@ -13,7 +13,7 @@
 // the crossings.
 // ============================================================================
 
-indicator("3SHA First Crossover", shorttitle="3SHA-FIRSTX", overlay=true)
+indicator("3SHA First Crossover", shorttitle="3SHA-FIRSTX", overlay=true, max_labels_count=500)
 
 // ── SHA FUNCTION  (verbatim from the strategy) ──────────────────────────────
 f_sha(_len1, _len2, _o, _h, _l, _c) =>
@@ -49,6 +49,9 @@ pa_layers = input.string("All three", "Price Must Clear", options=["All three","
 sha_ref   = input.string("Body (open/close)", "SHA Reference", options=["Body (open/close)","Wick (high/low)"], tooltip="Which part of each SHA candle price is measured against. Body is the open/close edge; Wick is the full extreme, a further level and so harder to clear.", group=grp_s)
 col_up    = input.color(color.new(#2962FF, 0), "Up", inline="c", group=grp_s)
 col_dn    = input.color(color.new(#F23645, 0), "Down", inline="c", group=grp_s)
+show_lbl   = input.bool(true, "Price Labels", tooltip="Shows the closing price of the crossing candle next to each marker.", group=grp_s)
+lbl_off_pct = input.float(0.30, "  Label Distance (%)", minval=0.0, step=0.05, tooltip="How far the label sits from the candle, as a percentage of price, so the gap looks the same on any instrument.", group=grp_s)
+lbl_size   = input.string("Small", "  Label Size", options=["Tiny","Small","Normal","Large","Huge"], group=grp_s)
 
 grp_disp = "③ ━━━ SHA CANDLES ━━━"
 show_wicks   = input.bool(false, "Show Wicks (all layers)",   group=grp_disp)
@@ -140,6 +143,18 @@ else if dn
 
 plotshape(first_up, title="First Up",   style=shape.triangleup,   location=location.belowbar, color=col_up, size=size.small)
 plotshape(first_dn, title="First Down", style=shape.triangledown, location=location.abovebar, color=col_dn, size=size.small)
+
+// Price labels, held clear of the candle by a percentage of price.
+_lsz = lbl_size == "Tiny" ? size.tiny : lbl_size == "Small" ? size.small : lbl_size == "Normal" ? size.normal : lbl_size == "Large" ? size.large : size.huge
+_off = rawC * lbl_off_pct / 100.0
+if show_lbl and first_up
+    label.new(bar_index, rawL - _off, text = str.tostring(rawC, format.mintick),
+         style = label.style_label_up, color = color.new(col_up, 15),
+         textcolor = color.white, size = _lsz)
+if show_lbl and first_dn
+    label.new(bar_index, rawH + _off, text = str.tostring(rawC, format.mintick),
+         style = label.style_label_down, color = color.new(col_dn, 15),
+         textcolor = color.white, size = _lsz)
 
 alertcondition(first_up, "First crossing up",   "3SHA first crossing UP on {{ticker}} {{interval}}")
 alertcondition(first_dn, "First crossing down", "3SHA first crossing DOWN on {{ticker}} {{interval}}")
