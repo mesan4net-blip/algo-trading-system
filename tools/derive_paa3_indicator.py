@@ -256,22 +256,22 @@ if did_enter
           + str.tostring(entry_price, format.mintick) + ", stop " + str.tostring(stop_level, format.mintick),
           alert.freq_once_per_bar_close)''')
 
-# ── 10. Diagnostics for the filling, so the two can be compared bar by bar ──
+# ── 10. Diagnostics for the order filling ──────────────────────────────────
 sub('plot(dbg ? dj_bars : na, "dbg doji candles in a row", display=display.data_window)',
     '''plot(dbg ? dj_bars : na, "dbg doji candles in a row", display=display.data_window)
 
-// ── ORDER FILLING DIAGNOSTICS ───────────────────────────────────────────────
-// Load this and the strategy on the same chart with the same settings, open the
-// Data Window and walk the bars. 'position' here should match the strategy's
-// Position Size at every bar, and 'entry fill price' should match its entry
-// price to the tick. Anywhere they differ is the filling code being wrong, and
-// nothing else in the two files can cause it.
+// ── ORDER FILLING ───────────────────────────────────────────────────────────
+// Load this and the strategy on one chart with the same settings, open the Data
+// Window and walk the bars. 'position' should match the strategy's Position
+// Size on every bar and 'entry fill price' should match its entry price to the
+// tick. Anywhere they differ is the filling code, and nothing else in the two
+// files can cause it.
 plot(dbg ? em_pos : na, "dbg position", display=display.data_window)
 plot(dbg ? em_e_px : na, "dbg entry fill price", display=display.data_window)
-plot(dbg ? em_e_bar : na, "dbg entry bar", display=display.data_window)
 plot(dbg ? em_x_px : na, "dbg last exit price", display=display.data_window)
 plot(dbg ? pend_lvl : na, "dbg order waiting at", display=display.data_window)
-plot(dbg ? (na(pend_lvl) ? na : pend_stop ? 1 : 0) : na, "dbg order is a stop", display=display.data_window)
+// 0 = nothing waiting  1 = buy stop  2 = buy limit  3 = sell stop  4 = sell limit
+plot(dbg ? (na(pend_lvl) ? 0 : pend_long ? (pend_stop ? 1 : 2) : (pend_stop ? 3 : 4)) : na, "dbg order type", display=display.data_window)
 plot(dbg ? rest_stop : na, "dbg stop waiting at", display=display.data_window)
 plot(dbg ? rest_tgt : na, "dbg target waiting at", display=display.data_window)''')
 
