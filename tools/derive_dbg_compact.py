@@ -38,6 +38,7 @@ plot(dbg ? (_dj_rng > 0 ? _dj_body / _dj_rng * 100.0 : na) : na, "dbg body % of 
 plot(dbg ? (_dj_rng > 0 ? (pos_dir == "short" ? (math.min(rawO, rawC) - rawL) : pos_dir == "long" ? (rawH - math.max(rawO, rawC)) : math.max(rawH - math.max(rawO, rawC), math.min(rawO, rawC) - rawL)) / _dj_rng * 100.0 : na) : na, "dbg wick against trade %", display=display.data_window)
 plot(dbg ? (not na(_dj_avg) and _dj_avg > 0 ? _dj_rng / _dj_avg * 100.0 : na) : na, "dbg candle size % of average", display=display.data_window)
 plot(dbg ? (dj_qual_long ? 1 : 0) + (dj_qual_short ? 2 : 0) : na, "dbg doji qualifies", display=display.data_window)
+plot(dbg ? (eng_qual_long ? 1 : 0) + (eng_qual_short ? 2 : 0) : na, "dbg engulfing qualifies", display=display.data_window)
 plot(dbg ? dj_bars : na, "dbg doji candles in a row", display=display.data_window)
 '''
 
