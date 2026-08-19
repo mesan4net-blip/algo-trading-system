@@ -177,6 +177,7 @@ sell_brk = input.string("Close beyond N-bar low", "  Sell Breakout Test", option
 // to prove it is resuming by CLOSING beyond the exit candle itself.
 gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
 min_layer_gap_pct = input.float(0.0, "Minimum Layer Gap (%)", minval=0.0, step=0.05, tooltip="How far apart the HTF1 and HTF2 SHA bodies have to be before an entry is allowed, as a percentage of price. Bunched layers mean no trend, which is where price crosses back and forth and trades go nowhere. 0 = off. Try 0.20 to start.\n\nIt releases slowly after a flat stretch, since the layers need time to spread again, so the first part of some real moves will be missed.", group=grp_entry)
+entry_confirm = input.bool(false, "Confirm Entry At Candle Close", tooltip="OFF: the order rests at the level and fills the moment price touches it, part-way through a candle. Nobody can know what colour that candle will be, so a sell can open on a candle that goes on to close green.\n\nON: no order rests. The trade opens at the CLOSE of the first candle that both reaches the level AND closes with the trade - a buy needs a candle closing up, a sell one closing down. A sell can then never open on an up candle, because the candle has finished by the time the trade exists.\n\nThe cost is the fill price, and it cuts both ways. On a candle that dips to the level and recovers, the close is a BETTER price than the level. On a candle that reaches the level and keeps running, it is a much worse one. And some trades are missed entirely: price reaches the level, closes against the trade, and never comes back.\n\nThe trigger candle itself can never fill - the level is taken FROM that candle, so it would enter at once and the level would mean nothing.", group=grp_entry)
 
 // ============================================================================
 // ④ INITIAL STOP  (invalidation level + sizing anchor)
@@ -1172,14 +1173,51 @@ _lvl_above_S = not na(entry_level) and entry_level > rawC
 // Long and short use separate order IDs. Pine refuses to change the direction
 // of a pending order under one ID, and a resting order on the far side is
 // exactly what a flip needs to replace.
+// ── CONFIRM-AT-CLOSE TEST ───────────────────────────────────────────────────
+// Never on the trigger candle: the level is taken FROM that candle, so its own
+// high or low reaches it by definition and the trade would open immediately at
+// the trigger close, making the reference level meaningless.
+// Above or below is judged against the PREVIOUS close - where price sat when
+// the candle began - which is the same question a resting order asks.
+_cf_live  = entry_confirm and trg_dir != 0 and not na(entry_level) and not na(trg_bar) and bar_index > trg_bar
+_cf_above = _cf_live and entry_level > rawC[1]
+_cf_reach = _cf_live and (_cf_above ? rawH >= entry_level : rawL <= entry_level)
+_cf_long  = _cf_reach and rawC >= rawO
+_cf_short = _cf_reach and rawC <= rawO
+
 if long_signal and (pos_dir == "flat" or (use_flip and pos_dir == "short"))
-    pend_lvl  := entry_level
-    pend_long := true
-    pend_stop := _lvl_above_L
+    if entry_confirm
+        // Nothing rests. The trade opens at THIS close, if the candle qualified.
+        pend_lvl := na
+        if _cf_long
+            if em_pos != 0
+                em_x_px  := rawC
+                em_x_bar := bar_index
+            em_e_px   := rawC
+            em_e_bar  := bar_index
+            em_pos    := 1
+            rest_stop := na
+            rest_tgt  := na
+    else
+        pend_lvl  := entry_level
+        pend_long := true
+        pend_stop := _lvl_above_L
 else if short_signal and (pos_dir == "flat" or (use_flip and pos_dir == "long"))
-    pend_lvl  := entry_level
-    pend_long := false
-    pend_stop := not _lvl_above_S
+    if entry_confirm
+        pend_lvl := na
+        if _cf_short
+            if em_pos != 0
+                em_x_px  := rawC
+                em_x_bar := bar_index
+            em_e_px   := rawC
+            em_e_bar  := bar_index
+            em_pos    := -1
+            rest_stop := na
+            rest_tgt  := na
+    else
+        pend_lvl  := entry_level
+        pend_long := false
+        pend_stop := not _lvl_above_S
 else
     pend_lvl  := na
 
