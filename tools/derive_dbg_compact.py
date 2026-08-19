@@ -17,11 +17,11 @@ new = '''// SIDE CODES, used by every reading below that has a buy and a sell ve
 plot(dbg ? (all_bull ? 1 : 0) + (all_bear ? 2 : 0) : na, "dbg setup", display=display.data_window)
 plot(dbg ? (pa_bull_raw ? 1 : 0) + (pa_bear_raw ? 2 : 0) : na, "dbg transition", display=display.data_window)
 plot(dbg ? (brk_ok_long ? 1 : 0) + (brk_ok_short ? 2 : 0) : na, "dbg breakout", display=display.data_window)
+plot(dbg ? (trg_dir_ok_long ? 1 : 0) + (trg_dir_ok_short ? 2 : 0) : na, "dbg candle direction ok", display=display.data_window)
 plot(dbg ? (all_bear ? _nb_lo_l : _nb_hi_h) : na, "dbg N-bar level", display=display.data_window)
 plot(dbg ? (trg_dir == 1 ? 1 : trg_dir == -1 ? 2 : 0) : na, "dbg trigger", display=display.data_window)
 plot(dbg ? (trg_dir == 0 or na(trg_bar) ? na : bar_index - trg_bar) : na, "dbg bars since trigger", display=display.data_window)
 plot(dbg ? entry_level : na, "dbg entry level", display=display.data_window)
-plot(dbg ? (trg_dir != 0 ? 1 : 0) : na, "dbg order resting", display=display.data_window)
 // One reading instead of four. 0 = nothing blocking, and the number names the
 // FIRST thing that is:  1 = date range   2 = gap   3 = daily cutoff
 //                       4 = layer gap too small
