@@ -618,8 +618,17 @@ trl_sell_2 = f_pt(h2O, h2H, h2L, h2C, trail_sell_pt)
 
 trail_low_anchor  = trail_mode == "Swing (Prev N Bars)" ? trail_sw_low  : trail_mode == "Base SHA Body" ? trl_buy_0 : trail_mode == "HTF1 SHA Body" ? trl_buy_1 : trail_mode == "HTF2 SHA Body" ? trl_buy_2 : trail_mode == "Closest Eligible SHA" ? rk_near_L : trail_mode == "Middle Eligible SHA" ? rk_mid_L : rk_far_L
 trail_high_anchor = trail_mode == "Swing (Prev N Bars)" ? trail_sw_high : trail_mode == "Base SHA Body" ? trl_sell_0 : trail_mode == "HTF1 SHA Body" ? trl_sell_1 : trail_mode == "HTF2 SHA Body" ? trl_sell_2 : trail_mode == "Closest Eligible SHA" ? rk_near_S : trail_mode == "Middle Eligible SHA" ? rk_mid_S : rk_far_S
-trail_low_ref  = trail_low_anchor  - trail_buffer_raw
-trail_high_ref = trail_high_anchor + trail_buffer_raw
+// An anchor can come back with nothing - the eligible-SHA choices have nothing
+// to point at when no layer qualifies. The comparison that ratchets the stop
+// then quietly fails and the trail never moves again for the life of the trade,
+// with no error and nothing on the chart to show it. Falling back to the swing
+// keeps the trail working; going silent is the one thing it must not do.
+trail_low_anchor_ok  = not na(trail_low_anchor)
+trail_high_anchor_ok = not na(trail_high_anchor)
+_tla = trail_low_anchor_ok  ? trail_low_anchor  : trail_sw_low
+_tha = trail_high_anchor_ok ? trail_high_anchor : trail_sw_high
+trail_low_ref  = _tla - trail_buffer_raw
+trail_high_ref = _tha + trail_buffer_raw
 
 // ============================================================================
 // ⑦ DATE FILTER
@@ -778,6 +787,9 @@ short_signal = trg_dir == -1 and not na(entry_level) and gates_ok and allow_shor
 
 var float dbg_stop_lvl = na
 var float dbg_stop_ok  = na
+var float dbg_rr       = na   // R right now. na means it cannot be worked out,
+                              // which switches off every R-based mechanism -
+                              // that used to happen silently.
 
 // Per-bar event flags (for markers)
 // Entry price has to be captured before the exit block clears it, or the exit
@@ -913,10 +925,11 @@ if _fresh
 _can_exit = not no_exit_entry_bar or na(entry_bar) or bar_index > entry_bar
 
 if pos_dir == "long" and not na(stop_level)
-    _rr = risk_unit > 0 ? (rawC - entry_price) / risk_unit : 0.0
+    _rr = risk_unit > 0 and not na(entry_price) ? (rawC - entry_price) / risk_unit : na
+    dbg_rr := _rr
 
     // 1. Partial take-profit
-    if use_tp1 and not tp1_taken and _rr >= tp1_r
+    if use_tp1 and not tp1_taken and not na(_rr) and _rr >= tp1_r
         strategy.close("PAA3-L", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
@@ -924,12 +937,12 @@ if pos_dir == "long" and not na(stop_level)
             be_moved := true
 
     // 2. Break-even
-    if use_be and not be_moved and _rr >= be_trig_r
+    if use_be and not be_moved and not na(_rr) and _rr >= be_trig_r
         stop_level := math.max(stop_level, entry_price + be_offset_raw)
         be_moved := true
 
     // 3. Structural trail (ratchet only)
-    if use_trail and _rr >= trail_start_r
+    if use_trail and not na(_rr) and _rr >= trail_start_r
         if trail_low_ref > stop_level
             stop_level := trail_low_ref
 
@@ -942,7 +955,7 @@ if pos_dir == "long" and not na(stop_level)
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
     _sha_touch = use_sha_break and sha_break_trig == "Touch"
     _sha_out   = use_sha_break and sha_break_trig == "Close Beyond" and rawC < shab_bot
-    _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
+    _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and (na(_rr) or _rr < time_stop_min_r)
     _cross_out = use_cross_exit and cross_dn
     _eod_out   = past_cutoff
     _dj_out    = use_doji_exit and dj_bars >= dj_need
@@ -983,20 +996,21 @@ if pos_dir == "long" and not na(stop_level)
         arm_2  := false
 
 else if pos_dir == "short" and not na(stop_level)
-    _rr = risk_unit > 0 ? (entry_price - rawC) / risk_unit : 0.0
+    _rr = risk_unit > 0 and not na(entry_price) ? (entry_price - rawC) / risk_unit : na
+    dbg_rr := _rr
 
-    if use_tp1 and not tp1_taken and _rr >= tp1_r
+    if use_tp1 and not tp1_taken and not na(_rr) and _rr >= tp1_r
         strategy.close("PAA3-S", qty_percent=tp1_pct, comment="TP1")
         tp1_taken := true
         if not be_moved
             stop_level := math.min(stop_level, entry_price - be_offset_raw)
             be_moved := true
 
-    if use_be and not be_moved and _rr >= be_trig_r
+    if use_be and not be_moved and not na(_rr) and _rr >= be_trig_r
         stop_level := math.min(stop_level, entry_price - be_offset_raw)
         be_moved := true
 
-    if use_trail and _rr >= trail_start_r
+    if use_trail and not na(_rr) and _rr >= trail_start_r
         if trail_high_ref < stop_level
             stop_level := trail_high_ref
 
@@ -1010,7 +1024,7 @@ else if pos_dir == "short" and not na(stop_level)
     _align_out = use_align_exit and bad_bars >= align_confirm_bars
     _sha_touch = use_sha_break and sha_break_trig == "Touch"
     _sha_out   = use_sha_break and sha_break_trig == "Close Beyond" and rawC > shab_top
-    _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and _rr < time_stop_min_r
+    _time_out  = use_time_stop and not na(entry_bar) and (bar_index - entry_bar) >= time_stop_bars and (na(_rr) or _rr < time_stop_min_r)
     _cross_out = use_cross_exit and cross_up
     _eod_out   = past_cutoff
     _dj_out    = use_doji_exit and dj_bars >= dj_need
@@ -1258,11 +1272,9 @@ alertcondition(did_exit, "PAA Exit", "3SHA Price Above All — position closed")
 plot(dbg ? (all_bull ? 1 : 0) + (all_bear ? 2 : 0) : na, "dbg setup", display=display.data_window)
 plot(dbg ? (pa_bull_raw ? 1 : 0) + (pa_bear_raw ? 2 : 0) : na, "dbg transition", display=display.data_window)
 plot(dbg ? (brk_ok_long ? 1 : 0) + (brk_ok_short ? 2 : 0) : na, "dbg breakout", display=display.data_window)
-plot(dbg ? _nb_hi_h : na, "dbg N-bar high", display=display.data_window)
-plot(dbg ? _nb_lo_l : na, "dbg N-bar low", display=display.data_window)
+plot(dbg ? (all_bear ? _nb_lo_l : _nb_hi_h) : na, "dbg N-bar level", display=display.data_window)
 plot(dbg ? (trg_dir == 1 ? 1 : trg_dir == -1 ? 2 : 0) : na, "dbg trigger", display=display.data_window)
 plot(dbg ? (trg_dir == 0 or na(trg_bar) ? na : bar_index - trg_bar) : na, "dbg bars since trigger", display=display.data_window)
-plot(dbg ? (trg_dir == 1 ? trg_h : trg_dir == -1 ? trg_l : na) : na, "dbg trigger level", display=display.data_window)
 plot(dbg ? entry_level : na, "dbg entry level", display=display.data_window)
 plot(dbg ? (trg_dir != 0 ? 1 : 0) : na, "dbg order resting", display=display.data_window)
 // One reading instead of four. 0 = nothing blocking, and the number names the
@@ -1272,7 +1284,16 @@ plot(dbg ? (not in_date ? 1 : gap_block ? 2 : eod_entry_block ? 3 : gap_block_en
 plot(dbg ? (long_signal ? 1 : 0) + (short_signal ? 2 : 0) : na, "dbg signal", display=display.data_window)
 plot(dbg ? (pos_dir == "flat" ? 1 : 0) : na, "dbg flat", display=display.data_window)
 plot(dbg ? dbg_stop_ok : na, "dbg stop ok", display=display.data_window)
-plot(dbg ? dbg_stop_lvl : na, "dbg stop level", display=display.data_window)
+plot(dbg ? dbg_stop_lvl : na, "dbg stop at entry", display=display.data_window)
+// R right now. BLANK means R cannot be worked out, and that switches off
+// break-even, the trail, partial take-profit, give-back, the target and the
+// time stop, all at once. A blank here explains a trade that will not close.
+plot(dbg ? dbg_rr : na, "dbg R now", display=display.data_window)
+// Where the trail would put the stop. Compare it with the Active Stop: if this
+// is the higher of the two in a buy and the stop has not moved, the trail is
+// not running.
+plot(dbg ? (pos_dir == "short" ? trail_high_ref : trail_low_ref) : na, "dbg trail would move stop to", display=display.data_window)
+plot(dbg ? (na(entry_bar) ? na : bar_index - entry_bar) : na, "dbg bars in trade", display=display.data_window)
 plot(dbg ? (_dj_rng > 0 ? _dj_body / _dj_rng * 100.0 : na) : na, "dbg body % of range", display=display.data_window)
 // The wick that matters is the one pointing against the trade - upper in a buy,
 // lower in a sell. Flat, it shows whichever is longer.
