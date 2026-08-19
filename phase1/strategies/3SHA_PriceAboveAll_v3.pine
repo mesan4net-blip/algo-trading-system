@@ -727,6 +727,15 @@ brk_ok_short = nbar_len <= 0 or (sell_brk == "Close beyond N-bar low"  ? rawC <=
    : sell_brk == "Low beyond N-bar low"     ? rawL <= _nb_lo_l
    :                                          rawC <= _nb_lo_c)
 
+// A trigger candle may not close AGAINST the trade it is starting. A red candle
+// closing above all three layers is price falling while it happens to still be
+// above them - that is not evidence of a push, and with Buy Reference = High the
+// order would then rest above a falling candle's high. A flat candle, close
+// equal to open, still counts: it is not against the trade.
+// Real candles, not SHA - this is the candle on the chart.
+trg_dir_ok_long  = rawC >= rawO
+trg_dir_ok_short = rawC <= rawO
+
 var int   trg_dir = 0        // 1 long, -1 short, 0 none
 var float trg_o = na
 var float trg_h = na
@@ -750,14 +759,14 @@ if _setup_gone
 // Flip is unaffected: an opposite entry closes and reverses in one order, and
 // the position is flat by the time the next trigger can form.
 _flat_now = strategy.position_size == 0
-if _flat_now and trg_dir == 0 and all_bull and brk_ok_long and allow_longs
+if _flat_now and trg_dir == 0 and all_bull and brk_ok_long and trg_dir_ok_long and allow_longs
     trg_dir := 1
     trg_o := rawO
     trg_h := rawH
     trg_l := rawL
     trg_c := rawC
     trg_bar := bar_index
-else if _flat_now and trg_dir == 0 and all_bear and brk_ok_short and allow_shorts
+else if _flat_now and trg_dir == 0 and all_bear and brk_ok_short and trg_dir_ok_short and allow_shorts
     trg_dir := -1
     trg_o := rawO
     trg_h := rawH
@@ -1272,11 +1281,11 @@ alertcondition(did_exit, "PAA Exit", "3SHA Price Above All — position closed")
 plot(dbg ? (all_bull ? 1 : 0) + (all_bear ? 2 : 0) : na, "dbg setup", display=display.data_window)
 plot(dbg ? (pa_bull_raw ? 1 : 0) + (pa_bear_raw ? 2 : 0) : na, "dbg transition", display=display.data_window)
 plot(dbg ? (brk_ok_long ? 1 : 0) + (brk_ok_short ? 2 : 0) : na, "dbg breakout", display=display.data_window)
+plot(dbg ? (trg_dir_ok_long ? 1 : 0) + (trg_dir_ok_short ? 2 : 0) : na, "dbg candle direction ok", display=display.data_window)
 plot(dbg ? (all_bear ? _nb_lo_l : _nb_hi_h) : na, "dbg N-bar level", display=display.data_window)
 plot(dbg ? (trg_dir == 1 ? 1 : trg_dir == -1 ? 2 : 0) : na, "dbg trigger", display=display.data_window)
 plot(dbg ? (trg_dir == 0 or na(trg_bar) ? na : bar_index - trg_bar) : na, "dbg bars since trigger", display=display.data_window)
 plot(dbg ? entry_level : na, "dbg entry level", display=display.data_window)
-plot(dbg ? (trg_dir != 0 ? 1 : 0) : na, "dbg order resting", display=display.data_window)
 // One reading instead of four. 0 = nothing blocking, and the number names the
 // FIRST thing that is:  1 = date range   2 = gap   3 = daily cutoff
 //                       4 = layer gap too small
