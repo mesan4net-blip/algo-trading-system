@@ -173,13 +173,21 @@ sub('''        strategy.close_all(comment = _why)''',
 # ── 8. Placing the entry order ──────────────────────────────────────────────
 sub('''if long_signal and (pos_dir == "flat" or (use_flip and pos_dir == "short"))
     strategy.cancel("PAA3-S")
-    if _lvl_above_L
+    if entry_confirm
+        strategy.cancel("PAA3-L")
+        if _cf_long
+            strategy.entry("PAA3-L", strategy.long)
+    else if _lvl_above_L
         strategy.entry("PAA3-L", strategy.long, stop=entry_level)
     else
         strategy.entry("PAA3-L", strategy.long, limit=entry_level)
 else if short_signal and (pos_dir == "flat" or (use_flip and pos_dir == "long"))
     strategy.cancel("PAA3-L")
-    if _lvl_above_S
+    if entry_confirm
+        strategy.cancel("PAA3-S")
+        if _cf_short
+            strategy.entry("PAA3-S", strategy.short)
+    else if _lvl_above_S
         strategy.entry("PAA3-S", strategy.short, limit=entry_level)
     else
         strategy.entry("PAA3-S", strategy.short, stop=entry_level)
@@ -187,13 +195,38 @@ else
     strategy.cancel("PAA3-L")
     strategy.cancel("PAA3-S")''',
     '''if long_signal and (pos_dir == "flat" or (use_flip and pos_dir == "short"))
-    pend_lvl  := entry_level
-    pend_long := true
-    pend_stop := _lvl_above_L
+    if entry_confirm
+        // Nothing rests. The trade opens at THIS close, if the candle qualified.
+        pend_lvl := na
+        if _cf_long
+            if em_pos != 0
+                em_x_px  := rawC
+                em_x_bar := bar_index
+            em_e_px   := rawC
+            em_e_bar  := bar_index
+            em_pos    := 1
+            rest_stop := na
+            rest_tgt  := na
+    else
+        pend_lvl  := entry_level
+        pend_long := true
+        pend_stop := _lvl_above_L
 else if short_signal and (pos_dir == "flat" or (use_flip and pos_dir == "long"))
-    pend_lvl  := entry_level
-    pend_long := false
-    pend_stop := not _lvl_above_S
+    if entry_confirm
+        pend_lvl := na
+        if _cf_short
+            if em_pos != 0
+                em_x_px  := rawC
+                em_x_bar := bar_index
+            em_e_px   := rawC
+            em_e_bar  := bar_index
+            em_pos    := -1
+            rest_stop := na
+            rest_tgt  := na
+    else
+        pend_lvl  := entry_level
+        pend_long := false
+        pend_stop := not _lvl_above_S
 else
     pend_lvl  := na
 
