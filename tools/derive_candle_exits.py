@@ -42,8 +42,12 @@ _dj_wick_dn    = dj_wick_pct > 0 and _dj_rng > 0 and _dj_dn_wick >= _dj_rng * dj
 // still qualifies both ways, which is right: a genuine stall is two-sided.
 _dj_against_long  = _dj_up_wick >= _dj_dn_wick
 _dj_against_short = _dj_dn_wick >= _dj_up_wick
-dj_qual_long  = use_doji_exit and dj_big_enough and _dj_against_long  and (_dj_body_small or _dj_wick_up)
-dj_qual_short = use_doji_exit and dj_big_enough and _dj_against_short and (_dj_body_small or _dj_wick_dn)
+// The SHAPE, on its own. Kept separate from the exit toggle so the same test can
+// be asked at entry without switching the exit on.
+dj_shape_long  = dj_big_enough and _dj_against_long  and (_dj_body_small or _dj_wick_up)
+dj_shape_short = dj_big_enough and _dj_against_short and (_dj_body_small or _dj_wick_dn)
+dj_qual_long  = use_doji_exit and dj_shape_long
+dj_qual_short = use_doji_exit and dj_shape_short
 
 // ── ENGULFING AGAINST THE TRADE ─────────────────────────────────────────────
 // Body swallows the previous body, and turns the other way. The two tests above
