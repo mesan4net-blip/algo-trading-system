@@ -183,6 +183,7 @@ sell_brk = input.string("Close beyond N-bar low", "  Sell Breakout Test", option
 gap_thresh   = input.float(0.0, "Skip Gap Entries Above (%)", minval=0.0, step=0.1, tooltip="0 = OFF, no gap is ever skipped. Any value above 0 is the gap size that invalidates an entry: if the day opened more than this away from the prior day's close, an entry firing on that open is skipped, because the alignment was likely manufactured by the gap rather than earned. The day itself is not blocked - a later, non-gap re-alignment enters normally.", group=grp_entry)
 min_layer_gap_pct = input.float(0.0, "Minimum Layer Gap (%)", minval=0.0, step=0.05, tooltip="How far apart the HTF1 and HTF2 SHA bodies have to be before an entry is allowed, as a percentage of price. Bunched layers mean no trend, which is where price crosses back and forth and trades go nowhere. 0 = off. Try 0.20 to start.\n\nIt releases slowly after a flat stretch, since the layers need time to spread again, so the first part of some real moves will be missed.", group=grp_entry)
 entry_confirm = input.bool(false, "Confirm Entry At Candle Close", tooltip="OFF: the order rests at the level and fills the moment price touches it, part-way through a candle. Nobody can know what colour that candle will be, so a sell can open on a candle that goes on to close green.\n\nON: no order rests. The trade opens at the CLOSE of the first candle that both reaches the level AND closes with the trade - a buy needs a candle closing up, a sell one closing down. A sell can then never open on an up candle, because the candle has finished by the time the trade exists.\n\nThe cost is the fill price, and it cuts both ways. On a candle that dips to the level and recovers, the close is a BETTER price than the level. On a candle that reaches the level and keeps running, it is a much worse one. And some trades are missed entirely: price reaches the level, closes against the trade, and never comes back.\n\nThe trigger candle itself can never fill - the level is taken FROM that candle, so it would enter at once and the level would mean nothing.", group=grp_entry)
+block_doji_entry = input.bool(false, "Block Doji / Rejection Candles", tooltip="A candle that says nobody is in control should not be the candle a trade starts on. An inverted hammer in a BUY - small body, long wick above - is a failed push, and buying it means buying the failure.\n\nSame two measurements as the exit: a small body, or a wick pointing AGAINST the trade, with the wick against having to be the dominant one. It uses the SAME thresholds, set in \u2465 Trade Management under Exit: Doji / Rejection Candle - Body Up To, Wick At Least and Minimum Candle Size. Those apply here whether or not that exit is switched on.\n\nIt blocks BOTH the trigger candle and, with Confirm Entry At Candle Close on, the candle the trade opens on.", group=grp_entry)
 
 // ============================================================================
 // ④ INITIAL STOP  (invalidation level + sizing anchor)
@@ -594,8 +595,12 @@ _dj_wick_dn    = dj_wick_pct > 0 and _dj_rng > 0 and _dj_dn_wick >= _dj_rng * dj
 // still qualifies both ways, which is right: a genuine stall is two-sided.
 _dj_against_long  = _dj_up_wick >= _dj_dn_wick
 _dj_against_short = _dj_dn_wick >= _dj_up_wick
-dj_qual_long  = use_doji_exit and dj_big_enough and _dj_against_long  and (_dj_body_small or _dj_wick_up)
-dj_qual_short = use_doji_exit and dj_big_enough and _dj_against_short and (_dj_body_small or _dj_wick_dn)
+// The SHAPE, on its own. Kept separate from the exit toggle so the same test can
+// be asked at entry without switching the exit on.
+dj_shape_long  = dj_big_enough and _dj_against_long  and (_dj_body_small or _dj_wick_up)
+dj_shape_short = dj_big_enough and _dj_against_short and (_dj_body_small or _dj_wick_dn)
+dj_qual_long  = use_doji_exit and dj_shape_long
+dj_qual_short = use_doji_exit and dj_shape_short
 
 // ── ENGULFING AGAINST THE TRADE ─────────────────────────────────────────────
 // Body swallows the previous body, and turns the other way. The two tests above
@@ -760,14 +765,14 @@ if _setup_gone
 // Flip is unaffected: an opposite entry closes and reverses in one order, and
 // the position is flat by the time the next trigger can form.
 _flat_now = strategy.position_size == 0
-if _flat_now and trg_dir == 0 and all_bull and brk_ok_long and trg_dir_ok_long and allow_longs
+if _flat_now and trg_dir == 0 and all_bull and brk_ok_long and trg_dir_ok_long and not (block_doji_entry and dj_shape_long) and allow_longs
     trg_dir := 1
     trg_o := rawO
     trg_h := rawH
     trg_l := rawL
     trg_c := rawC
     trg_bar := bar_index
-else if _flat_now and trg_dir == 0 and all_bear and brk_ok_short and trg_dir_ok_short and allow_shorts
+else if _flat_now and trg_dir == 0 and all_bear and brk_ok_short and trg_dir_ok_short and not (block_doji_entry and dj_shape_short) and allow_shorts
     trg_dir := -1
     trg_o := rawO
     trg_h := rawH
@@ -1106,8 +1111,8 @@ _lvl_above_S = not na(entry_level) and entry_level > rawC
 _cf_live  = entry_confirm and trg_dir != 0 and not na(entry_level) and not na(trg_bar) and bar_index > trg_bar
 _cf_above = _cf_live and entry_level > rawC[1]
 _cf_reach = _cf_live and (_cf_above ? rawH >= entry_level : rawL <= entry_level)
-_cf_long  = _cf_reach and rawC >= rawO
-_cf_short = _cf_reach and rawC <= rawO
+_cf_long  = _cf_reach and rawC >= rawO and not (block_doji_entry and dj_shape_long)
+_cf_short = _cf_reach and rawC <= rawO and not (block_doji_entry and dj_shape_short)
 
 if long_signal and (pos_dir == "flat" or (use_flip and pos_dir == "short"))
     strategy.cancel("PAA3-S")
@@ -1329,6 +1334,8 @@ plot(dbg ? (_dj_rng > 0 ? _dj_body / _dj_rng * 100.0 : na) : na, "dbg body % of 
 // lower in a sell. Flat, it shows whichever is longer.
 plot(dbg ? (_dj_rng > 0 ? (pos_dir == "short" ? (math.min(rawO, rawC) - rawL) : pos_dir == "long" ? (rawH - math.max(rawO, rawC)) : math.max(rawH - math.max(rawO, rawC), math.min(rawO, rawC) - rawL)) / _dj_rng * 100.0 : na) : na, "dbg wick against trade %", display=display.data_window)
 plot(dbg ? (not na(_dj_avg) and _dj_avg > 0 ? _dj_rng / _dj_avg * 100.0 : na) : na, "dbg candle size % of average", display=display.data_window)
-plot(dbg ? (dj_qual_long ? 1 : 0) + (dj_qual_short ? 2 : 0) : na, "dbg doji qualifies", display=display.data_window)
+// The SHAPE, regardless of whether either the exit or the entry block is on -
+// so the thresholds can be measured against real candles before committing.
+plot(dbg ? (dj_shape_long ? 1 : 0) + (dj_shape_short ? 2 : 0) : na, "dbg doji shape", display=display.data_window)
 plot(dbg ? (eng_qual_long ? 1 : 0) + (eng_qual_short ? 2 : 0) : na, "dbg engulfing qualifies", display=display.data_window)
 plot(dbg ? dj_bars : na, "dbg doji candles in a row", display=display.data_window)
