@@ -1568,11 +1568,16 @@ void UpdatePanel(const datetime nowBroker)
 
 void ClearObjects()
   {
-   for(int i = ObjectsTotal(0) - 1; i >= 0; i--)
+   //--- ChartID() rather than a literal 0: MQL4 still carries the legacy
+   //--- ObjectsTotal(window, type) overload, and a bare 0 fits both it and the
+   //--- modern ObjectsTotal(chart_id, window, type). ChartID() returns a long,
+   //--- which selects the modern form unambiguously.
+   long chart = ChartID();
+   for(int i = ObjectsTotal(chart, -1, -1) - 1; i >= 0; i--)
      {
-      string name = ObjectName(0, i);
+      string name = ObjectName(chart, i, -1, -1);
       if(StringFind(name, OBJ_PREFIX) == 0)
-         ObjectDelete(0, name);
+         ObjectDelete(chart, name);
      }
   }
 
@@ -1586,7 +1591,7 @@ void ClearObjects()
 //+------------------------------------------------------------------+
 void RollDay(const datetime nowBroker)
   {
-   datetime today = nowBroker - (nowBroker % 86400);
+   datetime today = (datetime)((long)nowBroker - ((long)nowBroker % 86400));
    if(today == g_dayKey)
       return;
 
