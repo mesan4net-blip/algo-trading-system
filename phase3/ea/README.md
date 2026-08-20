@@ -9,7 +9,7 @@ MT4 Expert Advisor for two session breakout patterns on one currency pair.
 | | Asia Range | Trigger Candle |
 |---|---|---|
 | Level | High/low of the Asia session | High/low of one nominated candle |
-| Default | 00:00–08:00 UTC | 08:00 London, H1 |
+| Default | 22:00–09:00 GMT | 08:00 London local, H1 |
 | **Entry** | Signal bar **CLOSES** beyond the level | Signal bar **CLOSES** beyond the level |
 | **Stop** | Signal bar **CLOSES** back beyond the opposite level | same |
 | **Target** | **TOUCH**, 80% of ATR5 from the opposite level | same |
@@ -59,16 +59,18 @@ must be told what your broker's clock does.
    where it thinks they are. If the box does not sit on the Asia session,
    the clock settings are wrong — fix them before trading, not after.
 
-4. On a NY-DST broker clock the numbers work out like this:
+4. On a NY-DST broker clock the shipped sessions work out like this:
 
-   | | Winter (server UTC+2) | Summer (server UTC+3) |
+   | | Summer (server UTC+3) | Winter (server UTC+2) |
    |---|---|---|
-   | Asia 00:00–08:00 UTC | 02:00–10:00 server | 03:00–11:00 server |
-   | Trigger 08:00 London | 10:00 server | 10:00 server |
-   | NY close 17:00 | 00:00 server | 00:00 server |
+   | Asia 22:00–09:00 GMT | **01:00–12:00 server** | 00:00–11:00 server |
+   | Trigger 08:00 London | **10:00 server** | 10:00 server |
+   | NY close 17:00 New York | **00:00 server** | 00:00 server |
 
-   London and New York hold a constant server hour; Asia moves, because Tokyo
-   has no DST. That is correct, not a bug.
+   The summer column is the reference table these defaults were set from.
+
+   London and New York hold a constant server hour; Asia moves, because it is
+   pinned to GMT. That is correct, not a bug — see below.
 
    For about three weeks each spring and one week each autumn the US and EU
    changeover dates do not line up, and the London trigger sits at 11:00
@@ -80,6 +82,43 @@ with these cases as assertions. Run it if you change any timezone input:
 ```
 python3 research/verify_session_clock.py
 ```
+
+### Why Asia is fixed to GMT but London and New York are not
+
+`InpAsiaTZ = TZ_UTC` — Sydney and Tokyo pull in opposite directions. Tokyo has
+no DST at all; Sydney's runs in the southern summer, the opposite half of the
+year from Europe's. No single local timezone describes the pair, so the Asia
+window is a fixed GMT band, and its 11 hours are wide enough to contain both
+markets whatever the season. The cost is that it moves an hour in server time
+across the broker's own changeover.
+
+`InpTriggerTZ = TZ_LONDON`, `InpNYCloseTZ = TZ_NEWYORK` — these track real
+local clocks, so the trigger candle is always the true London open hour and
+the hard exit is always the true 17:00 New York close. In GMT terms the London
+trigger is 07:00 in summer and 08:00 in winter; the NY close is 21:00 in
+summer and 22:00 in winter.
+
+If you would rather freeze London to 07:00 GMT year-round to match the
+reference table literally, set `InpTriggerTZ = TZ_UTC` and
+`InpTriggerHour = 7`. That is the choice between "the London open" and "07:00
+GMT" — they are the same thing only in summer.
+
+### Note: the London trigger sits inside the Asia window
+
+With Asia running to 09:00 GMT and the London trigger candle at 07:00–08:00
+GMT (summer), the trigger candle is **inside** the Asia session, and closes an
+hour before the Asia range is finalised.
+
+This does not affect `MODE_TRIGGER_CANDLE` on its own — it stops against its
+own candle. It matters in two cases:
+
+- `InpCandleSLSource = CSL_ASIA_SESSION`, where the candle flavor needs the
+  Asia range that does not exist yet. The EA reports `levels not ready` and
+  skips until 09:00 GMT.
+- `MODE_BOTH`, where the two flavors simply start at different times.
+
+If you want the trigger candle to be the first *post-Asia* hour instead, set
+`InpTriggerTZ = TZ_UTC` and `InpTriggerHour = 9`.
 
 ### Strategy Tester
 
@@ -96,8 +135,8 @@ backtesting or every session will be off by hours.
 | `InpMode` | Asia range | Or trigger candle, or both on separate magics |
 | `InpSignalTF` | H1 | The timeframe whose closes confirm entries and stops |
 | `InpTPPctOfATR` | 80 | Percent of the 5-day ATR, measured from the level |
-| `InpAsiaTZ` / hours | UTC, 00:00–08:00 | The Asia window |
-| `InpTriggerTZ` / hour | London, 08:00 | Which candle is the trigger |
+| `InpAsiaTZ` / hours | UTC, 22:00–09:00 | The Asia window (crosses midnight) |
+| `InpTriggerTZ` / hour | London, 08:00 | Which candle is the trigger (07:00 GMT in summer) |
 | `InpCandleSLSource` | Trigger candle | Switch to Asia session for a wider stop |
 | `InpProtectiveSLMode` | 25% of ATR5 | The disaster stop — see below |
 | `InpMaxTradesPerDay` | 1 | Per flavor |

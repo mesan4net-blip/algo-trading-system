@@ -44,12 +44,32 @@
 //    When the range is WIDER than 80% of ATR5 the target lands at or below
 //    the entry - an unwinnable trade. Those days are SKIPPED and logged.
 //
+//  SESSIONS AS SHIPPED
+//
+//    Asia (Sydney + Tokyo)   22:00 - 09:00 GMT, fixed          [InpAsiaTZ = UTC]
+//    London first hour       08:00 London local                 [InpTriggerTZ = LONDON]
+//    New York close          17:00 New York local               [InpNYCloseTZ = NEWYORK]
+//
+//    On a UTC+2/UTC+3 broker clock that lands as:
+//
+//                          summer (server UTC+3)   winter (server UTC+2)
+//      Asia                 01:00 - 12:00           00:00 - 11:00
+//      London trigger       10:00                   10:00
+//      NY close             00:00                   00:00
+//
 //  DAYLIGHT SAVING
-//    Every session is defined in its own real timezone and converted with
-//    real DST rules (EU rules for London, US rules for New York, none for
-//    Tokyo). See the TIME section below. The broker's own clock is handled
-//    separately - most brokers, including FOREX.com, run a New-York-DST
-//    clock at UTC+2 winter / UTC+3 summer.
+//    Asia is a FIXED GMT window, because Sydney and Tokyo pull in opposite
+//    directions - Tokyo has no DST at all and Sydney's runs in the southern
+//    summer - so no single local timezone describes the pair. The 11-hour
+//    window is wide enough to hold both whatever the season.
+//
+//    London and New York DO track their local clocks, with real DST rules
+//    (EU for London, US for New York). That is why the London trigger holds
+//    10:00 server all year while Asia moves an hour: the trigger follows the
+//    actual London open, the Asia window follows GMT.
+//
+//    The broker's own clock is handled separately - most brokers, including
+//    FOREX.com, run a New-York-DST clock at UTC+2 winter / UTC+3 summer.
 //
 //  HARD STOP
 //    Every position is closed at the New York session close, regardless of
@@ -144,9 +164,9 @@ input bool            InpTradeShorts             = true;                        
 
 input string          _s02                       = "=== ASIA SESSION ===";      // .
 input ENUM_TZ         InpAsiaTZ                  = TZ_UTC;                      // Timezone the Asia hours are given in
-input int             InpAsiaStartHour           = 0;                           // Asia start hour
+input int             InpAsiaStartHour           = 22;                          // Asia start hour
 input int             InpAsiaStartMin            = 0;                           // Asia start minute
-input int             InpAsiaEndHour             = 8;                           // Asia end hour
+input int             InpAsiaEndHour             = 9;                           // Asia end hour
 input int             InpAsiaEndMin              = 0;                           // Asia end minute
 input ENUM_TIMEFRAMES InpRangeTF                 = PERIOD_M15;                  // Timeframe used to measure the range
 

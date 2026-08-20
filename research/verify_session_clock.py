@@ -103,15 +103,22 @@ def prev_hard_exit(now_b, tz='NEWYORK', h=17, mi=0):
 
 
 # ---------------------------------------------------------------------------
-# Expectations. Broker clock: UTC+2 winter, US DST rules (FOREX.com and most
-# MT4 servers). Asia 00:00-08:00 UTC. Trigger 08:00 London. NY close 17:00.
+# Expectations, for the sessions as shipped:
+#
+#   Asia (Sydney + Tokyo)  22:00 - 09:00 GMT, fixed (crosses midnight)
+#   London first hour      08:00 London local
+#   New York close         17:00 New York local
+#
+# Broker clock: UTC+2 winter, US DST rules (FOREX.com and most MT4 servers).
 # ---------------------------------------------------------------------------
+ASIA = ("UTC", 22, 0, 9, 0)
+
 EXPECTED = [
     # label,                server "now",          asia start, asia end, trigger, next NY close
-    ("winter",              (2026,  1, 15, 14, 0), "02:00", "10:00", "10:00", "2026-01-16 00:00"),
-    ("summer",              (2026,  7, 15, 14, 0), "03:00", "11:00", "10:00", "2026-07-16 00:00"),
-    ("US on, EU still off", (2026,  3, 15, 14, 0), "03:00", "11:00", "11:00", "2026-03-16 00:00"),
-    ("EU off, US still on", (2026, 10, 28, 14, 0), "03:00", "11:00", "11:00", "2026-10-29 00:00"),
+    ("summer",              (2026,  7, 15, 14, 0), "01:00", "12:00", "10:00", "2026-07-16 00:00"),
+    ("winter",              (2026,  1, 15, 14, 0), "00:00", "11:00", "10:00", "2026-01-16 00:00"),
+    ("US on, EU still off", (2026,  3, 15, 14, 0), "01:00", "12:00", "11:00", "2026-03-16 00:00"),
+    ("EU off, US still on", (2026, 10, 28, 14, 0), "01:00", "12:00", "11:00", "2026-10-29 00:00"),
 ]
 
 
@@ -126,10 +133,11 @@ def full(t):
 def main():
     failures = 0
 
-    print("Broker clock: UTC+2 winter, US DST rules.\n")
+    print("Asia 22:00-09:00 GMT fixed | London trigger 08:00 local | "
+          "NY close 17:00 local\nBroker clock: UTC+2 winter, US DST rules.\n")
     for label, when, exp_start, exp_end, exp_trig, exp_close in EXPECTED:
         now_b = stamp(*when)
-        start, end = resolve_completed_session(now_b, "UTC", 0, 0, 8, 0)
+        start, end = resolve_completed_session(now_b, *ASIA)
         trig = resolve_past_local(now_b, "LONDON", 8, 0, 3600)
         close = next_hard_exit(now_b)
 
@@ -149,13 +157,13 @@ def main():
     # must never be tradeable, however the daily counters have been reset.
     print("\nExpired-level guard:")
     guard = [
-        ((2026, 1, 15, 22,  0), False),   # mid session
+        ((2026, 1, 15, 22,  0), False),   # mid session, 15:00 New York
         ((2026, 1, 16,  0, 30), True),    # 30 min past the NY close
-        ((2026, 1, 16, 10,  0), False),   # next day's Asia session has just ended
+        ((2026, 1, 16, 11,  0), False),   # next day's Asia session has just ended
     ]
     for when, expect_blocked in guard:
         now_b = stamp(*when)
-        _, asia_end = resolve_completed_session(now_b, "UTC", 0, 0, 8, 0)
+        _, asia_end = resolve_completed_session(now_b, *ASIA)
         blocked = asia_end <= prev_hard_exit(now_b)
         ok = blocked == expect_blocked
         if not ok:

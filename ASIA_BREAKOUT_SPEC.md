@@ -18,7 +18,7 @@ the New York close.
 |---|---|---|
 | Name | Asia Range Breakout | Trigger Candle Breakout |
 | Level source | High/Low of the Asia session | High/Low of one nominated candle |
-| Default level | Asia session 00:00–08:00 GMT | First hour of London (H1) |
+| Default level | Asia session 22:00–09:00 GMT | First hour of London, 08:00 local (H1) |
 | Long entry | Signal bar CLOSES above the level high | Signal bar CLOSES above trigger high |
 | Short entry | Signal bar CLOSES below the level low | Signal bar CLOSES below trigger low |
 | Stop loss | Bottom of Asia range (long) / top (short) | Trigger candle low (long) / high (short) |
@@ -75,11 +75,18 @@ its **own** timezone rather than everything sharing one global setting:
 
 | Session | Input | Default | DST rule applied |
 |---|---|---|---|
-| Asia | `InpAsiaTZ` | UTC | none |
-| Trigger candle | `InpTriggerTZ` | London | EU: last Sun Mar 01:00 UTC → last Sun Oct 01:00 UTC |
-| Hard exit | `InpNYCloseTZ` | New York | US: 2nd Sun Mar 07:00 UTC → 1st Sun Nov 06:00 UTC |
+| Asia | `InpAsiaTZ` | UTC, 22:00–09:00 | none — fixed GMT band |
+| Trigger candle | `InpTriggerTZ` | London, 08:00 | EU: last Sun Mar 01:00 UTC → last Sun Oct 01:00 UTC |
+| Hard exit | `InpNYCloseTZ` | New York, 17:00 | US: 2nd Sun Mar 07:00 UTC → 1st Sun Nov 06:00 UTC |
 
 Tokyo is also selectable and correctly has no DST.
+
+Asia is deliberately a fixed GMT band rather than a local timezone: Sydney and
+Tokyo pull in opposite directions — Tokyo has no DST, Sydney's runs in the
+southern summer — so no single local clock describes the pair. The 11-hour
+window holds both whatever the season. London and New York do track their
+local clocks, so the trigger is always the true London open and the hard exit
+is always the true New York close.
 
 All reasoning happens in UTC, because DST transitions are *defined* in UTC
 terms — evaluating them from a UTC instant is exact, with no ambiguous hour:
@@ -104,11 +111,11 @@ shut.
 On a NY-DST broker clock (FOREX.com and most MT4 servers, UTC+2 winter /
 UTC+3 summer):
 
-| | Winter (server UTC+2) | Summer (server UTC+3) |
+| | Summer (server UTC+3) | Winter (server UTC+2) |
 |---|---|---|
-| Asia 00:00–08:00 UTC | 02:00–10:00 server | 03:00–11:00 server |
+| Asia 22:00–09:00 GMT | 01:00–12:00 server | 00:00–11:00 server |
 | Trigger 08:00 London | 10:00 server | 10:00 server |
-| NY close 17:00 | 00:00 server | 00:00 server |
+| NY close 17:00 New York | 00:00 server | 00:00 server |
 
 London and New York hold a constant server hour; Asia moves, because Tokyo has
 no DST. For roughly three weeks each spring and one week each autumn the US and
@@ -123,7 +130,7 @@ to catch a misconfigured broker offset.
 
 ### 4.1 Building the range
 - Window: `InpAsiaStartHour:InpAsiaStartMin` to `InpAsiaEndHour:InpAsiaEndMin`
-  (default 00:00 → 08:00). Windows that cross midnight are supported.
+  (default 22:00 → 09:00, which crosses midnight — supported).
 - Range is built from `InpRangeTF` bars (default M15) for precision, not from
   the signal TF. Only bars whose OPEN time falls inside the window are used;
   partial bars straddling the boundary are excluded.
@@ -295,7 +302,7 @@ base rules have a track record.
 
 Still on defaults, all changeable from the inputs panel without a recompile:
 
-- Asia window 00:00–08:00 UTC.
+- Asia window 22:00–09:00 GMT, fixed.
 - One trade per flavor per day; no re-entry after a stop-out; no opposite side
   the same day.
 - Fixed 0.10 lots (`LOT_RISK_PERCENT` at 1% is available).
