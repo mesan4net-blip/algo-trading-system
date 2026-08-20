@@ -1,8 +1,9 @@
 # Asia / Trigger-Candle Breakout EA — Specification
 
-**Status:** Draft for approval — no EA code written yet
+**Status:** Built — see `phase3/ea/AsiaBreakout_EA_v1.mq4`
 **Target:** MT4 (MQL4), Forex.com broker, Forex.com VPS
-**File to be built:** `phase3/ea/AsiaBreakout_EA_v1.mq4`
+**Files:** `phase3/ea/AsiaBreakout_EA_v1.mq4`, `phase3/ea/README.md`,
+`research/verify_session_clock.py`
 
 ---
 
@@ -30,50 +31,93 @@ so there is exactly one place for each bug to live.
 
 ---
 
-## 2. Signal timing — close-only, no repaint
+## 2. The three signal rules
 
-Every decision reads CLOSED bars only (`shift >= 1`). The developing bar
-(`shift 0`) is used for drawing and for the hard-exit clock, never for a
-signal. A breakout is evaluated exactly once, on the first tick of the bar
-that follows the qualifying close, and the entry is a market order at that
-moment.
+They are deliberately **not** symmetrical:
 
-This mirrors the discipline already used in
-`phase3/indicators/3SHA_PriceAboveAll_Alerts_v1.mq4`: a signal that appears
-cannot later vanish.
+| | Rule | Why |
+|---|---|---|
+| **Entry** | Bar must CLOSE beyond the level | A wick through the level is not a breakout |
+| **Stop** | Bar must CLOSE back beyond the opposite level | A wick through the stop is not a failure either |
+| **Target** | TOUCH — a real broker TP order | Take the money when it is offered |
 
----
+Everything close-based reads CLOSED bars only (`shift >= 1`). The developing
+bar is used for drawing and for the hard-exit clock, never for a signal. A
+signal that appears cannot later vanish. This mirrors the discipline in
+`phase3/indicators/3SHA_PriceAboveAll_Alerts_v1.mq4`.
+
+### The consequence: the EA holds the stop, not the broker
+
+A close-based stop cannot be a broker stop order — a broker stop fills on a
+touch, which is exactly what the rule rejects. The EA therefore evaluates the
+stop itself on each bar close, and the position is unprotected if the terminal
+or the VPS dies.
+
+So a **disaster stop** is attached to the order, parked beyond the structural
+level (default: 25% of ATR5 past it) where it cannot pre-empt the close-based
+rule in normal conditions but will still catch a gap, a flash move, or a dead
+VPS. `InpProtectiveSLMode = PSL_NONE` disables it, with a warning on init.
+
+Two things follow that are worth stating plainly:
+
+- **A realised loss can exceed the structural stop distance.** Price may close
+  far beyond the level on a fast bar. Risk-percent sizing uses the structural
+  distance, so it is a planned risk, not a guaranteed one.
+- **MT4's tick-mode backtest cannot model this faithfully.** The stop only
+  reads bar closes, so "Open prices only" is the honest tester mode. The
+  target is a genuine TP order and is modelled correctly at any setting.
 
 ## 3. Time and session handling
 
 MT4 has no timezone database and the broker server clock is not GMT. This is
-the single most common failure mode for session EAs, so it is handled
-explicitly.
+the single most common failure mode for session EAs, so each session carries
+its **own** timezone rather than everything sharing one global setting:
 
-- `InpTimeMode` = `SERVER_TIME` | `GMT`. All session inputs are interpreted
-  in the selected frame.
-- Broker GMT offset is auto-detected as `round((TimeCurrent() - TimeGMT())/3600)`
-  and can be overridden with `InpBrokerGMTOffsetOverride` (999 = auto).
-- The detected offset, the resolved Asia window and the resolved NY close are
-  printed to the Experts log on init and drawn on the chart.
+| Session | Input | Default | DST rule applied |
+|---|---|---|---|
+| Asia | `InpAsiaTZ` | UTC | none |
+| Trigger candle | `InpTriggerTZ` | London | EU: last Sun Mar 01:00 UTC → last Sun Oct 01:00 UTC |
+| Hard exit | `InpNYCloseTZ` | New York | US: 2nd Sun Mar 07:00 UTC → 1st Sun Nov 06:00 UTC |
 
-### DST caveat (must be verified visually before going live)
+Tokyo is also selectable and correctly has no DST.
 
-Forex.com's server clock follows New York DST (UTC+2 winter / UTC+3 summer).
-Consequences:
+All reasoning happens in UTC, because DST transitions are *defined* in UTC
+terms — evaluating them from a UTC instant is exact, with no ambiguous hour:
 
-- In `SERVER_TIME` mode, **London and NY sit at a constant server hour all
-  year**, but the **Asia session drifts one hour** across DST changeovers
-  (Tokyo does not observe DST).
-- In `GMT` mode, the **Asia session is constant**, but **London and NY drift
-  one hour**.
+```
+session local time  <--  UTC  -->  broker server time
+```
 
-Neither mode is correct for all three sessions at once. The EA therefore
-draws the Asia box, the trigger candle box, and the SL/TP levels on the chart
-so the windows can be verified by eye. `InpDstShiftHours` allows a manual
-one-hour nudge if a changeover lands wrong.
+### The broker's own clock
 
----
+Handled separately from the sessions. `InpBrokerWinterOffsetHours` (default 2)
+and `InpBrokerDSTRule` (default US) describe the server, and `BOFF_AUTO`
+derives the winter base from `TimeGMT()` on init and prints what it found.
+
+The one approximation is broker → UTC, which must guess the broker's DST state
+before it knows the UTC instant. That is ambiguous only inside the one-hour
+transition band, which falls at 02:00 New York on a Sunday — the market is
+shut.
+
+### What this looks like in practice
+
+On a NY-DST broker clock (FOREX.com and most MT4 servers, UTC+2 winter /
+UTC+3 summer):
+
+| | Winter (server UTC+2) | Summer (server UTC+3) |
+|---|---|---|
+| Asia 00:00–08:00 UTC | 02:00–10:00 server | 03:00–11:00 server |
+| Trigger 08:00 London | 10:00 server | 10:00 server |
+| NY close 17:00 | 00:00 server | 00:00 server |
+
+London and New York hold a constant server hour; Asia moves, because Tokyo has
+no DST. For roughly three weeks each spring and one week each autumn the US and
+EU changeover dates diverge and the London trigger sits at 11:00 server. All of
+that is correct, and all of it is asserted in
+`research/verify_session_clock.py`.
+
+The EA also draws the resolved windows on the chart, which is the fastest way
+to catch a misconfigured broker offset.
 
 ## 4. Flavor A — Asia Range Breakout
 
@@ -105,29 +149,26 @@ Entry is a market order on the next tick.
 ### 4.4 Take profit
 `ATR5` = 5-day ATR (see §6). `Pct` = `InpTPPctOfATR` / 100 (default 0.80).
 
-`InpTPAnchor = SL_ANCHOR` (default — the reading of "the ATR is considered
-from the bottom of the Asia session all the way to the top"):
+Measured from the structural level, CONFIRMED, not from the entry price:
 
 - Long:  `TP = AsiaLow  + Pct * ATR5`
 - Short: `TP = AsiaHigh - Pct * ATR5`
 
-The SL→TP span therefore equals 80% of the 5-day ATR.
-
-`InpTPAnchor = ENTRY` (alternative):
-
-- Long:  `TP = EntryPrice + Pct * ATR5`
-- Short: `TP = EntryPrice - Pct * ATR5`
+The span from the structural stop to the target is therefore 80% of the 5-day
+ATR. The target is placed as a real broker TP order and fills on a touch.
 
 ### 4.5 Degenerate-target guard
 Under `SL_ANCHOR`, if the Asia range is wider than `Pct * ATR5`, the computed
 TP sits at or below the entry (long) — an instantly invalid trade.
-`InpOnInvalidTP` decides:
+CONFIRMED behaviour: **skip the day**, log the reason (`target behind entry`)
+and show it on the panel. The target is never fudged outward to make the trade
+possible. The same guard applies to Flavor B.
 
-- `SKIP` (default) — no trade, reason logged.
-- `USE_ENTRY_ANCHOR` — fall back to §4.4 ENTRY formula.
-- `ENFORCE_MIN_RR` — push TP out to `InpMinRR` × SL distance.
-
-The same guard applies to Flavor B.
+A second expiry guard exists for a case the original spec missed: a level stays
+in memory until the next session replaces it, so hours after the NY close the
+previous day's range is still loaded. Any level formed before the most recent
+hard exit is treated as expired and cannot open a trade, whatever the daily
+counters say.
 
 ---
 
@@ -139,10 +180,20 @@ The same guard applies to Flavor B.
 - When that candle closes, `TriggerHigh` / `TriggerLow` are latched and drawn.
 - **Long** when a later `InpSignalTF` bar closes above `TriggerHigh + Buffer`.
 - **Short** when a later bar closes below `TriggerLow - Buffer`.
-- SL: long = `TriggerLow - InpSLBufferPoints`; short = `TriggerHigh + InpSLBufferPoints`.
-- TP: identical to §4.4, anchored on the trigger candle low/high under
-  `SL_ANCHOR`.
-- `InpTriggerValidUntil` — setup expiry (default: NY close).
+- Stop level: long = `TriggerLow`, short = `TriggerHigh`, evaluated on bar
+  close like Flavor A.
+- TP: identical to §4.4, anchored on the trigger candle low/high.
+- Setup expiry: the NY close (via the expired-level guard in §4.5).
+
+### `InpCandleSLSource`
+
+The requirements carried a contradiction here: one line put the candle-mode
+stop at the **Asia session** low/high, while the target line and the exit rule
+both put it at the **trigger candle** low/high. The trigger candle reading is
+the default, because it is the one the other two statements agree on and the
+one the original brief specified. `InpCandleSLSource = CSL_ASIA_SESSION`
+switches to the wider Asia-based stop without a recompile. The target stays
+anchored on the trigger candle either way, as specified.
 
 ---
 
@@ -197,19 +248,19 @@ from the level, where the structural stop is unaffordable),
 
 ---
 
-## 9. Optional trade management (all OFF by default)
+## 9. Trade management beyond the specified rules
 
-`InpUseBreakEven` (+ trigger distance), `InpUsePartialClose` (+ % and level),
-`InpUseTrailingStop`. Included as hooks because
-`phases/phase-3-mt4-ea/spec.md` calls for them, but disabled so the strategy
-under test is exactly the strategy specified above.
-
----
+**Not implemented.** `phases/phase-3-mt4-ea/spec.md` calls for break-even
+moves, partial closes and trailing stops, but none are in this EA: the
+strategy under test is exactly the strategy specified above, and every extra
+exit rule would change what the results mean. They belong in a v2 once the
+base rules have a track record.
 
 ## 10. Broker plumbing
 
-- `MODE_STOPLEVEL` and freeze-level validation; SL/TP pushed to the nearest
-  legal distance or the trade skipped, per `InpOnStopLevelViolation`.
+- `MODE_STOPLEVEL` and `MODE_FREEZELEVEL` validation. A disaster stop closer
+  than the legal minimum is pushed out to it; a TARGET inside the minimum
+  means the trade is skipped rather than silently retargeted.
 - 3/5-digit pip normalization.
 - ECN fallback: if `OrderSend` with SL/TP is rejected, send naked then
   `OrderModify`.
@@ -230,27 +281,33 @@ under test is exactly the strategy specified above.
 
 ---
 
-## 12. Open questions
+## 12. Decisions taken
 
-1. **TP anchor** — confirm `SL_ANCHOR` (SL→TP span = 80% of ATR5) is the
-   intent, vs. measuring 80% of ATR5 from the entry price.
-2. **Asia window** — confirm 00:00–08:00 GMT, or specify preferred hours.
-3. **Invalid-TP handling** — confirm `SKIP` when the range exceeds 80% ATR5.
-4. **Re-entry** — one trade per day only, or allow a second attempt after a
-   stop-out?
-5. **Opposite direction** — if a long breakout stops out and price then closes
-   below the Asia low, take the short?
-6. **Sizing** — fixed lots or % risk, and at what value?
-7. **Pairs** — which symbols will this run on (affects range/spread filter
-   defaults)?
+| Question | Answer |
+|---|---|
+| Target anchor | From the structural level, not the entry. Span = 80% of ATR5 |
+| Entry confirmation | Bar close beyond the level |
+| Stop confirmation | Bar close back beyond the opposite level |
+| Target fill | Touch — a real broker TP order |
+| Range wider than the target | Skip the day |
+| Daylight saving | Real DST rules per session timezone, verified in `research/verify_session_clock.py` |
+| Candle-mode stop source | Trigger candle, switchable to Asia via `InpCandleSLSource` |
 
----
+Still on defaults, all changeable from the inputs panel without a recompile:
 
-## 13. Build plan
+- Asia window 00:00–08:00 UTC.
+- One trade per flavor per day; no re-entry after a stop-out; no opposite side
+  the same day.
+- Fixed 0.10 lots (`LOT_RISK_PERCENT` at 1% is available).
+- No pair-specific spread or range filters set.
 
-1. This spec — approved.
-2. `phase3/ea/AsiaBreakout_EA_v1.mq4` — the EA.
-3. `phase3/ea/README.md` — install, input reference, DST verification checklist.
-4. Optional: `research/asia_breakout_backtest.py` — offline replay of both
-   flavors on historical OHLC to sanity-check the rules and the 80% ATR target
-   before the EA touches a live account.
+## 13. Build status
+
+1. This spec.
+2. `phase3/ea/AsiaBreakout_EA_v1.mq4` — the EA. Built.
+3. `phase3/ea/README.md` — install, clock verification, input reference. Built.
+4. `research/verify_session_clock.py` — Python port of the EA's time functions
+   with the DST cases as assertions. Built, passing.
+5. Not built: an offline Python replay of both flavors over historical OHLC.
+   Worth doing before the EA touches a live account, because MT4's own tester
+   cannot model a close-based stop honestly in tick mode.
