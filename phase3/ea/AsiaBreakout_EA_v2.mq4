@@ -119,9 +119,16 @@ enum ENUM_CANDLE_SL_SRC
 
 enum ENUM_PSL_MODE
   {
-   PSL_NONE    = 0,  // No broker stop at all
-   PSL_ATR_PCT = 1,  // Percent of ATR5 beyond the structural level
-   PSL_POINTS  = 2   // Fixed points beyond the structural level
+   PSL_NONE       = 0,  // No broker stop at all
+   PSL_ATR_PCT    = 1,  // Percent of ATR5 beyond the structural level
+   PSL_POINTS     = 2,  // Fixed points beyond the structural level
+   PSL_STRUCT_PCT = 3   // Percent of the ENTRY-to-LEVEL distance beyond it
+  };
+
+enum ENUM_STOP_STYLE
+  {
+   STOP_ON_CLOSE = 0,  // Exit when a signal bar CLOSES beyond the level
+   STOP_ON_TOUCH = 1   // Broker stop sits AT the level and fills on a touch
   };
 
 #define DIR_NONE   0
@@ -143,6 +150,7 @@ enum ENUM_PSL_MODE
 input string          _s01                       = "=== STRATEGY ===";          // .
 input ENUM_STRAT_MODE InpMode                    = MODE_ASIA_RANGE;             // Which breakout to trade
 input double          InpTPPctOfATR              = 80.0;                        // Target as % of 5-day ATR
+input ENUM_STOP_STYLE InpStopStyle               = STOP_ON_CLOSE;               // How the structural stop is honoured
 input bool            InpTradeLongs              = true;                        // Allow long breakouts
 input bool            InpTradeShorts             = true;                        // Allow short breakouts
 
@@ -198,6 +206,7 @@ input double          InpRiskPercent             = 1.0;                         
 input ENUM_PSL_MODE   InpProtectiveSLMode        = PSL_ATR_PCT;                 // Disaster stop placed with the order
 input double          InpProtectiveSLATRPct      = 25.0;                        // Disaster stop: % of ATR5 beyond level
 input int             InpProtectiveSLPoints      = 300;                         // Disaster stop: points beyond level
+input double          InpProtectiveSLStructPct   = 50.0;                        // Disaster stop: % of the entry-to-level distance
 
 input string          _s10                       = "=== HARD EXIT (NY CLOSE) ==="; // .
 input ENUM_TZ         InpNYCloseTZ               = TZ_NEWYORK;                  // Timezone the NY close is given in
@@ -936,14 +945,24 @@ double MinStopDistance()
   }
 
 //--- where the disaster stop goes: beyond the structural level, never inside
-double ProtectiveStop(const int dir, const double structuralLevel)
+double ProtectiveStop(const int dir, const double structuralLevel, const double entry)
   {
+   //--- STOP_ON_TOUCH means the broker stop IS the structural stop: it sits
+   //--- exactly on the level and fills the moment price trades there. There
+   //--- is no pad and no close-based rule.
+   if(InpStopStyle == STOP_ON_TOUCH)
+      return(NormalizePrice(structuralLevel));
+
    if(InpProtectiveSLMode == PSL_NONE)
       return(0.0);
 
    double pad = 0.0;
    if(InpProtectiveSLMode == PSL_ATR_PCT)
       pad = g_atr5 * InpProtectiveSLATRPct / 100.0;
+   else if(InpProtectiveSLMode == PSL_STRUCT_PCT)
+      //--- scales with the trade's own risk, so a one-candle trigger stop
+      //--- does not get an ATR-sized pad slapped underneath it
+      pad = MathAbs(entry - structuralLevel) * InpProtectiveSLStructPct / 100.0;
    else
       pad = InpProtectiveSLPoints * g_pointsToPrice;
 
@@ -1036,7 +1055,7 @@ bool OpenTrade(const int slot, const int dir,
    RefreshRates();
    double entry = (dir == DIR_LONG) ? Ask : Bid;
    double lots  = ComputeLots(entry, structuralLevel);
-   double stop  = ProtectiveStop(dir, structuralLevel);
+   double stop  = ProtectiveStop(dir, structuralLevel, entry);
    double tp    = NormalizePrice(target);
    int    type  = (dir == DIR_LONG) ? OP_BUY : OP_SELL;
    string note  = StringFormat("%s-%s", InpTradeComment, SlotName(slot));
@@ -1084,7 +1103,18 @@ bool OpenTrade(const int slot, const int dir,
             return(false);
            }
          if(stop > 0.0 && entry - stop < minDist)
+           {
+            if(InpStopStyle == STOP_ON_TOUCH)
+               PrintFormat("[%s] %s %s: the level %s is inside the broker's "
+                           "minimum stop distance, so the stop is being pushed "
+                           "out to %s. The trade risks %.0f points more than the "
+                           "level implies.",
+                           InpTradeComment, SlotName(slot), DirName(dir),
+                           DoubleToString(stop, Digits),
+                           DoubleToString(entry - minDist, Digits),
+                           (minDist - (entry - stop)) / g_pointsToPrice);
             stop = NormalizePrice(entry - minDist);
+           }
         }
       else
         {
@@ -1095,7 +1125,18 @@ bool OpenTrade(const int slot, const int dir,
             return(false);
            }
          if(stop > 0.0 && stop - entry < minDist)
+           {
+            if(InpStopStyle == STOP_ON_TOUCH)
+               PrintFormat("[%s] %s %s: the level %s is inside the broker's "
+                           "minimum stop distance, so the stop is being pushed "
+                           "out to %s. The trade risks %.0f points more than the "
+                           "level implies.",
+                           InpTradeComment, SlotName(slot), DirName(dir),
+                           DoubleToString(stop, Digits),
+                           DoubleToString(entry + minDist, Digits),
+                           (minDist - (stop - entry)) / g_pointsToPrice);
             stop = NormalizePrice(entry + minDist);
+           }
         }
      }
 
@@ -1155,12 +1196,21 @@ bool OpenTrade(const int slot, const int dir,
                     : StringFormat("%.0f%% at the target, rest to the NY close",
                                    InpPartialClosePct));
 
-   PrintFormat("[%s] %s %s opened #%d  lots=%s entry=%s structural=%s target=%s "
-               "disasterSL=%s | %s",
+   string stopStory = (InpStopStyle == STOP_ON_TOUCH)
+                      ? StringFormat("stop ON TOUCH at %s (broker holds it)",
+                                     DoubleToString(stop, Digits))
+                      : StringFormat("stop ON CLOSE at %s (EA holds it) | "
+                                     "broker S/L is the DISASTER stop at %s, "
+                                     "%.0f points further out - it is NOT the "
+                                     "structural stop",
+                                     DoubleToString(structuralLevel, Digits),
+                                     (stop > 0.0 ? DoubleToString(stop, Digits) : "none"),
+                                     (stop > 0.0 ? MathAbs(structuralLevel - stop) / g_pointsToPrice : 0.0));
+
+   PrintFormat("[%s] %s %s opened #%d  lots=%s entry=%s target=%s | %s | %s",
                InpTradeComment, SlotName(slot), DirName(dir), ticket,
                DoubleToString(lots, 2), DoubleToString(entry, Digits),
-               DoubleToString(structuralLevel, Digits), DoubleToString(tp, Digits),
-               (stop > 0.0 ? DoubleToString(stop, Digits) : "none"), plan);
+               DoubleToString(tp, Digits), stopStory, plan);
 
    LogRow("ENTRY", slot, dir, entry, structuralLevel, tp, lots,
           StringFormat("ticket=%d %s", ticket, plan));
@@ -1482,6 +1532,10 @@ bool DirectionAllowed(const int slot, const int dir, string &why)
 //--- runner just as it governed the full position
 void EvaluateCloseStop(const int slot, const double close)
   {
+   //--- with a touch stop the broker holds it; there is nothing to evaluate
+   if(InpStopStyle == STOP_ON_TOUCH)
+      return;
+
    for(int dx = 0; dx < DX_COUNT; dx++)
      {
       int dir = DirOf(dx);
@@ -1489,12 +1543,31 @@ void EvaluateCloseStop(const int slot, const double close)
          continue;
 
       RecallTrade(slot, dx);
+
+      //--- A close-based stop lives in EA memory, so losing it means the
+      //--- position runs with no structural stop at all - the single worst
+      //--- failure this design can have. Rebuild it from the flavor's own
+      //--- levels rather than shrug and carry on.
       if(g_exitLevel[slot][dx] <= 0.0)
         {
-         PrintFormat("[%s] %s %s WARNING: open position with no remembered stop "
-                     "level. Only the disaster stop and the NY close will exit it.",
-                     InpTradeComment, SlotName(slot), DirName(dir));
-         continue;
+         double lh, ll, sh, sl;
+         if(SlotLevels(slot, lh, ll, sh, sl))
+           {
+            g_exitLevel[slot][dx] = (dir == DIR_LONG) ? sl : sh;
+            UpdateTradeState(slot, dx);
+            PrintFormat("[%s] %s %s stop level was missing and has been rebuilt "
+                        "from today's levels: %s. Check this trade by hand.",
+                        InpTradeComment, SlotName(slot), DirName(dir),
+                        DoubleToString(g_exitLevel[slot][dx], Digits));
+           }
+         else
+           {
+            Alert(StringFormat("%s %s %s: OPEN POSITION WITH NO STRUCTURAL STOP. "
+                               "Only the disaster stop and the NY close will exit "
+                               "it. Close it by hand if that is not acceptable.",
+                               InpTradeComment, Symbol(), DirName(dir)));
+            continue;
+           }
         }
 
       bool stopped = (dir == DIR_LONG) ? (close < g_exitLevel[slot][dx])
@@ -1795,11 +1868,15 @@ void UpdatePanel(const datetime nowBroker)
          if(!SelectDirOrder(slot, dir))
             continue;
          live++;
-         text += StringFormat("\n        %s %s lots  stop %s  target %s%s",
+         text += StringFormat("\n        %s %s lots  %s %s  target %s%s",
                               DirName(dir), DoubleToString(OrderLots(), 2),
+                              (InpStopStyle == STOP_ON_TOUCH ? "stop(touch)" : "stop(close)"),
                               DoubleToString(g_exitLevel[slot][dx], Digits),
                               DoubleToString(g_target[slot][dx], Digits),
                               (g_partialDone[slot][dx] ? "  [partial taken]" : ""));
+         if(InpStopStyle == STOP_ON_CLOSE && OrderStopLoss() > 0.0)
+            text += StringFormat("\n               broker S/L %s = disaster stop, not the level",
+                                 DoubleToString(OrderStopLoss(), Digits));
         }
 
       if(live == 0 && StringLen(g_skipReason[slot]) > 0)
@@ -1903,7 +1980,26 @@ bool ValidateInputs()
                      DoubleToString(MarketInfo(Symbol(), MODE_MINLOT), 2));
      }
 
-   if(InpProtectiveSLMode == PSL_NONE)
+   if(InpStopStyle == STOP_ON_CLOSE)
+      Print("NOTE: the structural stop is CLOSE-BASED, so it is held by the EA, "
+            "not by the broker. Price may trade through the level intrabar and "
+            "the trade survives, provided the bar closes back on the right side. "
+            "The S/L shown on the order in the terminal is the DISASTER stop, "
+            "further out - it is not the structural stop. Set InpStopStyle = "
+            "STOP_ON_TOUCH if you want the broker stop to sit on the level and "
+            "fill the moment price reaches it.");
+   else
+      Print("NOTE: the structural stop is ON TOUCH. The broker stop sits on the "
+            "level and fills the moment price trades there. The close-based rule "
+            "is disabled, and the disaster-stop settings are not used.");
+
+   if(InpStopStyle == STOP_ON_CLOSE && InpProtectiveSLMode == PSL_ATR_PCT)
+      Print("TIP: in trigger-candle mode the structural stop is one candle deep, "
+            "so an ATR-sized disaster pad can sit far below it and turn a small "
+            "planned loss into a large real one. InpProtectiveSLMode = "
+            "PSL_STRUCT_PCT keeps the pad proportional to the trade's own risk.");
+
+   if(InpProtectiveSLMode == PSL_NONE && InpStopStyle == STOP_ON_CLOSE)
       Print("WARNING: no broker stop will be attached. If this terminal or the "
             "VPS goes down with a position open, nothing limits the loss.");
 

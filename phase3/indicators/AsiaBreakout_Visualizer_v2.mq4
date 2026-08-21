@@ -91,6 +91,12 @@ enum ENUM_CANDLE_SL_SRC
    CSL_ASIA_SESSION   = 1   // Asia session low/high
   };
 
+enum ENUM_STOP_STYLE
+  {
+   STOP_ON_CLOSE = 0,  // Exit when a signal bar CLOSES beyond the level
+   STOP_ON_TOUCH = 1   // Stop sits AT the level and fills on a touch
+  };
+
 #define DIR_NONE   0
 #define DIR_LONG   1
 #define DIR_SHORT -1
@@ -115,6 +121,7 @@ enum ENUM_CANDLE_SL_SRC
 input string          _s01                       = "=== STRATEGY ===";          // .
 input ENUM_STRAT_MODE InpMode                    = MODE_ASIA_RANGE;             // Which breakout to replay
 input double          InpTPPctOfATR              = 80.0;                        // Target as % of 5-day ATR
+input ENUM_STOP_STYLE InpStopStyle               = STOP_ON_CLOSE;               // How the structural stop is honoured
 input bool            InpTradeLongs              = true;                        // Replay long breakouts
 input bool            InpTradeShorts             = true;                        // Replay short breakouts
 
@@ -1001,7 +1008,13 @@ int ReplayDay(const datetime nyClose, const int slot)
          //--- TARGET FIRST, and not as a tie-break: it is a resting order
          //--- that fills the moment price trades there, while the stop is
          //--- not even looked at until the bar has closed.
-         if(!partialOf[dx])
+         //--- with a TOUCH stop both levels can be reached inside one bar and
+         //--- the bar does not say which came first. Assume the stop, so the
+         //--- replay never flatters the strategy.
+         bool stopAlsoHit = (InpStopStyle == STOP_ON_TOUCH) &&
+                            ((dir == DIR_LONG) ? (lo <= stopOf[dx]) : (hi >= stopOf[dx]));
+
+         if(!partialOf[dx] && !stopAlsoHit)
            {
             bool touched = (dir == DIR_LONG) ? (hi >= tpOf[dx]) : (lo <= tpOf[dx]);
             if(touched)
@@ -1024,12 +1037,25 @@ int ReplayDay(const datetime nyClose, const int slot)
               }
            }
 
-         //--- the close-based stop, which governs the runner too
-         bool stopped = (dir == DIR_LONG) ? (cl < stopOf[dx]) : (cl > stopOf[dx]);
+         //--- the structural stop, in whichever style is configured
+         bool   stopped   = false;
+         double stopFill  = cl;
+         if(InpStopStyle == STOP_ON_TOUCH)
+           {
+            //--- a resting stop fills the moment price reaches it, at the level
+            stopped  = (dir == DIR_LONG) ? (lo <= stopOf[dx]) : (hi >= stopOf[dx]);
+            stopFill = stopOf[dx];
+           }
+         else
+           {
+            stopped  = (dir == DIR_LONG) ? (cl < stopOf[dx]) : (cl > stopOf[dx]);
+            stopFill = cl;
+           }
+
          if(stopped)
            {
             FinishTrade(slot, dir, EXIT_STOP, entryOf[dx], stopOf[dx], tpOf[dx],
-                        entryTimeOf[dx], barClose, cl, partialOf[dx],
+                        entryTimeOf[dx], barClose, stopFill, partialOf[dx],
                         partialTimeOf[dx], levelReadyAt, levelHigh, levelLow, atr5);
             live[dx] = false;
            }
@@ -1144,6 +1170,10 @@ void ShowSummary(const int daysWalked)
                         StringSubstr(EnumToString(InpRangeTF), 7));
    text += StringFormat("Target %.0f%% of ATR%d from the level | exit: %s\n",
                         InpTPPctOfATR, InpATRDays, exitPlan);
+   text += StringFormat("Structural stop: %s\n",
+                        (InpStopStyle == STOP_ON_TOUCH
+                         ? "ON TOUCH - fills the moment price reaches the level"
+                         : "ON CLOSE - a bar must close beyond the level"));
    text += StringFormat("Up to %d entries/day, 1 open per direction\n\n",
                         InpMaxTradesPerDay);
 

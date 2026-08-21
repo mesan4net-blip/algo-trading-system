@@ -304,3 +304,75 @@ chart once, or raise **Tools → Options → Charts → Max bars in history**.
 | Green dot mid-trade | The target was touched and the slice was taken |
 | Green leg then coloured leg | Entry to the slice, then the runner to its own exit |
 | `TP* +0.90R` | The star means part was scaled out; the R blends slice and runner |
+
+---
+
+# The two stops — read this if the stop looks wrong
+
+The most common confusion with this EA, and the one worth spelling out.
+
+**There are two different stops on every trade, and they are not in the same
+place.**
+
+| | Where it sits | Who holds it | What fires it |
+|---|---|---|---|
+| **Structural stop** | Exactly on the level — the trigger candle low, or the Asia low | The **EA**, in memory | A signal bar **closing** beyond it |
+| **Disaster stop** | Well **beyond** the level (default 25% of ATR5 further) | The **broker** | Price **touching** it |
+
+So in the terminal, the **S/L column on your order shows the disaster stop, not
+the trigger candle low.** That is not a bug — a broker stop fills on a touch,
+which is precisely what a close-based rule rejects, so the structural stop
+cannot be a broker order.
+
+Two things follow, and they are the two ways this looks like a broken stop:
+
+1. **Price trades below the trigger low and the trade stays open.** Correct
+   behaviour for `STOP_ON_CLOSE`. The bar has to *close* beyond the level. A
+   wick through it is not an exit, by the same logic that a wick through the
+   high is not an entry.
+2. **The trade closes far below the trigger low.** That was the disaster stop,
+   not the structural one. In trigger-candle mode this is the sharp edge: the
+   structural stop is one candle deep, so a pad sized off the daily ATR can sit
+   much further away than the trade's own risk, and a small planned loss
+   becomes a large real one.
+
+## `InpStopStyle`
+
+| Value | Behaviour |
+|---|---|
+| `STOP_ON_CLOSE` (default) | As specified: a bar must close beyond the level. The EA holds the stop; the broker holds a disaster stop further out |
+| `STOP_ON_TOUCH` | The broker stop sits **on the level** and fills the moment price reaches it. The close-based rule and the disaster-stop settings are switched off |
+
+If what you actually want is "my stop is the trigger candle low and I want it
+respected the moment price gets there", that is `STOP_ON_TOUCH`. Run the
+visualiser both ways over the same history before choosing — the two produce
+very different trade sets, and the touch stop is hit far more often.
+
+## `PSL_STRUCT_PCT`
+
+A fourth disaster-stop mode, added because the ATR-based pad is the wrong shape
+for trigger-candle mode.
+
+| Mode | Pad |
+|---|---|
+| `PSL_ATR_PCT` | `InpProtectiveSLATRPct`% of the 5-day ATR |
+| `PSL_POINTS` | `InpProtectiveSLPoints` points |
+| `PSL_STRUCT_PCT` | `InpProtectiveSLStructPct`% of the **entry-to-level distance** |
+| `PSL_NONE` | No broker stop at all |
+
+`PSL_STRUCT_PCT` at 50 puts the disaster stop half again as far as the trade's
+own risk — so a tight one-candle stop gets a tight pad and a wide Asia-range
+stop gets a wide one. Recommended whenever you trade `MODE_TRIGGER_CANDLE`.
+
+## What was actually broken
+
+One real bug, fixed: if the EA lost its remembered stop level for an open
+position — a restart after the terminal's global variables were cleared, a
+recompile with different magic numbers — it printed a warning and carried on
+with **no structural stop at all**, leaving the position to the disaster stop
+and the NY close. It now rebuilds the level from the flavor's current levels
+and says so, and raises a visible alert if even that is impossible.
+
+The entry log, the panel and the init messages now name the two stops
+separately, so the broker's S/L field can no longer be mistaken for the
+structural stop.
