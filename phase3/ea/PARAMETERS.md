@@ -201,3 +201,106 @@ close, the daily caps, the skip rules — is modelled exactly as the EA runs it.
 Inside a single bar the **target wins**. That is not an arbitrary tie-break:
 the target is a resting order that fills the moment price trades there, while
 the stop is not even evaluated until the bar has closed.
+
+---
+
+# v2 changes
+
+`AsiaBreakout_EA_v2.mq4` and `AsiaBreakout_Visualizer_v2.mq4` supersede the v1
+files. The v1 pair still works and is unchanged; v2 adds the following.
+
+## Three independent timeframes
+
+They were always separate inputs, but v1 buried them in three different
+groups. v2 puts them together so it is obvious they do not have to match.
+
+| Input | Default | What it governs |
+|---|---|---|
+| `InpSignalTF` | H1 | The bars whose **closes** confirm a breakout entry and a close-based stop |
+| `InpTriggerTF` | H1 | The candle whose high/low become the levels in trigger-candle mode. Nothing else uses it |
+| `InpRangeTF` | M15 | The bars the Asia high/low are measured from. Never generates a signal |
+
+An H4 trigger candle broken by an M15 close is valid, and so is the reverse.
+
+## Scaled exit
+
+| Input | Default | What it does |
+|---|---|---|
+| `InpPartialClosePct` | 50 | Percent of the position closed **at the target, on touch**. The remainder runs to the NY close |
+| `InpMoveStopAfterPartial` | false | After the slice is taken, move the runner's close-based stop to the entry price |
+
+- **100** — the whole position goes at the target, as in v1.
+- **0** — nothing happens at the target; everything runs to the stop or the NY close.
+- **Anything between** — the slice is taken, the runner continues.
+
+The close-based stop still governs the runner. If a bar closes back beyond the
+structural level after the slice has been taken, the remainder exits there
+rather than at the NY close.
+
+### The trade-off you are accepting
+
+A broker take-profit closes a **whole** position, so a scaled exit cannot be a
+resting TP order. When `InpPartialClosePct` is between 0 and 100 the EA watches
+the target itself, tick by tick. **If the terminal is offline when price
+reaches the target, the slice is not taken.** The disaster stop stays
+broker-side either way. At exactly 100 the target goes back to being a real TP
+order, because nothing needs slicing.
+
+There is also a lot-size floor: both the slice and the runner must clear the
+broker's minimum lot. At 0.10 lots with a 50% split each leg is 0.05, which is
+fine on most accounts. If the split is impossible the EA logs it loudly and the
+target closes the whole position instead.
+
+## Repeat entries
+
+| Input | Default | What it does |
+|---|---|---|
+| `InpMaxTradesPerDay` | 4 | Entries per flavor per day (was 1) |
+| `InpMaxOpenPerDirection` | 1 | Positions open at once per direction. This build tracks one; larger values are treated as 1 |
+| `InpRequireReset` | false | Price must close back **inside** the range before that direction can trigger again |
+
+A long and a short can now be live at the same time — they are separate trades
+with their own stop, target and partial state. Two longs at once is what the
+rule forbids.
+
+`InpAllowReEntryAfterStop` and `InpAllowOppositeSameDay` are gone; the two
+inputs above replace them.
+
+### Two consequences worth understanding
+
+**The runner blocks the slot.** While a runner is open, that direction is
+full, so the next long cannot start until the previous one has finished. With
+a scaled exit the runner usually lives until the NY close, which in practice
+caps most days at one trade per direction — not four. Set
+`InpPartialClosePct = 100` if you would rather targets free the slot again.
+
+**Every close beyond the level is a signal.** With `InpRequireReset` off, four
+consecutive bars closing above the Asia high are four valid entries, subject
+only to the slot being free. Turning it on demands price return inside the
+range first, which is usually what people mean by "the next setup".
+
+## Indicator: the history fix
+
+v1 built the replay once, in `OnInit`, before MT4 had loaded the other
+timeframes it reads. Those reads failed, nearly every day was discarded as
+"no data", and the next attempt did not come until a signal bar closed. The
+symptom was an indicator that only seemed to know about the last day or two.
+
+v2 watches how many bars each timeframe holds and rebuilds whenever that grows,
+so the picture fills in as history streams down. New display inputs:
+
+| Input | Default | What it does |
+|---|---|---|
+| `InpIncludeToday` | true | Also replay the day in progress, up to the last closed bar |
+
+The panel now reports the depth of every timeframe the replay depends on and
+flags any marked `SHORT`. If days are still missing, open that timeframe's
+chart once, or raise **Tools → Options → Charts → Max bars in history**.
+
+### Reading a scaled exit on the chart
+
+| Mark | Meaning |
+|---|---|
+| Green dot mid-trade | The target was touched and the slice was taken |
+| Green leg then coloured leg | Entry to the slice, then the runner to its own exit |
+| `TP* +0.90R` | The star means part was scaled out; the R blends slice and runner |
