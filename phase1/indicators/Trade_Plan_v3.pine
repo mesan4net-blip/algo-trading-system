@@ -1,0 +1,183 @@
+//@version=6
+// ============================================================================
+// TRADE PLAN  (v3)
+// ============================================================================
+// Your rules, pinned to the chart, with a gate in front of them.
+//
+// HOW TO TOGGLE IT FROM THE CHART:
+//   Every indicator gets an eye icon in the chart legend, top-left, beside its
+//   name. Click it and the plan hides; click again and it returns. Pine scripts
+//   can only draw, never receive a click, so a button painted on the chart is
+//   not possible - the legend eye is the real answer. Save this into a chart
+//   template so it loads everywhere, and drag it to the top of the list.
+//
+// WHAT CHANGED IN v3:
+//   THE EXIT. v2 said exit at the opposite level. That was wrong and you were
+//   right to push back: in a real trend levels get eaten, and exiting at each
+//   one caps every winner at one leg. The level now ARMS the exit; the LTF
+//   turning against you FIRES it. Nothing is killed while the path holds.
+//
+//   The cost of that, and it needs deciding in advance rather than in the
+//   moment: price can tag the level, stall, and roll all the way back without
+//   ever firing an exit. So once price tags the level, the invalidation moves
+//   up to just under the last LTF brick. That is not mid-trade tampering
+//   because it was decided now, before the trade, and it only ever moves the
+//   invalidation toward safety.
+//
+//   PYRAMIDING, made explicit. Adding to one position blends your average
+//   entry upward, and an add placed too high can turn a winning position into
+//   a losing one - the first entry would have survived the pullback, the
+//   blended position does not. Two rules stop that: each add is smaller than
+//   the one before, and after every add the invalidation sits at or above the
+//   blended break-even. An add must never be able to make a winner into a
+//   loser.
+//
+// WHAT CHANGED FROM v1:
+//   v1 was a list you could read past. v2 has a CHECKLIST you have to tick, and
+//   it shows NOT READY until every box is ticked. A plan you can ignore without
+//   noticing is not a plan, and "no exceptions" needs something that makes the
+//   exception visible.
+//
+// THE HONEST WARNING, AND WHY TWO RULES WERE CHANGED:
+//   Two rules in the original plan were dangerous together rather than apart.
+//
+//   "If support breaks, re-enter at the next support" is averaging down. Price
+//   breaking support is evidence the thesis was wrong, and buying more there
+//   makes the position largest exactly when it is most wrong. There is always a
+//   next support in a real downtrend, and nothing in the plan capped the ladder.
+//
+//   "Exit only when the portfolio is all positive" means a position that never
+//   goes green is never closed.
+//
+//   Each alone is survivable. Together they are a growing position with no exit,
+//   which is the mechanic behind most blown accounts. The defaults below replace
+//   them: out when the level breaks, and out at the opposite level regardless of
+//   P&L. Profitability is protected at ENTRY, by refusing trades whose reward to
+//   the next level is poor - not by refusing to exit.
+//
+//   These are defaults, not locks. Edit them if you disagree. But edit them
+//   deliberately, not in the middle of a position.
+// ============================================================================
+
+indicator("Trade Plan v3", shorttitle="PLAN3", overlay=true)
+
+// ── THE GATE ───────────────────────────────────────────────────────────────
+// Tick these before entering. The banner reads NOT READY until all of them are
+// on. Untick them after the trade closes - a checklist left ticked from
+// yesterday is worse than no checklist, because it looks like diligence.
+grp_gate = "━━━ PRE-TRADE CHECKLIST ━━━"
+gate_on  = input.bool(true,  "Show Checklist Gate", group=grp_gate)
+c1 = input.bool(false, "1. HTF (4H) renko direction is established, not warm-up", group=grp_gate)
+c2 = input.bool(false, "2. LTF (15m) renko AGREES with the 4H", group=grp_gate)
+c3 = input.bool(false, "3. Price is AT a level I marked in advance", tooltip="Marked in advance means before this session. A level found while looking for a reason to enter is not a level.", group=grp_gate)
+c4 = input.bool(false, "4. Zone has confluence of 2+ and distance to the opposite level is 2x my risk", tooltip="Two things. Confluence: the SR Zones indicator shows x2 or x3 on a zone where independent levels agree - a single untested line is not a zone. And reward: if the next level is close and the invalidation is far, the trade is bad however good the setup looks. This is where profitability is protected, not at the exit.", group=grp_gate)
+c5 = input.bool(false, "5. Invalidation price is written down", tooltip="The price at which this idea is wrong. Written before entry, not discovered afterwards.", group=grp_gate)
+c6 = input.bool(false, "6. Size is decided and it survives being wrong", group=grp_gate)
+c7 = input.bool(false, "7. Enough time before the cut-off for this to work", group=grp_gate)
+
+// ── LAYOUT ─────────────────────────────────────────────────────────────────
+grp_pos = "━━━ LAYOUT ━━━"
+pos_v   = input.string("Middle", "Vertical",   options=["Top", "Middle", "Bottom"], group=grp_pos)
+pos_h   = input.string("Left",   "Horizontal", options=["Left", "Center", "Right"], group=grp_pos)
+txt_sz  = input.string("Small",  "Text Size",  options=["Tiny", "Small", "Normal", "Large"], group=grp_pos)
+bg_col  = input.color(color.new(#1A1A1A, 15), "Background", group=grp_pos)
+tx_col  = input.color(color.white, "Text", group=grp_pos)
+hd_col  = input.color(color.new(#2962FF, 0), "Heading", group=grp_pos)
+
+// ── SECTIONS ───────────────────────────────────────────────────────────────
+grp_1 = "━━━ 1 — THE SETUP ━━━"
+s1_on   = input.bool(true, "Show", group=grp_1)
+s1_head = input.string("SETUP — ALL THREE, OR NO TRADE", "Heading", group=grp_1)
+s1_body = input.text_area("4H renko sets direction. It is the boss.\n15m renko must agree with it.\nEntry only AT a marked level. Never mid-range.\n\nLong bias is expressed as SIZE and PATIENCE on longs,\nnot as ignoring the 4H when it turns down.", "Rules", group=grp_1)
+
+grp_2 = "━━━ 2 — LONG ━━━"
+s2_on   = input.bool(true, "Show", group=grp_2)
+s2_head = input.string("LONG", "Heading", group=grp_2)
+s2_body = input.text_area("Enter at support, with 4H and 15m both up.\n\nEXIT: resistance ARMS it, the 15m turning down FIRES it.\nDo not kill a working path just because it reached a level.\nOnce resistance is tagged, invalidation moves to just\nunder the last 15m brick. Decided now, not in the moment.\n\nSupport breaks -> OUT. Do not buy the next one down.\nRe-entry needs 4H and 15m agreeing again AND price\nreclaiming the level it broke.\n\nADD only when: the last add is already in profit, the 15m\nhas turned back up, and price is NOT in the top third of\nthe range to resistance.\nEach add SMALLER than the one before. 100, 60, 40.\nAfter every add, invalidation at or above blended\nbreak-even. An add must never turn a winner into a loser.", "Rules", group=grp_2)
+
+grp_3 = "━━━ 3 — SHORT ━━━"
+s3_on   = input.bool(true, "Show", group=grp_3)
+s3_head = input.string("SHORT", "Heading", group=grp_3)
+s3_body = input.text_area("Only at resistance, and only with the 4H down.\nSmaller than a long. This is the against-bias side.\n\nEXIT: support ARMS it, the 15m turning up FIRES it.\nResistance breaks -> OUT immediately. No second chance,\nno adding. The bias is long; a short going wrong gets\nno patience.\n\nNo pyramiding on shorts.\nIf shorts keep going wrong, stop taking them.\nA long-biased trader does not have to trade both ways.", "Rules", group=grp_3)
+
+grp_4 = "━━━ 4 — WHILE IN ━━━"
+s4_on   = input.bool(true, "Show", group=grp_4)
+s4_head = input.string("WHILE IN", "Heading", group=grp_4)
+s4_body = input.text_area("The plan was made before entry. Nothing changes now.\nA single opposite brick is not a reason to act.\nThe exit needs the LEVEL and the LTF TURN together.\n\nThe only thing allowed to move is the invalidation, and\nonly toward safety, and only by the rule written above.\n\nExit is: the armed level plus an LTF turn, the\ninvalidation, or the cut-off. Nothing else.", "Rules", group=grp_4)
+
+grp_5 = "━━━ 5 — NEVER ━━━"
+s5_on   = input.bool(true, "Show", group=grp_5)
+s5_head = input.string("NEVER", "Heading", group=grp_5)
+s5_body = input.text_area("Never add to a position going against me.\nNever buy the next support after one breaks.\nNever add near resistance. That zone is an exit.\nNever make an add bigger than the one before it.\nNever let an add pull the invalidation below break-even.\nNever hold a position waiting for it to go green.\nNever move an invalidation further away.\nNever enter mid-range because I am bored.\nNever trade a zone I did not mark before the session.", "Rules", group=grp_5)
+
+// ── CLOCK ──────────────────────────────────────────────────────────────────
+grp_ctx  = "━━━ CLOCK ━━━"
+ctx_on   = input.bool(true, "Show Clock Row", group=grp_ctx)
+ctx_tz   = input.string("America/Los_Angeles", "Timezone", options=["America/Los_Angeles", "America/New_York", "America/Chicago", "Europe/London", "Asia/Kolkata", "Asia/Tokyo", "UTC"], group=grp_ctx)
+ctx_hour = input.int(12, "Cut-Off Hour (24h)", minval=0, maxval=23, group=grp_ctx)
+ctx_min  = input.int(45, "Cut-Off Minute", minval=0, maxval=59, group=grp_ctx)
+
+// ── BUILD ──────────────────────────────────────────────────────────────────
+_pos = pos_v == "Top" and pos_h == "Left" ? position.top_left : pos_v == "Top" and pos_h == "Center" ? position.top_center : pos_v == "Top" ? position.top_right : pos_v == "Bottom" and pos_h == "Left" ? position.bottom_left : pos_v == "Bottom" and pos_h == "Center" ? position.bottom_center : pos_v == "Bottom" ? position.bottom_right : pos_h == "Left" ? position.middle_left : pos_h == "Center" ? position.middle_center : position.middle_right
+
+_sz = txt_sz == "Tiny" ? size.tiny : txt_sz == "Normal" ? size.normal : txt_sz == "Large" ? size.large : size.small
+
+int  _ticked = (c1 ? 1 : 0) + (c2 ? 1 : 0) + (c3 ? 1 : 0) + (c4 ? 1 : 0) + (c5 ? 1 : 0) + (c6 ? 1 : 0) + (c7 ? 1 : 0)
+bool _ready  = _ticked == 7
+
+_rows = (gate_on ? 2 : 0) + (s1_on ? 2 : 0) + (s2_on ? 2 : 0) + (s3_on ? 2 : 0) + (s4_on ? 2 : 0) + (s5_on ? 2 : 0) + (ctx_on ? 1 : 0)
+
+var table tp = na
+if barstate.islast and _rows > 0
+    tp := table.new(_pos, 1, _rows, border_width=1,
+         frame_color=color.new(#000000, 50), frame_width=1)
+    int _r = 0
+
+    if gate_on
+        table.cell(tp, 0, _r, _ready ? "READY" : "NOT READY", text_color=color.white,
+             bgcolor = _ready ? color.new(#1D9E75, 0) : color.new(#F23645, 0),
+             text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        string _miss = (c1 ? "" : "4H direction\n") + (c2 ? "" : "15m agrees\n") + (c3 ? "" : "at a marked level\n") + (c4 ? "" : "2x reward to the next level\n") + (c5 ? "" : "invalidation written down\n") + (c6 ? "" : "size decided\n") + (c7 ? "" : "time before cut-off")
+        table.cell(tp, 0, _r, _ready ? "All seven ticked. Untick them after the trade." : "Missing:\n" + _miss,
+             text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if s1_on
+        table.cell(tp, 0, _r, s1_head, text_color=color.white, bgcolor=color.new(hd_col, 60), text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        table.cell(tp, 0, _r, s1_body, text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if s2_on
+        table.cell(tp, 0, _r, s2_head, text_color=color.white, bgcolor=color.new(#1D9E75, 40), text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        table.cell(tp, 0, _r, s2_body, text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if s3_on
+        table.cell(tp, 0, _r, s3_head, text_color=color.white, bgcolor=color.new(#B8860B, 40), text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        table.cell(tp, 0, _r, s3_body, text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if s4_on
+        table.cell(tp, 0, _r, s4_head, text_color=color.white, bgcolor=color.new(hd_col, 60), text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        table.cell(tp, 0, _r, s4_body, text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if s5_on
+        table.cell(tp, 0, _r, s5_head, text_color=color.white, bgcolor=color.new(#F23645, 30), text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        table.cell(tp, 0, _r, s5_body, text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if ctx_on
+        int _now  = hour(time_close, ctx_tz) * 60 + minute(time_close, ctx_tz)
+        int _left = ctx_hour * 60 + ctx_min - _now
+        string _clk = str.format("{0,number,00}:{1,number,00}", hour(time_close, ctx_tz), minute(time_close, ctx_tz))
+        table.cell(tp, 0, _r, _left > 0 ? _clk + "   cut-off in " + str.tostring(_left) + " min" : _clk + "   PAST CUT-OFF",
+             text_color=color.white,
+             bgcolor = _left <= 0 ? color.new(#F23645, 0) : _left <= 30 ? color.new(#B8860B, 0) : color.new(#1D9E75, 0),
+             text_size=_sz, text_halign=text.align_left)
