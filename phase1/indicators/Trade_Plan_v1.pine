@@ -1,0 +1,113 @@
+//@version=6
+// ============================================================================
+// TRADE PLAN  (v1)
+// ============================================================================
+// Your trading rules, pinned to the chart.
+//
+// HOW TO TOGGLE IT FROM THE CHART:
+//   This is a separate indicator on purpose. Every indicator gets an eye icon
+//   in the chart legend, top-left, next to its name. Click the eye and the plan
+//   disappears; click it again and it comes back. One click, no settings
+//   dialog, and it works on desktop and mobile alike.
+//
+//   Pine cannot draw a clickable button onto the chart surface - scripts can
+//   only draw, never receive a click - so the legend eye is the real answer
+//   rather than a workaround.
+//
+//   Two things worth doing once:
+//     - Save it into a chart template (Layout menu) so it loads on every chart.
+//     - Drag it to the top of the indicator list so the eye is easy to find.
+//
+// WHY THREE SECTIONS:
+//   A plan you read before entering is a different plan from the one you need
+//   while a position is open, and both are different from the list of things
+//   you have decided never to do. Splitting them means you can leave the first
+//   one showing while hunting, and the second while holding, without reading
+//   past the parts that do not apply.
+// ============================================================================
+
+indicator("Trade Plan", shorttitle="PLAN", overlay=true)
+
+// ── LAYOUT ─────────────────────────────────────────────────────────────────
+grp_pos = "━━━ LAYOUT ━━━"
+pos_v   = input.string("Middle", "Vertical",   options=["Top", "Middle", "Bottom"], group=grp_pos)
+pos_h   = input.string("Left",   "Horizontal", options=["Left", "Center", "Right"], group=grp_pos)
+txt_sz  = input.string("Small",  "Text Size",  options=["Tiny", "Small", "Normal", "Large"], group=grp_pos)
+bg_col  = input.color(color.new(#1A1A1A, 15), "Background", group=grp_pos)
+tx_col  = input.color(color.white, "Text", group=grp_pos)
+hd_col  = input.color(color.new(#2962FF, 0), "Heading", group=grp_pos)
+show_ttl= input.bool(true, "Show Title Row", group=grp_pos)
+plan_ttl= input.string("TRADE PLAN", "Title", group=grp_pos)
+
+// ── SECTION 1 ──────────────────────────────────────────────────────────────
+grp_1 = "━━━ 1 — BEFORE ENTRY ━━━"
+s1_on   = input.bool(true, "Show This Section", group=grp_1)
+s1_head = input.string("BEFORE ENTRY", "Heading", group=grp_1)
+s1_body = input.text_area("Commission set? A zero-cost curve is fiction.\nData Coverage above 99%?\nRenko direction established, not warm-up.\nOne entry per swing — has this swing been traded?\nSize decided before the entry, not after.", "Rules", tooltip="One rule per line. Press Enter for a new line. Keep each short enough to read at a glance — a plan you have to squint at is a plan you will skip.", group=grp_1)
+
+// ── SECTION 2 ──────────────────────────────────────────────────────────────
+grp_2 = "━━━ 2 — WHILE IN A TRADE ━━━"
+s2_on   = input.bool(true, "Show This Section", group=grp_2)
+s2_head = input.string("WHILE IN", "Heading", group=grp_2)
+s2_body = input.text_area("Exit is the renko turning back, or 12:45. Nothing else.\nDo not widen anything mid-trade.\nDo not add to a position that is going against me.\nThe cut-off is not negotiable.", "Rules", group=grp_2)
+
+// ── SECTION 3 ──────────────────────────────────────────────────────────────
+grp_3 = "━━━ 3 — NEVER ━━━"
+s3_on   = input.bool(true, "Show This Section", group=grp_3)
+s3_head = input.string("NEVER", "Heading", group=grp_3)
+s3_body = input.text_area("Never trade a backtest I have not costed.\nNever change a rule while a position is open.\nNever trust a result from a range with poor coverage.\nNever re-enter out of frustration.", "Rules", group=grp_3)
+
+// ── CONTEXT ────────────────────────────────────────────────────────────────
+grp_ctx = "━━━ LIVE CONTEXT ━━━"
+ctx_on   = input.bool(true, "Show Clock Row", tooltip="Adds the current bar's time in your trading timezone and a countdown to the daily cut-off, so the plan and the clock are in the same place. The cut-off time here is display only — it does not close anything. Set the real one in the strategy.", group=grp_ctx)
+ctx_tz   = input.string("America/Los_Angeles", "Timezone", options=["America/Los_Angeles", "America/New_York", "America/Chicago", "Europe/London", "Asia/Kolkata", "Asia/Tokyo", "UTC"], group=grp_ctx)
+ctx_hour = input.int(12, "Cut-Off Hour (24h)", minval=0, maxval=23, group=grp_ctx)
+ctx_min  = input.int(45, "Cut-Off Minute", minval=0, maxval=59, group=grp_ctx)
+
+// ── BUILD ──────────────────────────────────────────────────────────────────
+_pos = pos_v == "Top" and pos_h == "Left" ? position.top_left : pos_v == "Top" and pos_h == "Center" ? position.top_center : pos_v == "Top" ? position.top_right : pos_v == "Bottom" and pos_h == "Left" ? position.bottom_left : pos_v == "Bottom" and pos_h == "Center" ? position.bottom_center : pos_v == "Bottom" ? position.bottom_right : pos_h == "Left" ? position.middle_left : pos_h == "Center" ? position.middle_center : position.middle_right
+
+_sz = txt_sz == "Tiny" ? size.tiny : txt_sz == "Normal" ? size.normal : txt_sz == "Large" ? size.large : size.small
+
+// Rows are counted first so the table is created at exactly the right height.
+// A table with spare rows renders them as empty boxes.
+_rows = (show_ttl ? 1 : 0) + (s1_on ? 2 : 0) + (s2_on ? 2 : 0) + (s3_on ? 2 : 0) + (ctx_on ? 1 : 0)
+
+var table tp = na
+if barstate.islast and _rows > 0
+    tp := table.new(_pos, 1, _rows, border_width=1,
+         frame_color=color.new(#000000, 50), frame_width=1)
+    int _r = 0
+
+    if show_ttl
+        table.cell(tp, 0, _r, plan_ttl, text_color=color.white, bgcolor=hd_col,
+             text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if s1_on
+        table.cell(tp, 0, _r, s1_head, text_color=color.white, bgcolor=color.new(hd_col, 60), text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        table.cell(tp, 0, _r, s1_body, text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if s2_on
+        table.cell(tp, 0, _r, s2_head, text_color=color.white, bgcolor=color.new(hd_col, 60), text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        table.cell(tp, 0, _r, s2_body, text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if s3_on
+        table.cell(tp, 0, _r, s3_head, text_color=color.white, bgcolor=color.new(hd_col, 60), text_size=_sz, text_halign=text.align_left)
+        _r += 1
+        table.cell(tp, 0, _r, s3_body, text_color=tx_col, bgcolor=bg_col, text_size=_sz, text_halign=text.align_left)
+        _r += 1
+
+    if ctx_on
+        int _now  = hour(time_close, ctx_tz) * 60 + minute(time_close, ctx_tz)
+        int _cut  = ctx_hour * 60 + ctx_min
+        int _left = _cut - _now
+        string _clk = str.format("{0,number,00}:{1,number,00}", hour(time_close, ctx_tz), minute(time_close, ctx_tz))
+        string _msg = _left > 0 ? _clk + "   cut-off in " + str.tostring(_left) + " min" : _clk + "   PAST CUT-OFF"
+        table.cell(tp, 0, _r, _msg, text_color=color.white,
+             bgcolor = _left <= 0 ? color.new(#F23645, 0) : _left <= 30 ? color.new(#B8860B, 0) : color.new(#1D9E75, 0),
+             text_size=_sz, text_halign=text.align_left)
