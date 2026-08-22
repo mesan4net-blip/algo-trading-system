@@ -1,0 +1,235 @@
+//@version=6
+// ============================================================================
+// SR ZONES  (v1)
+// ============================================================================
+// Support and resistance for the renko system, built to be MECHANICAL. Every
+// level here comes from a rule, not from where a line looked good.
+//
+// WHY THESE LEVELS AND NOT OTHERS:
+//   A full pivot set gives seven levels per timeframe, so price is always near
+//   something and the filter stops filtering. Fewer, stronger levels is the
+//   point. What is here:
+//
+//   TIDES     prior day, week and month high and low. No parameters at all, so
+//             nothing to overfit, and they are what every desk is watching.
+//             Prior day high/low is the most respected intraday pair there is.
+//   SESSION   opening range high and low. Strong on equities, and it fits a
+//             plan that already ends at a fixed time.
+//   STRUCTURE confirmed HTF swing pivots. A pivot needs bars either side to
+//             confirm, so it cannot repaint once drawn.
+//
+//   Left out deliberately: Fibonacci, because choosing the anchor swing is a
+//   judgement call and there is always a fib that fits. Trendlines, because
+//   they are not reliably codable. Anything with a tunable lookback that
+//   invites optimising until the backtest improves.
+//
+// WHAT MAKES A LEVEL "GOOD":
+//   Two things, both counted here.
+//   TOUCHES    how often price has traded into the zone and left again. A level
+//              rejected three times means something; one touched once is a bar.
+//   CONFLUENCE how many other levels sit within tolerance of it. Prior week low
+//              sitting on a 4H pivot on the opening range low is a real zone.
+//   Set Minimum Confluence to 2 and the screen clears to a handful of zones.
+//
+// ZONE HEIGHT IS ONE BRICK:
+//   Height is the renko brick size, computed the same way the renko engine
+//   computes it - same sizing timeframe, same reset, same multiplier. So the
+//   zones scale with volatility on their own, and a zone is exactly as thick as
+//   the smallest move the renko considers meaningful. Match these settings to
+//   your renko scripts or the zones will not mean the same thing.
+//
+// NON-REPAINTING:
+//   Every level is read from a COMPLETED higher-timeframe bar with lookahead
+//   off. Prior day means yesterday, closed. Pivots need bars either side before
+//   they are accepted. Nothing here knows the future.
+// ============================================================================
+
+indicator("SR Zones", shorttitle="SR", overlay=true,
+     max_boxes_count = 500, max_labels_count = 500, max_bars_back = 1000)
+
+// ── WHICH LEVELS ───────────────────────────────────────────────────────────
+grp_lv = "━━━ LEVELS ━━━"
+use_pd   = input.bool(true,  "Prior Day High / Low",   group=grp_lv)
+use_pw   = input.bool(true,  "Prior Week High / Low",  group=grp_lv)
+use_pm   = input.bool(true,  "Prior Month High / Low", group=grp_lv)
+use_or   = input.bool(true,  "Opening Range High / Low", group=grp_lv)
+or_mins  = input.int(30, "  Opening Range (minutes)", minval=5, maxval=240, step=5, group=grp_lv)
+use_piv  = input.bool(true,  "HTF Swing Pivots", group=grp_lv)
+piv_tf   = input.timeframe("240", "  Pivot Timeframe", tooltip="The structure timeframe. 240 is 4 hours - the same HTF the plan uses for direction.", group=grp_lv)
+piv_len  = input.int(3, "  Pivot Strength (bars each side)", minval=1, maxval=20, tooltip="Bars required either side of the pivot before it is accepted. Higher means fewer and more significant. It also means the pivot is confirmed later - that delay is what stops it repainting.", group=grp_lv)
+piv_keep = input.int(8, "  Keep Last N Pivots (each side)", minval=1, maxval=20, group=grp_lv)
+
+// ── STRENGTH ───────────────────────────────────────────────────────────────
+grp_st = "━━━ STRENGTH ━━━"
+min_conf  = input.int(1, "Minimum Confluence To Draw", minval=1, maxval=5, tooltip="How many levels must agree within tolerance before a zone is drawn. 1 draws everything. 2 clears the screen to zones where two independent sources landed in the same place, which is the whole reason to bother measuring confluence.", group=grp_st)
+conf_tol  = input.float(0.5, "Confluence Tolerance (bricks)", minval=0.1, maxval=5.0, step=0.1, tooltip="How close two levels must be to count as agreeing. Measured in bricks, so it scales with volatility like everything else.", group=grp_st)
+touch_look= input.int(500, "Touch Lookback (bars)", minval=50, maxval=1000, group=grp_st)
+min_touch = input.int(0, "Minimum Touches To Draw", minval=0, maxval=20, tooltip="0 draws untested levels too. A fresh prior-day high has no touches yet and is still worth seeing.", group=grp_st)
+
+// ── ZONE HEIGHT (matches the renko brick) ──────────────────────────────────
+grp_bx = "━━━ ZONE HEIGHT ━━━"
+h_mode   = input.string("Renko Brick", "Height From", options=["Renko Brick", "Fixed", "Percent Of Price"], group=grp_bx)
+h_fixed  = input.float(0.0020, "  Fixed Height", minval=0.0, step=0.0001, group=grp_bx)
+h_pct    = input.float(0.10, "  Percent Of Price", minval=0.001, maxval=5.0, step=0.01, group=grp_bx)
+size_tf  = input.timeframe("30", "  Sizing Bar Timeframe", tooltip="Match this to your renko scripts.", group=grp_bx)
+size_rst = input.string("Monthly", "  Size Reset", options=["Daily", "Weekly", "Monthly"], group=grp_bx)
+size_mult= input.float(1.0, "  Size Multiplier", minval=0.05, maxval=20.0, step=0.05, group=grp_bx)
+
+// ── DRAWING ────────────────────────────────────────────────────────────────
+grp_dr = "━━━ DRAWING ━━━"
+sup_col  = input.color(color.new(#1D9E75, 75), "Support Zone", group=grp_dr)
+res_col  = input.color(color.new(#F23645, 75), "Resistance Zone", group=grp_dr)
+strong_a = input.int(45, "Strong Zone Opacity", minval=0, maxval=100, tooltip="Zones with confluence of 2 or more are drawn at this opacity - heavier than the rest, so the good ones stand out without reading the labels.", group=grp_dr)
+extend_r = input.int(30, "Extend Right (bars)", minval=0, maxval=200, group=grp_dr)
+show_lab = input.bool(true, "Show Zone Labels", group=grp_dr)
+lab_size = input.string("Small", "Label Size", options=["Tiny", "Small", "Normal"], group=grp_dr)
+
+// ============================================================================
+// BRICK SIZE — same construction the renko engine uses
+// ============================================================================
+sym = ticker.standard(syminfo.tickerid)
+
+f_avg(_reset) =>
+    bool _new = ta.change(time(_reset)) != 0
+    var float[] _r  = array.new_float()
+    var float _held = na
+    if _new
+        if array.size(_r) > 0
+            _held := array.median(_r)
+            array.clear(_r)
+    if array.size(_r) < 10000
+        array.push(_r, high - low)
+    _held
+
+rst_tf = size_rst == "Daily" ? "1D" : size_rst == "Weekly" ? "1W" : "1M"
+avg_rng = request.security(sym, size_tf, f_avg(rst_tf), lookahead = barmerge.lookahead_off)
+
+brick = h_mode == "Fixed" ? h_fixed : h_mode == "Percent Of Price" ? close * h_pct / 100.0 : (na(avg_rng) ? na : avg_rng * size_mult)
+brick := na(brick) or brick <= 0 ? syminfo.mintick * 10 : brick
+
+// ============================================================================
+// LEVELS
+// ============================================================================
+// Every one from a COMPLETED higher-timeframe bar, lookahead off. [1] is what
+// makes "prior day" mean yesterday rather than today so far.
+pdh = request.security(sym, "D", high[1], lookahead = barmerge.lookahead_off)
+pdl = request.security(sym, "D", low[1],  lookahead = barmerge.lookahead_off)
+pwh = request.security(sym, "W", high[1], lookahead = barmerge.lookahead_off)
+pwl = request.security(sym, "W", low[1],  lookahead = barmerge.lookahead_off)
+pmh = request.security(sym, "M", high[1], lookahead = barmerge.lookahead_off)
+pml = request.security(sym, "M", low[1],  lookahead = barmerge.lookahead_off)
+
+// Opening range: first N minutes of each session, frozen once the window ends.
+var float orh = na
+var float orl = na
+var int   or_start = na
+new_sess = ta.change(time("D")) != 0
+if new_sess
+    or_start := time
+    orh := high
+    orl := low
+else if not na(or_start) and (time - or_start) < or_mins * 60000
+    orh := math.max(orh, high)
+    orl := math.min(orl, low)
+
+// HTF swing pivots. pivothigh returns a value only once the required bars have
+// formed on BOTH sides, so a pivot cannot appear and then vanish.
+ph_raw = request.security(sym, piv_tf, ta.pivothigh(high, piv_len, piv_len), lookahead = barmerge.lookahead_off)
+pl_raw = request.security(sym, piv_tf, ta.pivotlow(low,  piv_len, piv_len), lookahead = barmerge.lookahead_off)
+
+var float[] piv_hi = array.new_float()
+var float[] piv_lo = array.new_float()
+if not na(ph_raw) and (array.size(piv_hi) == 0 or array.get(piv_hi, array.size(piv_hi) - 1) != ph_raw)
+    array.push(piv_hi, ph_raw)
+    if array.size(piv_hi) > piv_keep
+        array.shift(piv_hi)
+if not na(pl_raw) and (array.size(piv_lo) == 0 or array.get(piv_lo, array.size(piv_lo) - 1) != pl_raw)
+    array.push(piv_lo, pl_raw)
+    if array.size(piv_lo) > piv_keep
+        array.shift(piv_lo)
+
+// ============================================================================
+// BUILD, SCORE AND DRAW  (last bar only)
+// ============================================================================
+var box[]   zboxes = array.new_box()
+var label[] zlabs  = array.new_label()
+
+if barstate.islast
+    for _i = 0 to array.size(zboxes) - 1
+        box.delete(array.get(zboxes, _i))
+    array.clear(zboxes)
+    for _i = 0 to array.size(zlabs) - 1
+        label.delete(array.get(zlabs, _i))
+    array.clear(zlabs)
+
+    float[] lv = array.new_float()
+    string[] nm = array.new_string()
+
+    if use_pd and not na(pdh)
+        array.push(lv, pdh), array.push(nm, "PDH")
+    if use_pd and not na(pdl)
+        array.push(lv, pdl), array.push(nm, "PDL")
+    if use_pw and not na(pwh)
+        array.push(lv, pwh), array.push(nm, "PWH")
+    if use_pw and not na(pwl)
+        array.push(lv, pwl), array.push(nm, "PWL")
+    if use_pm and not na(pmh)
+        array.push(lv, pmh), array.push(nm, "PMH")
+    if use_pm and not na(pml)
+        array.push(lv, pml), array.push(nm, "PML")
+    if use_or and not na(orh)
+        array.push(lv, orh), array.push(nm, "ORH")
+    if use_or and not na(orl)
+        array.push(lv, orl), array.push(nm, "ORL")
+    if use_piv
+        for _i = 0 to array.size(piv_hi) - 1
+            array.push(lv, array.get(piv_hi, _i)), array.push(nm, "PIV")
+        for _i = 0 to array.size(piv_lo) - 1
+            array.push(lv, array.get(piv_lo, _i)), array.push(nm, "PIV")
+
+    float _tol = conf_tol * brick
+    float _hh  = brick / 2.0
+
+    for _i = 0 to array.size(lv) - 1
+        float _p = array.get(lv, _i)
+
+        // Confluence: how many OTHER levels sit within tolerance.
+        int _conf = 1
+        for _j = 0 to array.size(lv) - 1
+            if _j != _i and math.abs(array.get(lv, _j) - _p) <= _tol
+                _conf += 1
+
+        // Only the lowest member of a cluster draws, so a three-way confluence
+        // paints one zone rather than three stacked on top of each other.
+        bool _lowest = true
+        for _j = 0 to array.size(lv) - 1
+            if _j != _i and math.abs(array.get(lv, _j) - _p) <= _tol and array.get(lv, _j) < _p
+                _lowest := false
+
+        // Touches: bars whose range contained the zone. A level price has
+        // traded into and left again has been tested; one it has not reached
+        // is untested, which is different from weak.
+        int _touch = 0
+        for _b = 0 to touch_look - 1
+            if low[_b] <= _p + _hh and high[_b] >= _p - _hh
+                _touch += 1
+
+        if _lowest and _conf >= min_conf and _touch >= min_touch
+            bool  _is_sup = _p < close
+            color _base   = _is_sup ? sup_col : res_col
+            color _fill   = _conf >= 2 ? color.new(_base, strong_a) : _base
+            box _bx = box.new(bar_index - touch_look < 0 ? 0 : bar_index - 200, _p + _hh,
+                 bar_index + extend_r, _p - _hh,
+                 border_color = color.new(_base, 20),
+                 border_width = _conf >= 2 ? 2 : 1,
+                 bgcolor = _fill)
+            array.push(zboxes, _bx)
+
+            if show_lab
+                string _t = array.get(nm, _i) + (_conf >= 2 ? " x" + str.tostring(_conf) : "") + "  " + str.tostring(_touch) + "t"
+                label _lb = label.new(bar_index + extend_r, _p, _t,
+                     style = label.style_label_left,
+                     color = color.new(_base, 30),
+                     textcolor = color.white,
+                     size = lab_size == "Tiny" ? size.tiny : lab_size == "Normal" ? size.normal : size.small)
+                array.push(zlabs, _lb)
