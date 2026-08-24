@@ -221,12 +221,30 @@ if rk_box_new
 // a slow chart the engine still sees the round trips that a single chart bar
 // would have hidden. When the feed is the same as or slower than the chart it
 // has nothing finer to hand back, and the plain request below is used instead.
+// WHICH SOURCE IS CORRECT DEPENDS ON THE CHART, NOT ON PREFERENCE.
+//   Chart COARSER than the feed - a 4-hour chart with a 5-minute feed - hides
+//     the round trips inside each bar, so intrabars are genuinely needed.
+//   Chart AT OR FINER than the feed - a 1-minute chart with a 1-minute feed -
+//     already carries the feed at full fidelity in its own bars. Asking for
+//     intrabars there returns nothing, because there is nothing finer to
+//     return, and treating that as missing data was simply wrong. Nothing is
+//     hidden, so nothing needs recovering.
+rk_feed_s   = timeframe.in_seconds(renko_feed_tf)
+rk_chart_s  = timeframe.in_seconds()
+rk_need_ltf = rk_chart_s > rk_feed_s
+
 rk_fc = request.security_lower_tf(rk_sym, renko_feed_tf, close)
 rk_fh = request.security_lower_tf(rk_sym, renko_feed_tf, high)
 rk_fl = request.security_lower_tf(rk_sym, renko_feed_tf, low)
 
 rk_sc = request.security(rk_sym, renko_feed_tf, close, lookahead = barmerge.lookahead_off)
+rk_sh = request.security(rk_sym, renko_feed_tf, high,  lookahead = barmerge.lookahead_off)
+rk_sl = request.security(rk_sym, renko_feed_tf, low,   lookahead = barmerge.lookahead_off)
 rk_cc = request.security(rk_sym, timeframe.period, close, lookahead = barmerge.lookahead_off)
+
+// Do we have usable prices this bar? When intrabars are needed, that means the
+// request returned some. When they are not, the plain feed value is enough.
+rk_have = rk_need_ltf ? array.size(rk_fc) > 0 : not na(rk_sc)
 rk_sh = request.security(rk_sym, renko_feed_tf, high,  lookahead = barmerge.lookahead_off)
 rk_sl = request.security(rk_sym, renko_feed_tf, low,   lookahead = barmerge.lookahead_off)
 
@@ -255,7 +273,7 @@ int rk_bricks = 0
 // timeframes and worked on others with no obvious pattern.
 if not na(rk_box) and rk_box > 0 and (rk_box_new or na(rk_top))
     float _seed = na(rk_sc) ? rk_cc : rk_sc
-    if array.size(rk_fc) > 0
+    if rk_need_ltf and array.size(rk_fc) > 0
         _seed := array.get(rk_fc, 0)
     if not na(_seed)
         rk_bot := math.floor(_seed / rk_box) * rk_box
@@ -274,9 +292,11 @@ if barstate.isconfirmed and not na(rk_box) and rk_box > 0 and not na(rk_top)
     // `size > 0 ? array.get(a, i) : fallback` looks equivalent but is not:
     // Pine can evaluate both sides, and array.get on an empty array is a
     // runtime error that stops the script dead.
-    float[] _cs = array.size(rk_fc) > 0 ? rk_fc : array.from(na(rk_sc) ? rk_cc : rk_sc)
-    float[] _hs = array.size(rk_fh) > 0 ? rk_fh : array.from(na(rk_sh) ? rk_cc : rk_sh)
-    float[] _ls = array.size(rk_fl) > 0 ? rk_fl : array.from(na(rk_sl) ? rk_cc : rk_sl)
+    bool _use_ltf = rk_need_ltf and array.size(rk_fc) > 0
+    float _one_c = na(rk_sc) ? rk_cc : rk_sc
+    float[] _cs = _use_ltf ? rk_fc : array.from(_one_c)
+    float[] _hs = _use_ltf ? rk_fh : array.from(na(rk_sh) ? _one_c : rk_sh)
+    float[] _ls = _use_ltf ? rk_fl : array.from(na(rk_sl) ? _one_c : rk_sl)
     for _s = 0 to array.size(_cs) - 1
         float _c = array.get(_cs, _s)
         float _h = array.size(_hs) > _s ? array.get(_hs, _s) : _c
@@ -341,7 +361,6 @@ rk_ok_short = not renko_on or (rk_dir == -1 and rk_run >= renko_confirm)
 // know whether it had any. It is still worth measuring: the shading and the
 // coverage figure show which stretches were built from coarse fallback prices
 // and will therefore change as the intrabar window slides forward.
-rk_have  = array.size(rk_fc) > 0
 rk_valid = true
 
 // ── DATA COVERAGE ──────────────────────────────────────────────────────────
