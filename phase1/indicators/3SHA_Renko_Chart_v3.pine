@@ -231,8 +231,6 @@ rk_sl = request.security(rk_sym, renko_feed_tf, low,   lookahead = barmerge.look
 // Do we have usable prices this bar? When intrabars are needed, that means the
 // request returned some. When they are not, the plain feed value is enough.
 rk_have = rk_need_ltf ? array.size(rk_fc) > 0 : not na(rk_sc)
-rk_sh = request.security(rk_sym, renko_feed_tf, high,  lookahead = barmerge.lookahead_off)
-rk_sl = request.security(rk_sym, renko_feed_tf, low,   lookahead = barmerge.lookahead_off)
 
 // ── BRICK STATE ────────────────────────────────────────────────────────────
 // rk_dir: 1 up, -1 down, 0 not yet established. rk_run: bricks in a row.
