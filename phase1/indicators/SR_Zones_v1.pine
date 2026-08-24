@@ -155,12 +155,18 @@ var box[]   zboxes = array.new_box()
 var label[] zlabs  = array.new_label()
 
 if barstate.islast
-    for _i = 0 to array.size(zboxes) - 1
-        box.delete(array.get(zboxes, _i))
-    array.clear(zboxes)
-    for _i = 0 to array.size(zlabs) - 1
-        label.delete(array.get(zlabs, _i))
-    array.clear(zlabs)
+    // Every one of these loops is guarded on size > 0. In Pine,
+    // `for i = 0 to array.size(x) - 1` on an EMPTY array becomes `for 0 to -1`,
+    // and Pine counts DOWNWARD rather than skipping - so the body runs once
+    // with index 0 and array.get throws. It reads as safe and is not.
+    if array.size(zboxes) > 0
+        for _i = 0 to array.size(zboxes) - 1
+            box.delete(array.get(zboxes, _i))
+        array.clear(zboxes)
+    if array.size(zlabs) > 0
+        for _i = 0 to array.size(zlabs) - 1
+            label.delete(array.get(zlabs, _i))
+        array.clear(zlabs)
 
     float[] lv = array.new_float()
     string[] nm = array.new_string()
@@ -181,55 +187,60 @@ if barstate.islast
         array.push(lv, orh), array.push(nm, "ORH")
     if use_or and not na(orl)
         array.push(lv, orl), array.push(nm, "ORL")
-    if use_piv
+    if use_piv and array.size(piv_hi) > 0
         for _i = 0 to array.size(piv_hi) - 1
             array.push(lv, array.get(piv_hi, _i)), array.push(nm, "PIV")
+    if use_piv and array.size(piv_lo) > 0
         for _i = 0 to array.size(piv_lo) - 1
             array.push(lv, array.get(piv_lo, _i)), array.push(nm, "PIV")
 
     float _tol = conf_tol * brick
     float _hh  = brick / 2.0
 
-    for _i = 0 to array.size(lv) - 1
-        float _p = array.get(lv, _i)
+    // Guarded for the same reason. With every level type switched off, or
+    // early in the history before any higher-timeframe bar has completed, lv
+    // is legitimately empty and there is simply nothing to draw.
+    if array.size(lv) > 0
+        for _i = 0 to array.size(lv) - 1
+            float _p = array.get(lv, _i)
 
-        // Confluence: how many OTHER levels sit within tolerance.
-        int _conf = 1
-        for _j = 0 to array.size(lv) - 1
-            if _j != _i and math.abs(array.get(lv, _j) - _p) <= _tol
-                _conf += 1
+            // Confluence: how many OTHER levels sit within tolerance.
+            int _conf = 1
+            for _j = 0 to array.size(lv) - 1
+                if _j != _i and math.abs(array.get(lv, _j) - _p) <= _tol
+                    _conf += 1
 
-        // Only the lowest member of a cluster draws, so a three-way confluence
-        // paints one zone rather than three stacked on top of each other.
-        bool _lowest = true
-        for _j = 0 to array.size(lv) - 1
-            if _j != _i and math.abs(array.get(lv, _j) - _p) <= _tol and array.get(lv, _j) < _p
-                _lowest := false
+            // Only the lowest member of a cluster draws, so a three-way confluence
+            // paints one zone rather than three stacked on top of each other.
+            bool _lowest = true
+            for _j = 0 to array.size(lv) - 1
+                if _j != _i and math.abs(array.get(lv, _j) - _p) <= _tol and array.get(lv, _j) < _p
+                    _lowest := false
 
-        // Touches: bars whose range contained the zone. A level price has
-        // traded into and left again has been tested; one it has not reached
-        // is untested, which is different from weak.
-        int _touch = 0
-        for _b = 0 to touch_look - 1
-            if low[_b] <= _p + _hh and high[_b] >= _p - _hh
-                _touch += 1
+            // Touches: bars whose range contained the zone. A level price has
+            // traded into and left again has been tested; one it has not reached
+            // is untested, which is different from weak.
+            int _touch = 0
+            for _b = 0 to touch_look - 1
+                if low[_b] <= _p + _hh and high[_b] >= _p - _hh
+                    _touch += 1
 
-        if _lowest and _conf >= min_conf and _touch >= min_touch
-            bool  _is_sup = _p < close
-            color _base   = _is_sup ? sup_col : res_col
-            color _fill   = _conf >= 2 ? color.new(_base, strong_a) : _base
-            box _bx = box.new(bar_index - touch_look < 0 ? 0 : bar_index - 200, _p + _hh,
-                 bar_index + extend_r, _p - _hh,
-                 border_color = color.new(_base, 20),
-                 border_width = _conf >= 2 ? 2 : 1,
-                 bgcolor = _fill)
-            array.push(zboxes, _bx)
+            if _lowest and _conf >= min_conf and _touch >= min_touch
+                bool  _is_sup = _p < close
+                color _base   = _is_sup ? sup_col : res_col
+                color _fill   = _conf >= 2 ? color.new(_base, strong_a) : _base
+                box _bx = box.new(bar_index - touch_look < 0 ? 0 : bar_index - 200, _p + _hh,
+                     bar_index + extend_r, _p - _hh,
+                     border_color = color.new(_base, 20),
+                     border_width = _conf >= 2 ? 2 : 1,
+                     bgcolor = _fill)
+                array.push(zboxes, _bx)
 
-            if show_lab
-                string _t = array.get(nm, _i) + (_conf >= 2 ? " x" + str.tostring(_conf) : "") + "  " + str.tostring(_touch) + "t"
-                label _lb = label.new(bar_index + extend_r, _p, _t,
-                     style = label.style_label_left,
-                     color = color.new(_base, 30),
-                     textcolor = color.white,
-                     size = lab_size == "Tiny" ? size.tiny : lab_size == "Normal" ? size.normal : size.small)
-                array.push(zlabs, _lb)
+                if show_lab
+                    string _t = array.get(nm, _i) + (_conf >= 2 ? " x" + str.tostring(_conf) : "") + "  " + str.tostring(_touch) + "t"
+                    label _lb = label.new(bar_index + extend_r, _p, _t,
+                         style = label.style_label_left,
+                         color = color.new(_base, 30),
+                         textcolor = color.white,
+                         size = lab_size == "Tiny" ? size.tiny : lab_size == "Normal" ? size.normal : size.small)
+                    array.push(zlabs, _lb)
