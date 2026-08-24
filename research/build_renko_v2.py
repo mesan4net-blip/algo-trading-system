@@ -35,21 +35,22 @@ def strict_engine():
 
     edits = [
         # 1. no single-bar fallback series
-        ("""rk_sc = request.security(rk_sym, renko_feed_tf, close, lookahead = barmerge.lookahead_off)
-rk_cc = request.security(rk_sym, timeframe.period, close, lookahead = barmerge.lookahead_off)""",
-         """// V2: NO FALLBACK SERIES.
-// v1 kept a single chart-bar close to fall back on when the intrabar request
-// came back empty. That fallback is exactly the repainting problem: the
-// intrabar window slides forward with time, so a bar computed from fine data
-// today gets recomputed from coarse data later, and the bricks change. Here
-// there is nothing to fall back to, so a bar with no intrabar data simply
-// produces no bricks and the state stops advancing.
-rk_have = array.size(rk_fc) > 0"""),
+        ("""rk_cc = request.security(rk_sym, timeframe.period, close, lookahead = barmerge.lookahead_off)""",
+         """// V2: NO CHART-BAR FALLBACK WHEN INTRABARS ARE NEEDED.
+// v1 falls back to the chart bar's own close when the intrabar request comes
+// back empty. That fallback is the repainting problem: the intrabar window
+// slides forward with time, so a bar computed from fine data today gets
+// recomputed from coarse data later and its bricks change.
+//
+// Note this only applies where intrabars are NEEDED - a chart coarser than the
+// feed. On a chart at or below the feed timeframe there is nothing finer to
+// fetch and nothing hidden, so the plain feed value is the correct source and
+// there is nothing to refuse. rk_have already makes that distinction."""),
 
         # 2. seed only from real intrabar data
         ("""if not na(rk_box) and rk_box > 0 and (rk_box_new or na(rk_top))
     float _seed = na(rk_sc) ? rk_cc : rk_sc
-    if array.size(rk_fc) > 0
+    if rk_need_ltf and array.size(rk_fc) > 0
         _seed := array.get(rk_fc, 0)
     if not na(_seed)
         rk_bot := math.floor(_seed / rk_box) * rk_box
@@ -67,7 +68,9 @@ rk_have = array.size(rk_fc) > 0"""),
 // intrabar window, which differs per timeframe, so it failed on some
 // timeframes and worked on others with no obvious pattern.
 if rk_have and not na(rk_box) and rk_box > 0 and (rk_box_new or na(rk_top))
-    float _seed = array.get(rk_fc, 0)
+    float _seed = rk_sc
+    if rk_need_ltf and array.size(rk_fc) > 0
+        _seed := array.get(rk_fc, 0)
     if not na(_seed)
         rk_bot := math.floor(_seed / rk_box) * rk_box
         rk_top := rk_bot + rk_box"""),
@@ -78,18 +81,27 @@ if rk_have and not na(rk_box) and rk_box > 0 and (rk_box_new or na(rk_top))
     // `size > 0 ? array.get(a, i) : fallback` looks equivalent but is not:
     // Pine can evaluate both sides, and array.get on an empty array is a
     // runtime error that stops the script dead.
-    float[] _cs = array.size(rk_fc) > 0 ? rk_fc : array.from(na(rk_sc) ? rk_cc : rk_sc)
-    float[] _hs = array.size(rk_fh) > 0 ? rk_fh : array.from(na(rk_sh) ? rk_cc : rk_sh)
-    float[] _ls = array.size(rk_fl) > 0 ? rk_fl : array.from(na(rk_sl) ? rk_cc : rk_sl)
+    bool _use_ltf = rk_need_ltf and array.size(rk_fc) > 0
+    float _one_c = na(rk_sc) ? rk_cc : rk_sc
+    float[] _cs = _use_ltf ? rk_fc : array.from(_one_c)
+    float[] _hs = _use_ltf ? rk_fh : array.from(na(rk_sh) ? _one_c : rk_sh)
+    float[] _ls = _use_ltf ? rk_fl : array.from(na(rk_sl) ? _one_c : rk_sl)
     for _s = 0 to array.size(_cs) - 1
         float _c = array.get(_cs, _s)
         float _h = array.size(_hs) > _s ? array.get(_hs, _s) : _c
         float _l = array.size(_ls) > _s ? array.get(_ls, _s) : _c""",
          """if barstate.isconfirmed and rk_have and not na(rk_box) and rk_box > 0 and not na(rk_top)
-    for _s = 0 to array.size(rk_fc) - 1
-        float _c = array.get(rk_fc, _s)
-        float _h = array.size(rk_fh) > _s ? array.get(rk_fh, _s) : _c
-        float _l = array.size(rk_fl) > _s ? array.get(rk_fl, _s) : _c"""),
+    // Same two sources as v1. The difference is upstream: rk_have is false when
+    // intrabars are needed and none arrived, so this block never runs on a bar
+    // whose prices would have had to be guessed.
+    bool _use_ltf = rk_need_ltf and array.size(rk_fc) > 0
+    float[] _cs = _use_ltf ? rk_fc : array.from(rk_sc)
+    float[] _hs = _use_ltf ? rk_fh : array.from(na(rk_sh) ? rk_sc : rk_sh)
+    float[] _ls = _use_ltf ? rk_fl : array.from(na(rk_sl) ? rk_sc : rk_sl)
+    for _s = 0 to array.size(_cs) - 1
+        float _c = array.get(_cs, _s)
+        float _h = array.size(_hs) > _s ? array.get(_hs, _s) : _c
+        float _l = array.size(_ls) > _s ? array.get(_ls, _s) : _c"""),
 
         # 4. gate also requires live intrabar data
         ("""rk_ok_long  = not renko_on or (rk_dir ==  1 and rk_run >= renko_confirm)
@@ -101,15 +113,10 @@ rk_ok_long  = not renko_on or (rk_have and rk_dir ==  1 and rk_run >= renko_conf
 rk_ok_short = not renko_on or (rk_have and rk_dir == -1 and rk_run >= renko_confirm)"""),
     ]
 
-    # rk_sh / rk_sl were only ever read by the removed fallback. Leaving them
-    # would burn two of the forty permitted security calls for nothing.
-    dead = """rk_sh = request.security(rk_sym, renko_feed_tf, high,  lookahead = barmerge.lookahead_off)
-rk_sl = request.security(rk_sym, renko_feed_tf, low,   lookahead = barmerge.lookahead_off)
-"""
-    if dead in e:
-        e = e.replace(dead, "")
-    elif "rk_sh" in e:
-        sys.exit("FAIL: rk_sh present but not in the expected form")
+    # rk_sh / rk_sl used to be dead here and were stripped. They are live again:
+    # on a chart at or below the feed timeframe the plain feed values are the
+    # correct source, and wick mode needs the high and low. Stripping them now
+    # would leave the formation block referring to variables that do not exist.
 
     for old, new in edits:
         if e.count(old) != 1:
@@ -152,7 +159,6 @@ SHIM_V1 = """
 // know whether it had any. It is still worth measuring: the shading and the
 // coverage figure show which stretches were built from coarse fallback prices
 // and will therefore change as the intrabar window slides forward.
-rk_have  = array.size(rk_fc) > 0
 rk_valid = true
 """
 
