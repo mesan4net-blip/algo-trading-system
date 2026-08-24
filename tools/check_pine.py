@@ -63,7 +63,11 @@ def check(path):
     dec = set(re.findall(r'^\s*(?:var\s+\w+\s+|float\[\]\s+|bool\s+|float\s+|int\s+|string\s+|color\s+)?([a-zA-Z_]\w*)\s*:?=', code, re.M))
     for tup in re.findall(r'\[([^\]]+)\]\s*=', code):
         dec |= {x.strip() for x in tup.split(",")}
-    for v in sorted(set(re.findall(r'(?<![\w.])((?:rk|use|trail|stop|be|tp1|target|giveback|time_stop|entry|peak|risk|traded|armed|go|flip)_[a-z0-9_]+)', code))):
+    # Require a word boundary AFTER the name too. Without it, rk_pT matched the
+    # prefix rk_p and reported an undeclared variable that does not exist - a
+    # false alarm reported three times before it was worth fixing. A checker
+    # that cries wolf gets ignored, which is worse than no checker.
+    for v in sorted(set(re.findall(r'(?<![\w.])((?:rk|use|trail|stop|be|tp1|target|giveback|time_stop|entry|peak|risk|traded|armed|go|flip)_[a-z0-9_]+)(?![\w])', code))):
         if v not in dec:
             problems.append(f"  undeclared identifier: {v}")
 
