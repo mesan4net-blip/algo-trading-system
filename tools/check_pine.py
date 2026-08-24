@@ -59,6 +59,19 @@ def check(path):
                     f"  line {i+1}: `for 0 to array.size({arr}) - 1` is not guarded on size > 0\n"
                     f"      empty array -> `for 0 to -1` -> Pine counts down -> index error")
 
+    # Duplicate top-level declarations. Pine rejects a second `name = ...` at
+    # the same scope (CE10095). Easy to introduce when generated text is spliced
+    # in and the original declaration sits further down the block.
+    seen = {}
+    for i, line in enumerate(src.split("\n")):
+        m = re.match(r'^([a-zA-Z_]\w*)\s*=(?!=)', line)
+        if m:
+            n = m.group(1)
+            if n in seen:
+                problems.append(f"  line {i+1}: `{n}` is declared again (first at line {seen[n]}) - CE10095")
+            else:
+                seen[n] = i + 1
+
     code = "\n".join(l for l in src.split("\n") if not l.lstrip().startswith("//"))
     dec = set(re.findall(r'^\s*(?:var\s+\w+\s+|float\[\]\s+|bool\s+|float\s+|int\s+|string\s+|color\s+)?([a-zA-Z_]\w*)\s*:?=', code, re.M))
     for tup in re.findall(r'\[([^\]]+)\]\s*=', code):
