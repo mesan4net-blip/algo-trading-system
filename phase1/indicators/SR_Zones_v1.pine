@@ -42,6 +42,146 @@
 //   Every level is read from a COMPLETED higher-timeframe bar with lookahead
 //   off. Prior day means yesterday, closed. Pivots need bars either side before
 //   they are accepted. Nothing here knows the future.
+//
+// ============================================================================
+// SETTINGS REFERENCE — every parameter, what it does, what to set it to
+// ============================================================================
+//
+// ── LEVELS: which lines get considered ─────────────────────────────────────
+//
+//   Prior Day High / Low
+//     Yesterday's highest and lowest traded price. Two levels. The most
+//     watched intraday pair there is, because every desk can see them and
+//     nobody has to agree on how to calculate them.
+//     Leave ON.
+//
+//   Prior Week High / Low
+//   Prior Month High / Low
+//     The same idea on longer clocks. Slower, heavier, respected less often
+//     but harder when they are. Prior month matters most on a swing chart and
+//     can be noise on a 5-minute one.
+//     ON for both unless the chart gets crowded.
+//
+//   Opening Range High / Low
+//     The high and low of the first stretch of today's session. Price spends
+//     the day either breaking out of that box or rejecting off its edges.
+//     ON for equities. Meaningless on 24-hour forex, where there is no open.
+//
+//   Opening Range (minutes)
+//     How long that opening window lasts. 30 means the first half hour.
+//     Shorter reacts sooner and is noisier; longer is steadier but the levels
+//     arrive late in a short session.
+//     30 for QQQ. 60 if the first half hour is usually chaotic.
+//
+//   HTF Swing Pivots
+//     Turning points on a higher timeframe - a bar that is higher than the
+//     bars either side of it, or lower. This is "structure": where price
+//     actually turned before, rather than where a clock ticked over.
+//     ON.
+//
+//   Pivot Timeframe
+//     Which bars to find those turns on. 240 is 4 hours, matching the HTF the
+//     plan uses for direction. Lower gives more and smaller turns; higher
+//     gives fewer and more significant ones.
+//     240 to match the plan. D if you want only major structure.
+//
+//   Pivot Strength (bars each side)
+//     How many bars must be lower on BOTH sides before a high counts as a
+//     pivot. At 3, a bar needs three lower bars to its left and three to its
+//     right. Raise it and you get fewer, more meaningful turns.
+//     The trade-off is timing, not quality: a pivot cannot be confirmed until
+//     those bars exist, so strength 3 means the level appears 3 bars after the
+//     actual turn. That delay is exactly what stops it repainting.
+//     3 is a reasonable balance. 5 for major structure only.
+//
+//   Keep Last N Pivots (each side)
+//     How many recent pivots to remember, per direction. 8 keeps the last
+//     eight swing highs and the last eight swing lows. Old pivots far from
+//     current price are clutter.
+//     8. Drop to 4 if the chart is busy.
+//
+// ── STRENGTH: which of those levels are worth drawing ──────────────────────
+//
+//   Minimum Confluence To Draw
+//     THE MOST IMPORTANT SETTING HERE. Confluence is how many independent
+//     levels land in the same place. Prior week low sitting on a 4H pivot
+//     sitting on the opening range low is one zone with three reasons to
+//     exist - that is a real level. A single line nobody else is watching is
+//     not.
+//       1 = draw everything. Expect a crowded screen.
+//       2 = only where two independent sources agree. Usually a handful of
+//           zones, which is the point.
+//       3 = only the very strongest. Sometimes nothing at all.
+//     Start at 1 to see what exists, then move to 2 and trade from those.
+//
+//   Confluence Tolerance (bricks)
+//     How close two levels have to be before they count as the same place.
+//     Measured in bricks so it scales with volatility rather than being a
+//     fixed number of pips that means different things in different markets.
+//     0.5 means within half a brick.
+//     Too small and nothing ever agrees. Too large and everything does, which
+//     makes the confluence number meaningless.
+//     0.5. Raise toward 1.0 only if genuine clusters are being split.
+//
+//   Touch Lookback (bars)
+//     How far back to look when counting touches. 500 bars.
+//     Longer finds more history but is slower and includes levels from a
+//     regime that no longer applies.
+//
+//   Minimum Touches To Draw
+//     A touch is a bar whose range reached into the zone. A level rejected
+//     three times has proved something; one price has never reached has not
+//     yet been tested - which is different from weak, and often more
+//     interesting, because untested levels are where the reaction is sharpest.
+//     0 shows untested levels too. That is why it defaults to 0.
+//     Raise to 2 or 3 only if you specifically want proven levels.
+//
+// ── ZONE HEIGHT: how thick the bands are ───────────────────────────────────
+//
+//   Height From
+//     Renko Brick     - height equals one brick. The zone is then exactly as
+//                       thick as the smallest move your renko treats as
+//                       meaningful, and it scales with volatility by itself.
+//     Fixed           - a number you type. Never changes.
+//     Percent Of Price- scales with the instrument's price level.
+//     Renko Brick, so the zones and the bricks speak the same language.
+//
+//   Fixed Height / Percent Of Price
+//     Only used by their matching mode. Ignored otherwise.
+//
+//   Sizing Bar Timeframe / Size Reset / Size Multiplier
+//     These three compute the brick, and they are the SAME three settings the
+//     renko scripts use. Brick = the median range of the sizing bars over the
+//     last reset period, times the multiplier.
+//     MATCH THESE TO YOUR RENKO SCRIPTS. If they differ, a zone here is not
+//     one brick tall on the chart you are trading, and the confluence
+//     tolerance means something different too.
+//
+// ── DRAWING: appearance only, nothing here changes a level ─────────────────
+//
+//   Support Zone / Resistance Zone
+//     Colours. A level below current price draws as support, above as
+//     resistance. That flips automatically as price moves through it.
+//
+//   Strong Zone Opacity
+//     Zones with confluence of 2 or more are drawn at this opacity, heavier
+//     than the rest, so the good ones are obvious without reading labels.
+//     Lower number = more solid.
+//
+//   Extend Right (bars)
+//     How far past the last bar the zone stretches. Purely visual.
+//
+//   Show Zone Labels / Label Size
+//     The label reads like "PWL x3  7t": the source, the confluence count
+//     when it is 2 or more, and the touch count. PDH/PDL is prior day,
+//     PWH/PWL prior week, PMH/PML prior month, ORH/ORL opening range, PIV a
+//     swing pivot.
+//
+// ── SUGGESTED STARTING POINT ───────────────────────────────────────────────
+//   All level types ON, Minimum Confluence 1 for the first look, then 2.
+//   Tolerance 0.5, Touch Lookback 500, Minimum Touches 0.
+//   Height From Renko Brick, with the three sizing settings copied exactly
+//   from whichever renko script you are running.
 // ============================================================================
 
 indicator("SR Zones", shorttitle="SR", overlay=true,
