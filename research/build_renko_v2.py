@@ -47,7 +47,7 @@ rk_cc = request.security(rk_sym, timeframe.period, close, lookahead = barmerge.l
 rk_have = array.size(rk_fc) > 0"""),
 
         # 2. seed only from real intrabar data
-        ("""if rk_box_new and not na(rk_box) and rk_box > 0
+        ("""if not na(rk_box) and rk_box > 0 and (rk_box_new or na(rk_top))
     float _seed = na(rk_sc) ? rk_cc : rk_sc
     if array.size(rk_fc) > 0
         _seed := array.get(rk_fc, 0)
@@ -58,7 +58,15 @@ rk_have = array.size(rk_fc) > 0"""),
 // chart that is one bar along, on a 4-hour chart forty-eight bars along, so
 // seeding off the last would start the grid in a different cell on each chart.
 // V2 seeds only from real intrabar data. No data, no grid.
-if rk_box_new and rk_have and not na(rk_box) and rk_box > 0
+// SEED WHENEVER THERE IS NO GRID YET, not only on the bar the brick size first
+// appears. This was a real fault: rk_box_new is true for exactly one bar, and
+// if that bar happened to have no intrabar data the grid was never anchored,
+// rk_top stayed na, and formation - which requires a grid - never ran again.
+// The indicator then drew nothing for the whole chart. Whether it struck
+// depended on where the chart's first bar sat relative to TradingView's
+// intrabar window, which differs per timeframe, so it failed on some
+// timeframes and worked on others with no obvious pattern.
+if rk_have and not na(rk_box) and rk_box > 0 and (rk_box_new or na(rk_top))
     float _seed = array.get(rk_fc, 0)
     if not na(_seed)
         rk_bot := math.floor(_seed / rk_box) * rk_box
