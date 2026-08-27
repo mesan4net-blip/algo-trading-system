@@ -205,6 +205,7 @@ input string          InpTag                     = "AsiaBO";                    
 int    g_brokerWinterOffsetSec = 0;
 double g_pointsToPrice         = 0.0;
 int    g_objCount              = 0;
+double g_pipSize               = 0.0;
 int    g_csvHandle             = INVALID_HANDLE;
 
 //--- history tracking: the fix for v1's "only the last two days" bug
@@ -219,6 +220,11 @@ int    g_nLosses[SLOT_COUNT];
 int    g_nFlat[SLOT_COUNT];
 int    g_nPartials[SLOT_COUNT];
 double g_sumR[SLOT_COUNT];
+double g_sumPips[SLOT_COUNT];
+double g_wonPips[SLOT_COUNT];
+double g_lostPips[SLOT_COUNT];
+double g_bestPips[SLOT_COUNT];
+double g_worstPips[SLOT_COUNT];
 double g_bestR[SLOT_COUNT];
 double g_worstR[SLOT_COUNT];
 int    g_nDays[SLOT_COUNT];
@@ -704,7 +710,7 @@ void OpenCSV()
      }
    FileWrite(g_csvHandle, "day", "slot", "dir", "level_high", "level_low",
              "atr5", "entry_time", "entry", "stop_level", "target",
-             "partial_taken", "exit_time", "exit", "reason", "r_multiple");
+             "partial_taken", "exit_time", "exit", "reason", "r_multiple", "pips");
   }
 
 void CloseCSV()
@@ -785,6 +791,12 @@ void FinishTrade(const int slot, const int dir, const int reason,
                      ? InpPartialClosePct / 100.0 : 0.0;
    double r = fraction * rTarget + (1.0 - fraction) * rRest;
 
+   //--- the same blend in pips: the slice banked at the target plus the
+   //--- runner, weighted by how much of the position each carried
+   double pipsTarget = ((dir == DIR_LONG) ? (tp - entry) : (entry - tp)) / g_pipSize;
+   double pipsRest   = ((dir == DIR_LONG) ? (exitPrice - entry) : (entry - exitPrice)) / g_pipSize;
+   double pips = fraction * pipsTarget + (1.0 - fraction) * pipsRest;
+
    bool touchedTarget = partialTaken || (reason == EXIT_TARGET);
 
    g_nTrades[slot]++;
@@ -792,6 +804,13 @@ void FinishTrade(const int slot, const int dir, const int reason,
    if(g_nTrades[slot] == 1) { g_bestR[slot] = r; g_worstR[slot] = r; }
    g_bestR[slot]  = MathMax(g_bestR[slot], r);
    g_worstR[slot] = MathMin(g_worstR[slot], r);
+
+   g_sumPips[slot] += pips;
+   if(pips >= 0.0) g_wonPips[slot]  += pips;
+   else            g_lostPips[slot] += pips;
+   if(g_nTrades[slot] == 1) { g_bestPips[slot] = pips; g_worstPips[slot] = pips; }
+   g_bestPips[slot]  = MathMax(g_bestPips[slot], pips);
+   g_worstPips[slot] = MathMin(g_worstPips[slot], pips);
 
    if(touchedTarget)          g_nWins[slot]++;
    if(partialTaken)           g_nPartials[slot]++;
@@ -849,7 +868,8 @@ void FinishTrade(const int slot, const int dir, const int reason,
                 TimeToString(exitTime, TIME_DATE|TIME_MINUTES),
                 DoubleToString(exitPrice, Digits),
                 reasonText,
-                DoubleToString(r, 3));
+                DoubleToString(r, 3),
+                DoubleToString(pips, 1));
   }
 
 //+------------------------------------------------------------------+
@@ -1194,6 +1214,11 @@ void ShowSummary(const int daysWalked)
                               n - g_nLosses[slot] - g_nFlat[slot], g_nLosses[slot], g_nFlat[slot]);
          text += StringFormat("        total %+.2fR   avg %+.2fR   best %+.2fR   worst %+.2fR\n",
                               g_sumR[slot], g_sumR[slot] / n, g_bestR[slot], g_worstR[slot]);
+         text += StringFormat("        PIPS  %+.1f total   %+.1f avg   won %+.1f   lost %.1f\n",
+                              g_sumPips[slot], g_sumPips[slot] / n,
+                              g_wonPips[slot], g_lostPips[slot]);
+         text += StringFormat("              best %+.1f   worst %+.1f\n",
+                              g_bestPips[slot], g_worstPips[slot]);
         }
 
       int skipped = g_nSkipNoBreak[slot] + g_nSkipTarget[slot]
@@ -1242,6 +1267,8 @@ void Rebuild()
       g_nTrades[slot] = 0;  g_nWins[slot]   = 0;  g_nLosses[slot] = 0;
       g_nFlat[slot]   = 0;  g_nPartials[slot] = 0;
       g_sumR[slot]    = 0;  g_bestR[slot]   = 0;  g_worstR[slot]  = 0;
+      g_sumPips[slot] = 0;  g_wonPips[slot] = 0;  g_lostPips[slot] = 0;
+      g_bestPips[slot] = 0; g_worstPips[slot] = 0;
       g_nDays[slot]   = 0;
       g_nSkipNoBreak[slot] = 0;  g_nSkipTarget[slot] = 0;
       g_nSkipFilter[slot]  = 0;  g_nSkipNoData[slot] = 0;
@@ -1331,6 +1358,8 @@ int OnInit()
      }
 
    g_pointsToPrice = Point;
+   //--- a pip is ten points on a 3 or 5 digit feed, one point otherwise
+   g_pipSize       = Point * ((Digits == 3 || Digits == 5) ? 10.0 : 1.0);
    g_lastBarCount  = 0;
    ResolveBrokerClock();
 

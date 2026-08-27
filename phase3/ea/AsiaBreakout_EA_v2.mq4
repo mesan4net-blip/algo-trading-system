@@ -245,6 +245,7 @@ input color           InpColorSL                 = clrFireBrick;                
 //+------------------------------------------------------------------+
 int      g_brokerWinterOffsetSec = 0;
 double   g_pointsToPrice         = 0.0;
+double   g_pipSize               = 0.0;
 int      g_stopLevelPoints       = 0;
 
 datetime g_dayKey                = 0;
@@ -1282,8 +1283,13 @@ bool CloseDir(const int slot, const int dir, const string reason)
                   InpTradeComment, SlotName(slot), DirName(dir), ticket, reason,
                   DoubleToString(exitPrice, Digits), DoubleToString(profit, 2));
 
+      double pips = (exitPrice > 0.0 && OrderOpenPrice() > 0.0)
+                    ? ((type == OP_BUY) ? (exitPrice - OrderOpenPrice())
+                                        : (OrderOpenPrice() - exitPrice)) / g_pipSize
+                    : 0.0;
       LogRow("EXIT", slot, dir, exitPrice, g_exitLevel[slot][dx], 0, lots,
-             StringFormat("%s pl=%s", reason, DoubleToString(profit, 2)));
+             StringFormat("%s pl=%s pips=%s", reason,
+                          DoubleToString(profit, 2), DoubleToString(pips, 1)));
      }
 
    if(closedSomething)
@@ -1392,9 +1398,11 @@ void TakePartialAtTarget(const int slot, const int dir)
                DoubleToString(lots, 2), DoubleToString(booked, 2),
                g_ticket[slot][dx]);
 
+   double partialPips = ((dir == DIR_LONG) ? (target - g_entryPrice[slot][dx])
+                                           : (g_entryPrice[slot][dx] - target)) / g_pipSize;
    LogRow("PARTIAL", slot, dir, target, g_exitLevel[slot][dx], target, partialLots,
-          StringFormat("target touched pl=%s runner=%s",
-                       DoubleToString(booked, 2),
+          StringFormat("target touched pl=%s pips=%s runner=%s",
+                       DoubleToString(booked, 2), DoubleToString(partialPips, 1),
                        DoubleToString(lots - partialLots, 2)));
   }
 
@@ -1434,8 +1442,11 @@ void ReconcileClosed(const int slot, const int dir)
                InpTradeComment, SlotName(slot), DirName(dir), ticket, reason,
                DoubleToString(exitPrice, Digits), DoubleToString(profit, 2));
 
+   double pips = ((dir == DIR_LONG) ? (exitPrice - OrderOpenPrice())
+                                    : (OrderOpenPrice() - exitPrice)) / g_pipSize;
    LogRow("EXIT", slot, dir, exitPrice, g_exitLevel[slot][dx], tp, OrderLots(),
-          StringFormat("%s pl=%s", reason, DoubleToString(profit, 2)));
+          StringFormat("%s pl=%s pips=%s", reason,
+                       DoubleToString(profit, 2), DoubleToString(pips, 1)));
 
    ForgetTrade(slot, dx);
   }
@@ -2048,6 +2059,8 @@ int OnInit()
       return(INIT_PARAMETERS_INCORRECT);
 
    g_pointsToPrice   = Point;
+   //--- a pip is ten points on a 3 or 5 digit feed, one point otherwise
+   g_pipSize         = Point * ((Digits == 3 || Digits == 5) ? 10.0 : 1.0);
    g_maxOpenPerDir   = 1;
    g_stopLevelPoints = (int)MarketInfo(Symbol(), MODE_STOPLEVEL);
    PrintFormat("[%s] %s: digits=%d point=%s broker stop level=%d points",
