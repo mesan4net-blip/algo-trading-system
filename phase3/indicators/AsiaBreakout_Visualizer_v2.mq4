@@ -93,8 +93,9 @@ enum ENUM_CANDLE_SL_SRC
 
 enum ENUM_REVERSAL_FROM
   {
-   REV_FROM_ENTRY = 0,  // Measured against the ENTRY price
-   REV_FROM_PEAK  = 1   // Measured against the BEST price reached (giveback)
+   REV_FROM_LEVEL = 0,  // From the LEVEL that was broken (back inside the range)
+   REV_FROM_ENTRY = 1,  // From the ENTRY price
+   REV_FROM_PEAK  = 2   // From the BEST price reached (giveback)
   };
 
 enum ENUM_STOP_STYLE
@@ -156,7 +157,7 @@ input bool            InpMoveStopAfterPartial    = false;                       
 input string          _s05b                      = "=== REVERSAL EXIT ===";     // .
 input bool            InpUseReversalExit         = false;                       // Close the trade if price reverses
 input double          InpReversalPctOfRange      = 50.0;                        // Reversal size, as % of the range
-input ENUM_REVERSAL_FROM InpReversalFrom         = REV_FROM_ENTRY;              // Reversal measured from what
+input ENUM_REVERSAL_FROM InpReversalFrom         = REV_FROM_LEVEL;              // Reversal measured from what
 
 input string          _s06                       = "=== 5-DAY ATR ===";         // .
 input int             InpATRDays                 = 5;                           // ATR lookback in daily bars
@@ -998,9 +999,9 @@ int ReplayDay(const datetime nyClose, const int slot)
       return(0);
      }
 
-   //--- the range the trade is built on: the Asia range in Asia mode, the
-   //--- trigger candle's height in candle mode
-   double rangeHeight = stopHigh - stopLow;
+   //--- the range price broke out of, and which the reversal exit measures
+   //--- against: the Asia range in Asia mode, the trigger candle in candle mode
+   double rangeHeight = levelHigh - levelLow;
 
    double targetDist = InpTPPctOfATR / 100.0 * atr5;
    double buffer     = InpBreakoutBufferPoints * g_pointsToPrice;
@@ -1074,7 +1075,10 @@ int ReplayDay(const datetime nyClose, const int slot)
          if(InpUseReversalExit && InpReversalPctOfRange > 0.0 && rangeHeight > 0.0)
            {
             double give = rangeHeight * InpReversalPctOfRange / 100.0;
-            double from = (InpReversalFrom == REV_FROM_PEAK) ? bestOf[dx] : entryOf[dx];
+            double from = 0.0;
+            if(InpReversalFrom == REV_FROM_PEAK)       from = bestOf[dx];
+            else if(InpReversalFrom == REV_FROM_ENTRY) from = entryOf[dx];
+            else                                       from = (dir == DIR_LONG) ? levelHigh : levelLow;
             revLevel = (dir == DIR_LONG) ? from - give : from + give;
            }
 
@@ -1273,7 +1277,9 @@ void ShowSummary(const int daysWalked)
    if(InpUseReversalExit)
       text += StringFormat("Reversal exit: %.0f%% of the range back from %s\n",
                            InpReversalPctOfRange,
-                           (InpReversalFrom == REV_FROM_PEAK ? "the best price" : "entry"));
+                           (InpReversalFrom == REV_FROM_PEAK  ? "the best price" :
+                            InpReversalFrom == REV_FROM_ENTRY ? "entry" :
+                                                                "the level it broke"));
    text += StringFormat("Structural stop: %s\n",
                         (InpStopStyle == STOP_ON_TOUCH
                          ? "ON TOUCH - fills the moment price reaches the level"

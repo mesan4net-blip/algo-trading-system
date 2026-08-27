@@ -459,19 +459,29 @@ mode, the **trigger candle's height** in candle mode (or the Asia range there
 too, if `InpCandleSLSource = CSL_ASIA_SESSION`). It is captured at entry, so a
 new session replacing the levels cannot move the line under an open trade.
 
-## The two references
+## The three references
 
 | | Meaning | The line |
 |---|---|---|
+| `REV_FROM_LEVEL` **(default)** | Price came back **inside** the range and then fell this far below the level it broke | Fixed at the level, independent of the fill |
 | `REV_FROM_ENTRY` | How far wrong the trade may go from where it started | Fixed, set at entry |
 | `REV_FROM_PEAK` | How much of a move already made it may give back | Follows price up, never down |
 
-With a 40-point Asia range and 50%, a long entered at 1.1000:
+Take a **1.1560 – 1.1600** Asia range (40 pips) with a long filled at 1.1604:
 
-- **From entry** — closes at 1.0980, whatever price does first.
-- **From peak** — if price runs to 1.1050, the line follows to 1.1030. Until
-  price moves in your favour the two behave identically, because the peak
-  starts at the entry.
+| Setting | 25% | 50% | 100% |
+|---|---|---|---|
+| **From level** | exit **1.1590** | exit 1.1580 | exit 1.1560 |
+| From entry | exit 1.1594 | exit 1.1584 | exit 1.1564 |
+
+**From level** is the one that answers "price got back inside the range and
+kept going". It measures from the range top, so a bad fill four pips above the
+level does not shift the exit — which is the point. At 100% it lands exactly on
+the Asia low, which is the structural stop, so keep it below 100 for the rule
+to mean anything.
+
+**From peak** only differs once the trade is in profit: at 50%, a long that
+runs to 1.1650 has its line follow up to 1.1630.
 
 ## When it fires
 
@@ -482,8 +492,8 @@ reverses can trigger the giveback within itself.
 
 ## Worth knowing before you switch it on
 
-**It usually fires before the structural stop.** Half the Asia range back from
-entry is, by definition, closer than the full range. So with this on, the
+**It usually fires before the structural stop.** Half the range back from the
+broken level is, by definition, closer than the full range. So with this on, the
 structural stop rarely gets hit — the reversal exit becomes your real stop,
 and the Asia low becomes a backstop. Set the percentage above 100 if you want
 the reversal to sit *outside* the structural stop and act only as a
