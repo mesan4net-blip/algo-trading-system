@@ -411,3 +411,32 @@ that does **not** land on a candle boundary, such as a 09:15 Asia end with
 `InpEntryTF = H1`. The straddling candle is excluded, so the range is measured
 to 09:00. Keep session times on the boundaries of your entry timeframe and this
 never arises.
+
+---
+
+# Panel appearance
+
+The panel used to be written with `Comment()`, which MT4 renders at a fixed
+small size that cannot be changed. It is now drawn from objects — a background
+box plus one label per line — which allows a real font, size and colours, any
+corner, and a button to fold it away.
+
+| Input | Default | What it does |
+|---|---|---|
+| `InpPanelFontSize` | 10 | Font size. This is the one you were looking for |
+| `InpPanelFont` | Consolas | **Use a monospaced font.** MT4 gives no way to measure rendered text, so the box width is estimated per character — a proportional font makes columns drift and the box mis-fit |
+| `InpPanelTextColor` | black | Text |
+| `InpPanelBgColor` | white | Background |
+| `InpPanelBorderColor` | silver | Border |
+| `InpPanelCorner` | upper left | Which corner it sits in. All four work; on a bottom corner the lines are reversed internally so the text still reads top to bottom |
+| `InpPanelX` / `InpPanelY` | 12 / 14 | Offset from that corner |
+| `InpPanelWidthChars` | 0 | Fix the width in characters. 0 fits to the longest line |
+| `InpPanelShowToggle` | true | Show the **HIDE STATS / SHOW STATS** button above the panel |
+
+`InpShowPanel` still turns the whole thing off, button included.
+
+Both programs carry the same panel, and their objects are namespaced apart
+(`ABPNLE_` for the EA, `ABPNLI_` for the visualiser) so you can run them on the
+same chart without them fighting over the same names. They will overlap
+visually, though — put one in a different corner, or give them different
+`InpPanelY` values.

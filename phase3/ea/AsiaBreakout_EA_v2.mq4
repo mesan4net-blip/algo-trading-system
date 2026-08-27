@@ -232,6 +232,18 @@ input int             InpMagicAsia               = 8801;                        
 input int             InpMagicTrigger            = 8802;                        // Magic number, trigger candle flavor
 input string          InpTradeComment            = "AsiaBO";                    // Order comment prefix
 
+input string          _sPanel                    = "=== PANEL LOOK ===";        // .
+input int             InpPanelFontSize           = 10;                          // Panel font size
+input string          InpPanelFont               = "Consolas";                  // Panel font (use a MONOSPACED one)
+input color           InpPanelTextColor          = clrBlack;                    // Panel text colour
+input color           InpPanelBgColor            = clrWhite;                    // Panel background colour
+input color           InpPanelBorderColor        = clrSilver;                   // Panel border colour
+input ENUM_BASE_CORNER InpPanelCorner            = CORNER_LEFT_UPPER;           // Which corner the panel sits in
+input int             InpPanelX                  = 12;                          // Panel offset from that corner, across
+input int             InpPanelY                  = 14;                          // Panel offset from that corner, down
+input int             InpPanelWidthChars         = 0;                           // Fixed panel width in characters (0 = fit)
+input bool            InpPanelShowToggle         = true;                        // Show the hide/show button
+
 input string          _s13                       = "=== DISPLAY / LOG ===";     // .
 input bool            InpDrawObjects             = true;                        // Draw levels and boxes on the chart
 input bool            InpShowPanel               = true;                        // Show the status panel
@@ -246,6 +258,7 @@ input color           InpColorSL                 = clrFireBrick;                
 int      g_brokerWinterOffsetSec = 0;
 double   g_pointsToPrice         = 0.0;
 double   g_pipSize               = 0.0;
+string   g_panelBlock            = "";
 int      g_stopLevelPoints       = 0;
 
 datetime g_dayKey                = 0;
@@ -1815,7 +1828,7 @@ void UpdatePanel(const datetime nowBroker)
   {
    if(!InpShowPanel)
      {
-      Comment("");
+      PanelClear();
       return;
      }
 
@@ -1900,7 +1913,8 @@ void UpdatePanel(const datetime nowBroker)
       text += "\n";
      }
 
-   Comment(text);
+   g_panelBlock = text;
+   PanelRender(text);
   }
 
 void ClearObjects()
@@ -1936,6 +1950,200 @@ void RollDay(const datetime nowBroker)
    PrintFormat("[%s] New trading day %s   ATR%d = %s (%.0f pts)",
                InpTradeComment, TimeToString(today, TIME_DATE), InpATRDays,
                DoubleToString(g_atr5, Digits), g_atr5 / g_pointsToPrice);
+  }
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//|  PANEL                                                           |
+//|                                                                  |
+//|  Comment() writes at a fixed, small size that MT4 will not let    |
+//|  you change, so the panel is drawn instead: a rectangle label as  |
+//|  the background and one text label per line. That buys a chosen   |
+//|  font and size, real colours, any corner of the chart, and a      |
+//|  button to fold it away.                                         |
+//|                                                                  |
+//|  Use a MONOSPACED font (Consolas, Courier New) or the columns     |
+//|  will not line up - MT4 gives no way to measure rendered text,    |
+//|  so the box is sized from a per-character width estimate.         |
+//+------------------------------------------------------------------+
+#define PANEL_PREFIX "ABPNLE_"   // E = EA; the visualiser uses ABPNLI_
+#define PANEL_TOGGLE PANEL_PREFIX "toggle"
+
+bool g_panelOpen = true;
+
+bool PanelCornerIsLower()
+  {
+   return(InpPanelCorner == CORNER_LEFT_LOWER || InpPanelCorner == CORNER_RIGHT_LOWER);
+  }
+
+ENUM_ANCHOR_POINT PanelAnchor()
+  {
+   switch(InpPanelCorner)
+     {
+      case CORNER_RIGHT_UPPER: return(ANCHOR_RIGHT_UPPER);
+      case CORNER_LEFT_LOWER:  return(ANCHOR_LEFT_LOWER);
+      case CORNER_RIGHT_LOWER: return(ANCHOR_RIGHT_LOWER);
+     }
+   return(ANCHOR_LEFT_UPPER);
+  }
+
+void PanelClear()
+  {
+   long chart = ChartID();
+   for(int i = ObjectsTotal(chart, -1, -1) - 1; i >= 0; i--)
+     {
+      string name = ObjectName(chart, i, -1, -1);
+      if(StringFind(name, PANEL_PREFIX) == 0)
+         ObjectDelete(chart, name);
+     }
+  }
+
+void PanelDropLines()
+  {
+   long chart = ChartID();
+   for(int i = ObjectsTotal(chart, -1, -1) - 1; i >= 0; i--)
+     {
+      string name = ObjectName(chart, i, -1, -1);
+      if(StringFind(name, PANEL_PREFIX "L") == 0 || name == PANEL_PREFIX "bg")
+         ObjectDelete(chart, name);
+     }
+  }
+
+void PanelButton(const int x, const int y, const int w, const int h)
+  {
+   if(!InpPanelShowToggle)
+      return;
+
+   if(ObjectFind(0, PANEL_TOGGLE) < 0)
+      ObjectCreate(0, PANEL_TOGGLE, OBJ_BUTTON, 0, 0, 0);
+
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_CORNER,    InpPanelCorner);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_XSIZE,     w);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_YSIZE,     h);
+   ObjectSetString (0, PANEL_TOGGLE, OBJPROP_TEXT,      g_panelOpen ? "HIDE STATS" : "SHOW STATS");
+   ObjectSetString (0, PANEL_TOGGLE, OBJPROP_FONT,      InpPanelFont);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_FONTSIZE,  InpPanelFontSize);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_COLOR,     InpPanelTextColor);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_BGCOLOR,   InpPanelBgColor);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_BORDER_COLOR, InpPanelBorderColor);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_STATE,     false);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_HIDDEN,    true);
+  }
+
+void PanelLine(const int index, const int x, const int y, const string text)
+  {
+   string name = StringFormat("%sL%03d", PANEL_PREFIX, index);
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+
+   ObjectSetInteger(0, name, OBJPROP_CORNER,     InpPanelCorner);
+   ObjectSetInteger(0, name, OBJPROP_ANCHOR,     PanelAnchor());
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE,  x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE,  y);
+   ObjectSetString (0, name, OBJPROP_TEXT,       (StringLen(text) > 0 ? text : " "));
+   ObjectSetString (0, name, OBJPROP_FONT,       InpPanelFont);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE,   InpPanelFontSize);
+   ObjectSetInteger(0, name, OBJPROP_COLOR,      InpPanelTextColor);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN,     true);
+  }
+
+//--- render a whole block of text, newline separated
+void PanelRender(const string block)
+  {
+   if(!InpShowPanel)
+     {
+      PanelClear();
+      return;
+     }
+
+   int lineH = (int)MathRound(InpPanelFontSize * 1.75) + 2;
+   int charW = (int)MathRound(InpPanelFontSize * 0.62) + 1;
+   int padX  = 8;
+   int padY  = 6;
+   int btnH  = InpPanelShowToggle ? (lineH + 8) : 0;
+   int btnW  = 11 * charW + 2 * padX;
+
+   PanelButton(InpPanelX, InpPanelY, btnW, btnH);
+
+   if(!g_panelOpen)
+     {
+      PanelDropLines();
+      ChartRedraw();
+      return;
+     }
+
+   string lines[];
+   int count = StringSplit(block, '\n', lines);
+   if(count <= 0)
+     {
+      PanelDropLines();
+      return;
+     }
+
+   //--- MT4 cannot measure rendered text, so the width is estimated from the
+   //--- longest line. A monospaced font makes the estimate accurate.
+   int widest = 0;
+   for(int i = 0; i < count; i++)
+      widest = MathMax(widest, StringLen(lines[i]));
+
+   int boxW = (InpPanelWidthChars > 0 ? InpPanelWidthChars : widest) * charW + 2 * padX;
+   int boxH = count * lineH + 2 * padY;
+   int top  = InpPanelY + btnH + (btnH > 0 ? 4 : 0);
+
+   //--- background
+   string bg = PANEL_PREFIX "bg";
+   if(ObjectFind(0, bg) < 0)
+      ObjectCreate(0, bg, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, bg, OBJPROP_CORNER,       InpPanelCorner);
+   ObjectSetInteger(0, bg, OBJPROP_XDISTANCE,    InpPanelX);
+   ObjectSetInteger(0, bg, OBJPROP_YDISTANCE,    top);
+   ObjectSetInteger(0, bg, OBJPROP_XSIZE,        boxW);
+   ObjectSetInteger(0, bg, OBJPROP_YSIZE,        boxH);
+   ObjectSetInteger(0, bg, OBJPROP_BGCOLOR,      InpPanelBgColor);
+   ObjectSetInteger(0, bg, OBJPROP_BORDER_TYPE,  BORDER_FLAT);
+   ObjectSetInteger(0, bg, OBJPROP_COLOR,        InpPanelBorderColor);
+   ObjectSetInteger(0, bg, OBJPROP_BACK,         false);
+   ObjectSetInteger(0, bg, OBJPROP_SELECTABLE,   false);
+   ObjectSetInteger(0, bg, OBJPROP_HIDDEN,       true);
+
+   //--- lines. On a bottom corner the y axis runs upwards, so the order is
+   //--- reversed to keep the text reading top to bottom either way.
+   int textX = InpPanelX + padX;
+   for(int i = 0; i < count; i++)
+     {
+      int y = PanelCornerIsLower()
+              ? top + padY + (count - 1 - i) * lineH
+              : top + padY + i * lineH;
+      PanelLine(i, textX, y, lines[i]);
+     }
+
+   //--- drop any labels left over from a longer previous render
+   long chart = ChartID();
+   for(int i = ObjectsTotal(chart, -1, -1) - 1; i >= 0; i--)
+     {
+      string name = ObjectName(chart, i, -1, -1);
+      if(StringFind(name, PANEL_PREFIX "L") != 0)
+         continue;
+      int idx = (int)StringToInteger(StringSubstr(name, StringLen(PANEL_PREFIX) + 1));
+      if(idx >= count)
+         ObjectDelete(chart, name);
+     }
+
+   ChartRedraw();
+  }
+
+void PanelHandleClick(const string clicked, const string block)
+  {
+   if(clicked != PANEL_TOGGLE)
+      return;
+   g_panelOpen = !g_panelOpen;
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_STATE, false);
+   PanelRender(block);
   }
 
 //+------------------------------------------------------------------+
@@ -2138,7 +2346,16 @@ int OnInit()
 void OnDeinit(const int reason)
   {
    ClearObjects();
+   PanelClear();
    Comment("");
+  }
+
+//--- the toggle button
+void OnChartEvent(const int id, const long &lparam, const double &dparam,
+                  const string &sparam)
+  {
+   if(id == CHARTEVENT_OBJECT_CLICK)
+      PanelHandleClick(sparam, g_panelBlock);
   }
 
 void OnTick()
