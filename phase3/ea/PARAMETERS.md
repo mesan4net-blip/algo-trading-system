@@ -376,3 +376,38 @@ and says so, and raises a visible alert if even that is impossible.
 The entry log, the panel and the init messages now name the two stops
 separately, so the broker's S/L field can no longer be mistaken for the
 structural stop.
+
+---
+
+# Timeframes: one candle, not three
+
+**Changed.** `InpSignalTF` and `InpRangeTF` are gone, replaced by a single
+`InpEntryTF`.
+
+| Input | Default | What it does |
+|---|---|---|
+| `InpEntryTF` | H1 | Measures the Asia high and low, **and** its close beyond the range is the entry, **and** its close back beyond the level is the stop |
+| `InpTriggerTF` | H1 | The trigger candle in trigger-candle mode. Nothing else uses it |
+
+The first `InpEntryTF` candle that closes beyond the range is the trade. Set it
+to M5 and the first M5 close beyond the range takes it; set it to H1 and you
+wait for an hourly close.
+
+## Why the old split was wrong
+
+`InpRangeTF` measured the box; a separate `InpSignalTF` decided the breakout.
+With the shipped defaults that meant M15 boxes and H1 entries — so entries
+landed on candles that had nothing to do with the boxes on screen, and looked
+arbitrary. That was a design error, not a fault in the trading logic.
+
+The split also bought nothing. When the session boundaries fall on candle
+boundaries — which they do for every default session here — **the high and low
+of a window are identical whether you read them from M5 candles or H1 candles**,
+because an H1 high simply *is* the highest of its M15 highs. Measuring finer
+was never changing the box. All it did was decouple the box from the entry.
+
+The one case where the measuring timeframe still matters: a session boundary
+that does **not** land on a candle boundary, such as a 09:15 Asia end with
+`InpEntryTF = H1`. The straddling candle is excluded, so the range is measured
+to 09:00. Keep session times on the boundaries of your entry timeframe and this
+never arises.

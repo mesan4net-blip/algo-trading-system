@@ -15,8 +15,8 @@
 //      label           the blended R multiple and how it ended
 //
 //  v2 MATCHES EA v2
-//    - three independent timeframes: trigger candle, signal (entry/stop),
-//      and the Asia range measurement
+//    - one candle size measures the Asia range AND provides the breakout
+//      close and the stop close; the trigger candle keeps its own
 //    - scaled exit: a slice at the target on TOUCH, the runner to the NY
 //      close, with the close-based stop still governing the runner
 //    - repeat entries: up to InpMaxTradesPerDay a day, at most one open per
@@ -125,10 +125,9 @@ input ENUM_STOP_STYLE InpStopStyle               = STOP_ON_CLOSE;               
 input bool            InpTradeLongs              = true;                        // Replay long breakouts
 input bool            InpTradeShorts             = true;                        // Replay short breakouts
 
-input string          _s02                       = "=== TIMEFRAMES (all independent) ==="; // .
-input ENUM_TIMEFRAMES InpSignalTF                = PERIOD_H1;                   // BREAKOUT / ENTRY / STOP close timeframe
-input ENUM_TIMEFRAMES InpTriggerTF               = PERIOD_H1;                   // TRIGGER CANDLE timeframe
-input ENUM_TIMEFRAMES InpRangeTF                 = PERIOD_M15;                  // Asia range measurement timeframe
+input string          _s02                       = "=== TIMEFRAMES ===";        // .
+input ENUM_TIMEFRAMES InpEntryTF                 = PERIOD_H1;                   // ASIA RANGE + BREAKOUT / ENTRY / STOP candle
+input ENUM_TIMEFRAMES InpTriggerTF               = PERIOD_H1;                   // TRIGGER CANDLE candle
 
 input string          _s03                       = "=== ASIA SESSION ===";      // .
 input ENUM_TZ         InpAsiaTZ                  = TZ_UTC;                      // Timezone the Asia hours are given in
@@ -729,7 +728,7 @@ void CloseCSV()
 //+------------------------------------------------------------------+
 int HistoryFingerprint()
   {
-   int total = iBars(NULL, InpSignalTF) + iBars(NULL, InpRangeTF)
+   int total = iBars(NULL, InpEntryTF) + iBars(NULL, InpEntryTF)
              + iBars(NULL, PERIOD_D1);
    if(InpMode != MODE_ASIA_RANGE)
       total += iBars(NULL, InpTriggerTF);
@@ -750,14 +749,14 @@ string DescribeTF(const string label, const ENUM_TIMEFRAMES tf, const int needed
 //--- what the requested replay depth actually needs, per timeframe
 void BuildHistoryReport()
   {
-   int signalMin = PeriodSeconds(InpSignalTF) / 60;
-   int rangeMin  = PeriodSeconds(InpRangeTF) / 60;
+   int signalMin = PeriodSeconds(InpEntryTF) / 60;
+   int rangeMin  = PeriodSeconds(InpEntryTF) / 60;
    int needSignal = (signalMin > 0) ? InpDaysToShow * (1440 / MathMax(1, signalMin)) : 0;
    int needRange  = (rangeMin  > 0) ? InpDaysToShow * (1440 / MathMax(1, rangeMin))  : 0;
    int needDaily  = InpDaysToShow + InpATRDays + 10;
 
-   g_historyReport  = DescribeTF("signal", InpSignalTF, needSignal);
-   g_historyReport += DescribeTF("range",  InpRangeTF,  needRange);
+   g_historyReport  = DescribeTF("signal", InpEntryTF, needSignal);
+   g_historyReport += DescribeTF("range",  InpEntryTF,  needRange);
    g_historyReport += DescribeTF("daily",  PERIOD_D1,   needDaily);
    if(InpMode != MODE_ASIA_RANGE)
       g_historyReport += DescribeTF("trigger", InpTriggerTF, InpDaysToShow);
@@ -867,7 +866,7 @@ string DirName(const int dir) { return(dir == DIR_LONG ? "LONG" : "SHORT"); }
 
 int ReplayDay(const datetime nyClose, const int slot)
   {
-   int period = PeriodSeconds(InpSignalTF);
+   int period = PeriodSeconds(InpEntryTF);
    if(period <= 0)
       return(0);
 
@@ -882,7 +881,7 @@ int ReplayDay(const datetime nyClose, const int slot)
                            InpAsiaStartHour, InpAsiaStartMin,
                            InpAsiaEndHour,   InpAsiaEndMin,
                            asiaStart, asiaEnd);
-   bool asiaOk = RangeInWindow(InpRangeTF, asiaStart, asiaEnd, asiaHigh, asiaLow);
+   bool asiaOk = RangeInWindow(InpEntryTF, asiaStart, asiaEnd, asiaHigh, asiaLow);
 
    if(slot == SLOT_ASIA)
      {
@@ -952,8 +951,8 @@ int ReplayDay(const datetime nyClose, const int slot)
    double targetDist = InpTPPctOfATR / 100.0 * atr5;
    double buffer     = InpBreakoutBufferPoints * g_pointsToPrice;
 
-   int startShift = iBarShift(NULL, InpSignalTF, levelReadyAt, false);
-   int endShift   = iBarShift(NULL, InpSignalTF, nyClose - 1, false);
+   int startShift = iBarShift(NULL, InpEntryTF, levelReadyAt, false);
+   int endShift   = iBarShift(NULL, InpEntryTF, nyClose - 1, false);
 
    //--- shift 0 is the bar still forming. Replaying the day in progress must
    //--- stop at the last CLOSED bar or the drawing would change under itself,
@@ -987,15 +986,15 @@ int ReplayDay(const datetime nyClose, const int slot)
    //--- 3. walk the day ---------------------------------------------------
    for(int k = startShift; k >= endShift; k--)
      {
-      datetime barOpen  = iTime(NULL, InpSignalTF, k);
+      datetime barOpen  = iTime(NULL, InpEntryTF, k);
       datetime barClose = barOpen + period;
       if(barClose <= levelReadyAt) continue;
       if(barOpen  >= nyClose)      break;
       sawBar = true;
 
-      double hi = iHigh(NULL, InpSignalTF, k);
-      double lo = iLow(NULL, InpSignalTF, k);
-      double cl = iClose(NULL, InpSignalTF, k);
+      double hi = iHigh(NULL, InpEntryTF, k);
+      double lo = iLow(NULL, InpEntryTF, k);
+      double cl = iClose(NULL, InpEntryTF, k);
 
       //--- 3a. manage what is already open on this bar
       for(int dx = 0; dx < DX_COUNT; dx++)
@@ -1089,7 +1088,7 @@ int ReplayDay(const datetime nyClose, const int slot)
       int entryShift = k - 1;
       if(entryShift < endShift) continue;  // no bar left in the day to open on
 
-      double entry = iOpen(NULL, InpSignalTF, entryShift);
+      double entry = iOpen(NULL, InpEntryTF, entryShift);
       double structural = (dir == DIR_LONG) ? stopLow : stopHigh;
       double tp         = (dir == DIR_LONG) ? stopLow + targetDist
                                             : stopHigh - targetDist;
@@ -1104,7 +1103,7 @@ int ReplayDay(const datetime nyClose, const int slot)
          g_nSkipTarget[slot]++;
          skipped = true;
          if(InpShowSkips)
-            PaintText(iTime(NULL, InpSignalTF, entryShift),
+            PaintText(iTime(NULL, InpEntryTF, entryShift),
                       (dir == DIR_LONG) ? levelHigh : levelLow,
                       " target behind entry", InpColorSkip);
          continue;
@@ -1114,7 +1113,7 @@ int ReplayDay(const datetime nyClose, const int slot)
       armed[dxNew]        = false;
       partialOf[dxNew]    = false;
       entryShiftOf[dxNew] = entryShift;
-      entryTimeOf[dxNew]  = iTime(NULL, InpSignalTF, entryShift);
+      entryTimeOf[dxNew]  = iTime(NULL, InpEntryTF, entryShift);
       entryOf[dxNew]      = entry;
       stopOf[dxNew]       = structural;
       tpOf[dxNew]         = tp;
@@ -1122,8 +1121,8 @@ int ReplayDay(const datetime nyClose, const int slot)
      }
 
    //--- 4. the hard exit: whatever is still open goes at the NY close ------
-   double lastClose = iClose(NULL, InpSignalTF, endShift);
-   datetime lastTime = iTime(NULL, InpSignalTF, endShift) + period;
+   double lastClose = iClose(NULL, InpEntryTF, endShift);
+   datetime lastTime = iTime(NULL, InpEntryTF, endShift) + period;
    for(int dx = 0; dx < DX_COUNT; dx++)
       if(live[dx])
         {
@@ -1164,10 +1163,11 @@ void ShowSummary(const int daysWalked)
 
    string text = StringFormat("%s replay v2  %s   %d trading days\n",
                               InpTag, Symbol(), daysWalked);
-   text += StringFormat("TF  signal %s | trigger %s | range %s\n",
-                        StringSubstr(EnumToString(InpSignalTF), 7),
-                        StringSubstr(EnumToString(InpTriggerTF), 7),
-                        StringSubstr(EnumToString(InpRangeTF), 7));
+   text += StringFormat("TF  %s breaks the range%s\n",
+                        StringSubstr(EnumToString(InpEntryTF), 7),
+                        (InpMode == MODE_ASIA_RANGE ? "" :
+                         StringFormat("  |  trigger candle %s",
+                                      StringSubstr(EnumToString(InpTriggerTF), 7))));
    text += StringFormat("Target %.0f%% of ATR%d from the level | exit: %s\n",
                         InpTPPctOfATR, InpATRDays, exitPlan);
    text += StringFormat("Structural stop: %s\n",
@@ -1367,7 +1367,7 @@ int OnCalculate(const int rates_total,
    //--- and without this the replay would keep whatever it managed to read
    //--- on the very first pass.
    int fingerprint = HistoryFingerprint();
-   datetime currentBar = iTime(NULL, InpSignalTF, 0);
+   datetime currentBar = iTime(NULL, InpEntryTF, 0);
 
    if(currentBar != lastSignalBar || fingerprint != g_lastBarCount)
      {

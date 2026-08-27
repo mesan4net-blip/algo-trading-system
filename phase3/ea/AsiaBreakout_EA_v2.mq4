@@ -11,21 +11,26 @@
 //      MODE_TRIGGER_CANDLE Levels are the high/low of ONE nominated candle.
 //      MODE_BOTH           Both, on separate magic numbers.
 //
-//  THREE INDEPENDENT TIMEFRAMES
+//  TWO TIMEFRAMES
+//    InpEntryTF     ONE candle size does all three jobs: it measures the Asia
+//                   high and low, its CLOSE beyond the range is the entry,
+//                   and its CLOSE back beyond the level is the stop. The
+//                   first such candle to close beyond the range is the trade.
 //    InpTriggerTF   the candle whose high/low become the levels in
 //                   trigger-candle mode. Nothing else uses it.
-//    InpSignalTF    the bars whose CLOSES confirm a breakout entry and a
-//                   close-based stop. The heart of the strategy.
-//    InpRangeTF     the bars the Asia high/low are measured from. Finer is
-//                   more accurate; it never generates a signal.
 //
-//    They are set separately. An H4 trigger candle broken by an M15 close is
-//    a valid configuration, and so is the reverse.
+//    Earlier versions split the measuring timeframe from the breakout
+//    timeframe. That was a mistake in practice: you would watch M15 boxes
+//    while entries fired on H1 closes, and the entries looked arbitrary.
+//    Measuring on a finer timeframe was buying nothing anyway - when the
+//    session boundaries land on candle boundaries the high and low of a
+//    window are the same whether you read them from M5 or H1 candles, since
+//    an H1 high IS the highest of its M15 highs.
 //
 //  THE SIGNAL RULES - deliberately NOT symmetrical
 //
-//    ENTRY   a bar on InpSignalTF must CLOSE beyond the level.
-//    STOP    a bar on InpSignalTF must CLOSE back beyond the opposite level.
+//    ENTRY   a bar on InpEntryTF must CLOSE beyond the level.
+//    STOP    a bar on InpEntryTF must CLOSE back beyond the opposite level.
 //    TARGET  TOUCH. Price only has to trade there.
 //
 //  THE EXIT IS IN TWO PARTS (new in v2)
@@ -154,10 +159,9 @@ input ENUM_STOP_STYLE InpStopStyle               = STOP_ON_CLOSE;               
 input bool            InpTradeLongs              = true;                        // Allow long breakouts
 input bool            InpTradeShorts             = true;                        // Allow short breakouts
 
-input string          _s02                       = "=== TIMEFRAMES (all independent) ==="; // .
-input ENUM_TIMEFRAMES InpSignalTF                = PERIOD_H1;                   // BREAKOUT / ENTRY / STOP close timeframe
-input ENUM_TIMEFRAMES InpTriggerTF               = PERIOD_H1;                   // TRIGGER CANDLE timeframe
-input ENUM_TIMEFRAMES InpRangeTF                 = PERIOD_M15;                  // Asia range measurement timeframe
+input string          _s02                       = "=== TIMEFRAMES ===";        // .
+input ENUM_TIMEFRAMES InpEntryTF                 = PERIOD_H1;                   // ASIA RANGE + BREAKOUT / ENTRY / STOP candle
+input ENUM_TIMEFRAMES InpTriggerTF               = PERIOD_H1;                   // TRIGGER CANDLE candle
 
 input string          _s03                       = "=== ASIA SESSION ===";      // .
 input ENUM_TZ         InpAsiaTZ                  = TZ_UTC;                      // Timezone the Asia hours are given in
@@ -640,7 +644,7 @@ void UpdateAsiaRange(const datetime nowBroker)
       return;                                   // already have this instance
 
    double high, low;
-   if(!RangeInWindow(InpRangeTF, startB, endB, high, low))
+   if(!RangeInWindow(InpEntryTF, startB, endB, high, low))
      {
       g_asiaReady = false;
       return;
@@ -1524,7 +1528,7 @@ bool DirectionAllowed(const int slot, const int dir, string &why)
 
 //+------------------------------------------------------------------+
 //|                                                                  |
-//|  SIGNALS - one closed bar of InpSignalTF at a time               |
+//|  SIGNALS - one closed bar of InpEntryTF at a time               |
 //|                                                                  |
 //+------------------------------------------------------------------+
 
@@ -1695,8 +1699,8 @@ void EvaluateEntry(const int slot, const datetime nowBroker,
 //--- to happen: exits, then re-arming, then entries
 void ProcessBar(const int slot, const datetime nowBroker)
   {
-   double close = iClose(NULL, InpSignalTF, 1);
-   datetime barClose = iTime(NULL, InpSignalTF, 1) + PeriodSeconds(InpSignalTF);
+   double close = iClose(NULL, InpEntryTF, 1);
+   datetime barClose = iTime(NULL, InpEntryTF, 1) + PeriodSeconds(InpEntryTF);
 
    EvaluateCloseStop(slot, close);
 
@@ -1816,10 +1820,11 @@ void UpdatePanel(const datetime nowBroker)
                                        InpPartialClosePct, 100.0 - InpPartialClosePct));
 
    string text = StringFormat("%s v2  %s  [%s]\n", InpTradeComment, Symbol(), modeText);
-   text += StringFormat("TF  signal %s | trigger %s | range %s\n",
-                        StringSubstr(EnumToString(InpSignalTF), 7),
-                        StringSubstr(EnumToString(InpTriggerTF), 7),
-                        StringSubstr(EnumToString(InpRangeTF), 7));
+   text += StringFormat("TF  %s breaks the range%s\n",
+                        StringSubstr(EnumToString(InpEntryTF), 7),
+                        (InpMode == MODE_ASIA_RANGE ? "" :
+                         StringFormat("  |  trigger candle %s",
+                                      StringSubstr(EnumToString(InpTriggerTF), 7))));
    text += StringFormat("Server %s   UTC %s   offset %+.1fh\n",
                         TimeToString(nowBroker, TIME_MINUTES),
                         TimeToString(BrokerToUtc(nowBroker), TIME_MINUTES),
@@ -2052,7 +2057,7 @@ int OnInit()
    for(int slot = 0; slot < SLOT_COUNT; slot++)
      {
       g_tradesToday[slot]   = 0;
-      g_lastSignalBar[slot] = iTime(NULL, InpSignalTF, 0);
+      g_lastSignalBar[slot] = iTime(NULL, InpEntryTF, 0);
       g_skipReason[slot]    = "";
       for(int dx = 0; dx < DX_COUNT; dx++)
         {
@@ -2081,36 +2086,36 @@ int OnInit()
    //--- higher. Asking it for a LOWER one returns nothing, the new-bar check
    //--- never fires, and the EA sits there taking no trades and saying
    //--- nothing about why. That is worth shouting about.
-   if(IsTesting() && PeriodSeconds(InpSignalTF) < PeriodSeconds((ENUM_TIMEFRAMES)Period()))
-      Alert(StringFormat("%s: the Strategy Tester is running on %s but InpSignalTF "
+   if(IsTesting() && PeriodSeconds(InpEntryTF) < PeriodSeconds((ENUM_TIMEFRAMES)Period()))
+      Alert(StringFormat("%s: the Strategy Tester is running on %s but InpEntryTF "
                          "is %s. MT4 cannot serve a timeframe LOWER than the one "
                          "being tested, so NO TRADES will be taken. Set the "
                          "tester's Period to %s and use Every tick.",
                          InpTradeComment,
                          StringSubstr(EnumToString((ENUM_TIMEFRAMES)Period()), 7),
-                         StringSubstr(EnumToString(InpSignalTF), 7),
-                         StringSubstr(EnumToString(InpSignalTF), 7)));
+                         StringSubstr(EnumToString(InpEntryTF), 7),
+                         StringSubstr(EnumToString(InpEntryTF), 7)));
 
-   int signalBars = iBars(NULL, InpSignalTF);
-   if(signalBars <= 2 || iTime(NULL, InpSignalTF, 1) == 0)
+   int signalBars = iBars(NULL, InpEntryTF);
+   if(signalBars <= 2 || iTime(NULL, InpEntryTF, 1) == 0)
       Alert(StringFormat("%s: no usable %s history on %s (%d bars). The EA cannot "
                          "see a signal bar close, so it will take no trades. Open "
                          "an %s chart for this symbol once to pull the history.",
-                         InpTradeComment, StringSubstr(EnumToString(InpSignalTF), 7),
+                         InpTradeComment, StringSubstr(EnumToString(InpEntryTF), 7),
                          Symbol(), signalBars,
-                         StringSubstr(EnumToString(InpSignalTF), 7)));
+                         StringSubstr(EnumToString(InpEntryTF), 7)));
    else
       PrintFormat("[%s] signal timeframe %s has %d bars, most recent close %s.",
-                  InpTradeComment, StringSubstr(EnumToString(InpSignalTF), 7),
-                  signalBars, TimeToString(iTime(NULL, InpSignalTF, 1) +
-                                           PeriodSeconds(InpSignalTF), TIME_DATE|TIME_MINUTES));
+                  InpTradeComment, StringSubstr(EnumToString(InpEntryTF), 7),
+                  signalBars, TimeToString(iTime(NULL, InpEntryTF, 1) +
+                                           PeriodSeconds(InpEntryTF), TIME_DATE|TIME_MINUTES));
 
-   PrintFormat("[%s] v2 ready on %s. TF: signal %s, trigger %s, range %s. "
+   PrintFormat("[%s] v2 ready on %s. The %s candle both measures the range and "
+               "must CLOSE beyond it to enter; the trigger candle is %s. "
                "Up to %d entries/day, %d open per direction. Hard exit %s.",
                InpTradeComment, Symbol(),
-               StringSubstr(EnumToString(InpSignalTF), 7),
+               StringSubstr(EnumToString(InpEntryTF), 7),
                StringSubstr(EnumToString(InpTriggerTF), 7),
-               StringSubstr(EnumToString(InpRangeTF), 7),
                InpMaxTradesPerDay, g_maxOpenPerDir,
                TimeToString(NextHardExit(nowBroker), TIME_DATE|TIME_MINUTES));
 
@@ -2152,7 +2157,7 @@ void OnTick()
      }
 
    //--- everything close-based happens once per closed signal bar
-   datetime currentBar = iTime(NULL, InpSignalTF, 0);
+   datetime currentBar = iTime(NULL, InpEntryTF, 0);
 
    //--- a zero here means the signal timeframe has no data. Without this the
    //--- new-bar check would simply never fire and the EA would look idle.
@@ -2164,8 +2169,8 @@ void OnTick()
          lastBlindWarning = nowBroker;
          PrintFormat("[%s] no %s data available - no signal bars to read, so no "
                      "trades can be taken. Open an %s chart for %s once.",
-                     InpTradeComment, StringSubstr(EnumToString(InpSignalTF), 7),
-                     StringSubstr(EnumToString(InpSignalTF), 7), Symbol());
+                     InpTradeComment, StringSubstr(EnumToString(InpEntryTF), 7),
+                     StringSubstr(EnumToString(InpEntryTF), 7), Symbol());
          g_skipReason[SLOT_ASIA]    = "no signal TF data";
          g_skipReason[SLOT_TRIGGER] = "no signal TF data";
         }
