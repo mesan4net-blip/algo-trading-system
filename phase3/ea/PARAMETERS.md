@@ -17,7 +17,7 @@ EURUSD feed 1 pip = 10 points, so 30 points = 3 pips.
 |---|---|---|
 | `InpMode` | Asia range | `MODE_ASIA_RANGE` trades the Asia session high/low. `MODE_TRIGGER_CANDLE` trades one nominated candle's high/low. `MODE_BOTH` runs both on separate magic numbers |
 | `InpSignalTF` | H1 | The timeframe whose **bar closes** confirm entries and stops. This is the single most consequential input: a lower timeframe reacts sooner and stops out more; a higher one gives the trade more room and enters later |
-| `InpTPPctOfATR` | 80 | Target size as a percentage of the 5-day ATR, measured **from the structural level**, not from the entry. Lower it and more days become tradeable but each win is smaller; raise it and more days get skipped for `target behind entry` |
+| `InpTPPctOfATR` | 60 | Target size as a percentage of the 5-day ATR, measured **from the structural level**, not from the entry. Lower it and more days become tradeable but each win is smaller; raise it and more days get skipped for `target behind entry` |
 | `InpTradeLongs` / `InpTradeShorts` | both on | Direction filters. Turn one off to test a directional bias |
 
 ---
@@ -226,7 +226,7 @@ An H4 trigger candle broken by an M15 close is valid, and so is the reverse.
 
 | Input | Default | What it does |
 |---|---|---|
-| `InpPartialClosePct` | 50 | Percent of the position closed **at the target, on touch**. The remainder runs to the NY close |
+| `InpPartialClosePct` | 100 | Percent of the position closed **at the target, on touch**. The remainder runs to the NY close |
 | `InpMoveStopAfterPartial` | false | After the slice is taken, move the runner's close-based stop to the entry price |
 
 - **100** — the whole position goes at the target, as in v1.
@@ -340,8 +340,8 @@ Two things follow, and they are the two ways this looks like a broken stop:
 
 | Value | Behaviour |
 |---|---|
-| `STOP_ON_CLOSE` (default) | As specified: a bar must close beyond the level. The EA holds the stop; the broker holds a disaster stop further out |
-| `STOP_ON_TOUCH` | The broker stop sits **on the level** and fills the moment price reaches it. The close-based rule and the disaster-stop settings are switched off |
+| `STOP_ON_CLOSE` | As specified: a bar must close beyond the level. The EA holds the stop; the broker holds a disaster stop further out |
+| `STOP_ON_TOUCH` **(default)** | The broker stop sits **on the level** and fills the moment price reaches it. The close-based rule and the disaster-stop settings are switched off |
 
 If what you actually want is "my stop is the trigger candle low and I want it
 respected the moment price gets there", that is `STOP_ON_TOUCH`. Run the
@@ -386,7 +386,7 @@ structural stop.
 
 | Input | Default | What it does |
 |---|---|---|
-| `InpEntryTF` | H1 | Measures the Asia high and low, **and** its close beyond the range is the entry, **and** its close back beyond the level is the stop |
+| `InpEntryTF` | M30 | Measures the Asia high and low, **and** its close beyond the range is the entry, **and** its close back beyond the level is the stop |
 | `InpTriggerTF` | H1 | The trigger candle in trigger-candle mode. Nothing else uses it |
 
 The first `InpEntryTF` candle that closes beyond the range is the trade. Set it
@@ -507,3 +507,39 @@ you want; it is not the "let it run to the close" behaviour of the default.
 Run the visualiser with it on and off over the same history before deciding.
 Reversal exits are drawn in `InpColorReverse` and labelled `RV`, and the panel
 counts them separately from stops.
+
+---
+
+# Current shipped defaults
+
+Set from live testing rather than from the original spec.
+
+| Input | Now | Was |
+|---|---|---|
+| `InpTPPctOfATR` | **60** | 80 |
+| `InpStopStyle` | **STOP_ON_TOUCH** | STOP_ON_CLOSE |
+| `InpEntryTF` | **M30** | H1 |
+| `InpPartialClosePct` | **100** | 50 |
+
+Three of these interact, so it is worth stating what the combination now does.
+
+**The stop is a real broker order sitting on the level.** It fills the moment
+price touches it. The close-based rule is off, and so is the disaster stop —
+`InpProtectiveSLMode` and its settings are simply not used in this mode. The
+S/L you see on the order in the terminal is now the actual structural stop,
+which is what you were expecting to see all along.
+
+**The target closes the whole position**, so it goes back to being a resting
+take-profit at the broker. Nothing is watched tick by tick, nothing is left
+running to the NY close, and the direction's slot is freed the moment the
+target fills — so a second entry in that direction becomes possible the same
+day, up to `InpMaxTradesPerDay`.
+
+**Both stop and target are now broker-side orders.** Neither depends on the
+terminal being awake. That is a materially more robust configuration than the
+close-based default was.
+
+**A 30-minute candle both measures the range and breaks it.** Entries are
+quicker than H1 and the touch stop is tighter, so expect more trades and more
+stop-outs than the earlier defaults produced. Run the visualiser before and
+after to see the size of that shift on your pair.

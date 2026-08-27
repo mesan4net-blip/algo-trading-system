@@ -161,13 +161,13 @@ enum ENUM_STOP_STYLE
 //+------------------------------------------------------------------+
 input string          _s01                       = "=== STRATEGY ===";          // .
 input ENUM_STRAT_MODE InpMode                    = MODE_ASIA_RANGE;             // Which breakout to trade
-input double          InpTPPctOfATR              = 80.0;                        // Target as % of 5-day ATR
-input ENUM_STOP_STYLE InpStopStyle               = STOP_ON_CLOSE;               // How the structural stop is honoured
+input double          InpTPPctOfATR              = 60.0;                        // Target as % of 5-day ATR
+input ENUM_STOP_STYLE InpStopStyle               = STOP_ON_TOUCH;               // How the structural stop is honoured
 input bool            InpTradeLongs              = true;                        // Allow long breakouts
 input bool            InpTradeShorts             = true;                        // Allow short breakouts
 
 input string          _s02                       = "=== TIMEFRAMES ===";        // .
-input ENUM_TIMEFRAMES InpEntryTF                 = PERIOD_H1;                   // ASIA RANGE + BREAKOUT / ENTRY / STOP candle
+input ENUM_TIMEFRAMES InpEntryTF                 = PERIOD_M30;                  // ASIA RANGE + BREAKOUT / ENTRY / STOP candle
 input ENUM_TIMEFRAMES InpTriggerTF               = PERIOD_H1;                   // TRIGGER CANDLE candle
 
 input string          _s03                       = "=== ASIA SESSION ===";      // .
@@ -184,7 +184,7 @@ input int             InpTriggerMin              = 0;                           
 input ENUM_CANDLE_SL_SRC InpCandleSLSource       = CSL_TRIGGER_CANDLE;          // Candle mode: stop/target anchor source
 
 input string          _s05                       = "=== SCALED EXIT ===";       // .
-input double          InpPartialClosePct         = 50.0;                        // % of the position closed AT THE TARGET
+input double          InpPartialClosePct         = 100.0;                       // % of the position closed AT THE TARGET
 input bool            InpMoveStopAfterPartial    = false;                       // After the partial, stop the runner at entry
 
 input string          _s05b                      = "=== REVERSAL EXIT ===";     // .
@@ -2122,15 +2122,21 @@ bool PanelCornerIsLower()
    return(InpPanelCorner == CORNER_LEFT_LOWER || InpPanelCorner == CORNER_RIGHT_LOWER);
   }
 
+bool PanelCornerIsRight()
+  {
+   return(InpPanelCorner == CORNER_RIGHT_UPPER || InpPanelCorner == CORNER_RIGHT_LOWER);
+  }
+
+//--- Labels stay LEFT anchored in every corner. A right-anchored label is
+//--- drawn leftwards from its point, which would right-align ragged lines
+//--- inside a left-aligned box; the x coordinate is shifted per corner
+//--- instead. The background box and the button cannot be anchored at all -
+//--- MT4 treats their coordinate as the top-left and grows them right and
+//--- down - so in a right or bottom corner their coordinate has to be pushed
+//--- out by their own size or the box lands off the edge of the chart.
 ENUM_ANCHOR_POINT PanelAnchor()
   {
-   switch(InpPanelCorner)
-     {
-      case CORNER_RIGHT_UPPER: return(ANCHOR_RIGHT_UPPER);
-      case CORNER_LEFT_LOWER:  return(ANCHOR_LEFT_LOWER);
-      case CORNER_RIGHT_LOWER: return(ANCHOR_RIGHT_LOWER);
-     }
-   return(ANCHOR_LEFT_UPPER);
+   return(PanelCornerIsLower() ? ANCHOR_LEFT_LOWER : ANCHOR_LEFT_UPPER);
   }
 
 void PanelClear()
@@ -2164,8 +2170,8 @@ void PanelButton(const int x, const int y, const int w, const int h)
       ObjectCreate(0, PANEL_TOGGLE, OBJ_BUTTON, 0, 0, 0);
 
    ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_CORNER,    InpPanelCorner);
-   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_XDISTANCE, x);
-   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_XDISTANCE, PanelCornerIsRight() ? x + w : x);
+   ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_YDISTANCE, PanelCornerIsLower() ? y + h : y);
    ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_XSIZE,     w);
    ObjectSetInteger(0, PANEL_TOGGLE, OBJPROP_YSIZE,     h);
    ObjectSetString (0, PANEL_TOGGLE, OBJPROP_TEXT,      g_panelOpen ? "HIDE STATS" : "SHOW STATS");
@@ -2240,13 +2246,18 @@ void PanelRender(const string block)
    int boxH = count * lineH + 2 * padY;
    int top  = InpPanelY + btnH + (btnH > 0 ? 4 : 0);
 
-   //--- background
+   //--- background. Its coordinate is its top-left and it grows right and
+   //--- down, so on a right or bottom corner it must be pushed out by its own
+   //--- width or height to end up where the text is.
+   int boxX = PanelCornerIsRight() ? InpPanelX + boxW : InpPanelX;
+   int boxY = PanelCornerIsLower() ? top + boxH : top;
+
    string bg = PANEL_PREFIX "bg";
    if(ObjectFind(0, bg) < 0)
       ObjectCreate(0, bg, OBJ_RECTANGLE_LABEL, 0, 0, 0);
    ObjectSetInteger(0, bg, OBJPROP_CORNER,       InpPanelCorner);
-   ObjectSetInteger(0, bg, OBJPROP_XDISTANCE,    InpPanelX);
-   ObjectSetInteger(0, bg, OBJPROP_YDISTANCE,    top);
+   ObjectSetInteger(0, bg, OBJPROP_XDISTANCE,    boxX);
+   ObjectSetInteger(0, bg, OBJPROP_YDISTANCE,    boxY);
    ObjectSetInteger(0, bg, OBJPROP_XSIZE,        boxW);
    ObjectSetInteger(0, bg, OBJPROP_YSIZE,        boxH);
    ObjectSetInteger(0, bg, OBJPROP_BGCOLOR,      InpPanelBgColor);
@@ -2258,7 +2269,10 @@ void PanelRender(const string block)
 
    //--- lines. On a bottom corner the y axis runs upwards, so the order is
    //--- reversed to keep the text reading top to bottom either way.
-   int textX = InpPanelX + padX;
+   //--- on a right corner x is measured leftwards from the right edge, so the
+   //--- text's left edge sits one pad inside the box's left edge
+   int textX = PanelCornerIsRight() ? InpPanelX + boxW - padX
+                                    : InpPanelX + padX;
    for(int i = 0; i < count; i++)
      {
       int y = PanelCornerIsLower()
