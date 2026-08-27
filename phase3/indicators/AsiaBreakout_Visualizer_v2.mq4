@@ -91,6 +91,12 @@ enum ENUM_CANDLE_SL_SRC
    CSL_ASIA_SESSION   = 1   // Asia session low/high
   };
 
+enum ENUM_REVERSAL_FROM
+  {
+   REV_FROM_ENTRY = 0,  // Measured against the ENTRY price
+   REV_FROM_PEAK  = 1   // Measured against the BEST price reached (giveback)
+  };
+
 enum ENUM_STOP_STYLE
   {
    STOP_ON_CLOSE = 0,  // Exit when a signal bar CLOSES beyond the level
@@ -114,6 +120,7 @@ enum ENUM_STOP_STYLE
 #define EXIT_TARGET  0
 #define EXIT_STOP    1
 #define EXIT_NYCLOSE 2
+#define EXIT_REVERSE 3
 
 //+------------------------------------------------------------------+
 //| Inputs - keep these identical to your EA                         |
@@ -145,6 +152,11 @@ input ENUM_CANDLE_SL_SRC InpCandleSLSource       = CSL_TRIGGER_CANDLE;          
 input string          _s05                       = "=== SCALED EXIT ===";       // .
 input double          InpPartialClosePct         = 50.0;                        // % of the position closed AT THE TARGET
 input bool            InpMoveStopAfterPartial    = false;                       // After the partial, stop the runner at entry
+
+input string          _s05b                      = "=== REVERSAL EXIT ===";     // .
+input bool            InpUseReversalExit         = false;                       // Close the trade if price reverses
+input double          InpReversalPctOfRange      = 50.0;                        // Reversal size, as % of the range
+input ENUM_REVERSAL_FROM InpReversalFrom         = REV_FROM_ENTRY;              // Reversal measured from what
 
 input string          _s06                       = "=== 5-DAY ATR ===";         // .
 input int             InpATRDays                 = 5;                           // ATR lookback in daily bars
@@ -193,6 +205,7 @@ input color           InpColorTrigger            = C'90,60,20';                 
 input color           InpColorWin                = clrMediumSeaGreen;           // Target was reached
 input color           InpColorLoss               = clrIndianRed;                // Stopped on a close
 input color           InpColorFlat               = clrGoldenrod;                // Ran to the NY close
+input color           InpColorReverse            = clrOrchid;                   // Closed by the reversal exit
 input color           InpColorSkip               = clrDimGray;                  // Skipped day
 
 input string          _sPanel                    = "=== PANEL LOOK ===";        // .
@@ -231,6 +244,7 @@ int    g_nTrades[SLOT_COUNT];
 int    g_nWins[SLOT_COUNT];
 int    g_nLosses[SLOT_COUNT];
 int    g_nFlat[SLOT_COUNT];
+int    g_nReverse[SLOT_COUNT];
 int    g_nPartials[SLOT_COUNT];
 double g_sumR[SLOT_COUNT];
 double g_sumPips[SLOT_COUNT];
@@ -829,13 +843,16 @@ void FinishTrade(const int slot, const int dir, const int reason,
    if(partialTaken)           g_nPartials[slot]++;
    if(reason == EXIT_STOP)    g_nLosses[slot]++;
    if(reason == EXIT_NYCLOSE) g_nFlat[slot]++;
+   if(reason == EXIT_REVERSE) g_nReverse[slot]++;
 
-   color finalClr = (reason == EXIT_TARGET) ? InpColorWin
-                  : (reason == EXIT_STOP)   ? InpColorLoss
-                                            : InpColorFlat;
-   string reasonText = (reason == EXIT_TARGET) ? "TP"
-                     : (reason == EXIT_STOP)   ? "SL"
-                                               : "NY";
+   color finalClr = (reason == EXIT_TARGET)  ? InpColorWin
+                  : (reason == EXIT_STOP)    ? InpColorLoss
+                  : (reason == EXIT_REVERSE) ? InpColorReverse
+                                             : InpColorFlat;
+   string reasonText = (reason == EXIT_TARGET)  ? "TP"
+                     : (reason == EXIT_STOP)    ? "SL"
+                     : (reason == EXIT_REVERSE) ? "RV"
+                                                : "NY";
 
    PaintArrow(entryTime, entry, (dir == DIR_LONG) ? 233 : 234, finalClr,
               StringFormat("%s %s entry %s", SlotName(slot), DirName(dir),
@@ -981,6 +998,10 @@ int ReplayDay(const datetime nyClose, const int slot)
       return(0);
      }
 
+   //--- the range the trade is built on: the Asia range in Asia mode, the
+   //--- trigger candle's height in candle mode
+   double rangeHeight = stopHigh - stopLow;
+
    double targetDist = InpTPPctOfATR / 100.0 * atr5;
    double buffer     = InpBreakoutBufferPoints * g_pointsToPrice;
 
@@ -1004,10 +1025,11 @@ int ReplayDay(const datetime nyClose, const int slot)
    bool     partialOf[DX_COUNT];
    datetime partialTimeOf[DX_COUNT];
    bool     armed[DX_COUNT];
+   double   bestOf[DX_COUNT];
 
    for(int dx = 0; dx < DX_COUNT; dx++)
      {
-      live[dx] = false;  partialOf[dx] = false;  armed[dx] = true;
+      live[dx] = false;  partialOf[dx] = false;  armed[dx] = true;  bestOf[dx] = 0;
       entryShiftOf[dx] = 0;  entryOf[dx] = 0;  stopOf[dx] = 0;  tpOf[dx] = 0;
       entryTimeOf[dx] = 0;   partialTimeOf[dx] = 0;
      }
@@ -1040,11 +1062,44 @@ int ReplayDay(const datetime nyClose, const int slot)
          //--- TARGET FIRST, and not as a tie-break: it is a resting order
          //--- that fills the moment price trades there, while the stop is
          //--- not even looked at until the bar has closed.
+         //--- the high-water mark this bar, before anything is tested against
+         //--- it, so a bar that runs up and reverses can trigger a giveback
+         //--- within itself - which is what actually happens
+         if(bestOf[dx] <= 0.0)
+            bestOf[dx] = entryOf[dx];
+         bestOf[dx] = (dir == DIR_LONG) ? MathMax(bestOf[dx], hi)
+                                        : MathMin(bestOf[dx], lo);
+
+         double revLevel = 0.0;
+         if(InpUseReversalExit && InpReversalPctOfRange > 0.0 && rangeHeight > 0.0)
+           {
+            double give = rangeHeight * InpReversalPctOfRange / 100.0;
+            double from = (InpReversalFrom == REV_FROM_PEAK) ? bestOf[dx] : entryOf[dx];
+            revLevel = (dir == DIR_LONG) ? from - give : from + give;
+           }
+
+         bool revHit = false;
+         double revFill = 0.0;
+         if(revLevel > 0.0)
+           {
+            if(InpStopStyle == STOP_ON_TOUCH)
+              {
+               revHit  = (dir == DIR_LONG) ? (lo <= revLevel) : (hi >= revLevel);
+               revFill = revLevel;
+              }
+            else
+              {
+               revHit  = (dir == DIR_LONG) ? (cl <= revLevel) : (cl >= revLevel);
+               revFill = cl;
+              }
+           }
+
          //--- with a TOUCH stop both levels can be reached inside one bar and
          //--- the bar does not say which came first. Assume the stop, so the
          //--- replay never flatters the strategy.
-         bool stopAlsoHit = (InpStopStyle == STOP_ON_TOUCH) &&
-                            ((dir == DIR_LONG) ? (lo <= stopOf[dx]) : (hi >= stopOf[dx]));
+         bool stopAlsoHit = ((InpStopStyle == STOP_ON_TOUCH) &&
+                             ((dir == DIR_LONG) ? (lo <= stopOf[dx]) : (hi >= stopOf[dx])))
+                            || (revHit && InpStopStyle == STOP_ON_TOUCH);
 
          if(!partialOf[dx] && !stopAlsoHit)
            {
@@ -1067,6 +1122,17 @@ int ReplayDay(const datetime nyClose, const int slot)
                      stopOf[dx] = entryOf[dx];
                  }
               }
+           }
+
+         //--- the reversal exit is offered the bar before the structural stop,
+         //--- since it is usually the tighter of the two
+         if(revHit)
+           {
+            FinishTrade(slot, dir, EXIT_REVERSE, entryOf[dx], stopOf[dx], tpOf[dx],
+                        entryTimeOf[dx], barClose, revFill, partialOf[dx],
+                        partialTimeOf[dx], levelReadyAt, levelHigh, levelLow, atr5);
+            live[dx] = false;
+            continue;
            }
 
          //--- the structural stop, in whichever style is configured
@@ -1148,6 +1214,7 @@ int ReplayDay(const datetime nyClose, const int slot)
       entryShiftOf[dxNew] = entryShift;
       entryTimeOf[dxNew]  = iTime(NULL, InpEntryTF, entryShift);
       entryOf[dxNew]      = entry;
+      bestOf[dxNew]       = entry;
       stopOf[dxNew]       = structural;
       tpOf[dxNew]         = tp;
       taken++;
@@ -1203,6 +1270,10 @@ void ShowSummary(const int daysWalked)
                                       StringSubstr(EnumToString(InpTriggerTF), 7))));
    text += StringFormat("Target %.0f%% of ATR%d from the level | exit: %s\n",
                         InpTPPctOfATR, InpATRDays, exitPlan);
+   if(InpUseReversalExit)
+      text += StringFormat("Reversal exit: %.0f%% of the range back from %s\n",
+                           InpReversalPctOfRange,
+                           (InpReversalFrom == REV_FROM_PEAK ? "the best price" : "entry"));
    text += StringFormat("Structural stop: %s\n",
                         (InpStopStyle == STOP_ON_TOUCH
                          ? "ON TOUCH - fills the moment price reaches the level"
@@ -1223,8 +1294,9 @@ void ShowSummary(const int daysWalked)
         {
          text += StringFormat("        target reached %d (%.0f%%)   of which scaled out %d\n",
                               g_nWins[slot], 100.0 * g_nWins[slot] / n, g_nPartials[slot]);
-         text += StringFormat("        ended: %d at target, %d on a close-stop, %d at the NY close\n",
-                              n - g_nLosses[slot] - g_nFlat[slot], g_nLosses[slot], g_nFlat[slot]);
+         text += StringFormat("        ended: %d at target, %d on a stop, %d reversal, %d at the NY close\n",
+                              n - g_nLosses[slot] - g_nFlat[slot] - g_nReverse[slot],
+                              g_nLosses[slot], g_nReverse[slot], g_nFlat[slot]);
          text += StringFormat("        total %+.2fR   avg %+.2fR   best %+.2fR   worst %+.2fR\n",
                               g_sumR[slot], g_sumR[slot] / n, g_bestR[slot], g_worstR[slot]);
          text += StringFormat("        PIPS  %+.1f total   %+.1f avg   won %+.1f   lost %.1f\n",
@@ -1279,7 +1351,7 @@ void Rebuild()
    for(int slot = 0; slot < SLOT_COUNT; slot++)
      {
       g_nTrades[slot] = 0;  g_nWins[slot]   = 0;  g_nLosses[slot] = 0;
-      g_nFlat[slot]   = 0;  g_nPartials[slot] = 0;
+      g_nFlat[slot]   = 0;  g_nPartials[slot] = 0;  g_nReverse[slot] = 0;
       g_sumR[slot]    = 0;  g_bestR[slot]   = 0;  g_worstR[slot]  = 0;
       g_sumPips[slot] = 0;  g_wonPips[slot] = 0;  g_lostPips[slot] = 0;
       g_bestPips[slot] = 0; g_worstPips[slot] = 0;

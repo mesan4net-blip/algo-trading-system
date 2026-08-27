@@ -440,3 +440,60 @@ Both programs carry the same panel, and their objects are namespaced apart
 same chart without them fighting over the same names. They will overlap
 visually, though — put one in a different corner, or give them different
 `InpPanelY` values.
+
+---
+
+# Reversal exit
+
+Closes the trade when price turns back against it by a percentage of the range
+the trade was built on. Off by default.
+
+| Input | Default | What it does |
+|---|---|---|
+| `InpUseReversalExit` | false | Turns the rule on |
+| `InpReversalPctOfRange` | 50 | How far back, as a percentage of the range |
+| `InpReversalFrom` | from entry | What the reversal is measured against |
+
+**Which range.** The one the trade was built on — the **Asia range** in Asia
+mode, the **trigger candle's height** in candle mode (or the Asia range there
+too, if `InpCandleSLSource = CSL_ASIA_SESSION`). It is captured at entry, so a
+new session replacing the levels cannot move the line under an open trade.
+
+## The two references
+
+| | Meaning | The line |
+|---|---|---|
+| `REV_FROM_ENTRY` | How far wrong the trade may go from where it started | Fixed, set at entry |
+| `REV_FROM_PEAK` | How much of a move already made it may give back | Follows price up, never down |
+
+With a 40-point Asia range and 50%, a long entered at 1.1000:
+
+- **From entry** — closes at 1.0980, whatever price does first.
+- **From peak** — if price runs to 1.1050, the line follows to 1.1030. Until
+  price moves in your favour the two behave identically, because the peak
+  starts at the entry.
+
+## When it fires
+
+On a **bar close** or on a **touch**, following `InpStopStyle` — the whole EA
+keeps one convention for when a stop counts. The high-water mark for
+`REV_FROM_PEAK` is tracked tick by tick either way, so a bar that runs up and
+reverses can trigger the giveback within itself.
+
+## Worth knowing before you switch it on
+
+**It usually fires before the structural stop.** Half the Asia range back from
+entry is, by definition, closer than the full range. So with this on, the
+structural stop rarely gets hit — the reversal exit becomes your real stop,
+and the Asia low becomes a backstop. Set the percentage above 100 if you want
+the reversal to sit *outside* the structural stop and act only as a
+catastrophe rail.
+
+**It cuts the runner too.** After the scaled exit takes its slice at the
+target, the remainder is still governed by this rule, so a `REV_FROM_PEAK`
+setting will often close the runner well before the NY close. That may be what
+you want; it is not the "let it run to the close" behaviour of the default.
+
+Run the visualiser with it on and off over the same history before deciding.
+Reversal exits are drawn in `InpColorReverse` and labelled `RV`, and the panel
+counts them separately from stops.

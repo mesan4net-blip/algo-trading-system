@@ -130,6 +130,12 @@ enum ENUM_PSL_MODE
    PSL_STRUCT_PCT = 3   // Percent of the ENTRY-to-LEVEL distance beyond it
   };
 
+enum ENUM_REVERSAL_FROM
+  {
+   REV_FROM_ENTRY = 0,  // Measured against the ENTRY price
+   REV_FROM_PEAK  = 1   // Measured against the BEST price reached (giveback)
+  };
+
 enum ENUM_STOP_STYLE
   {
    STOP_ON_CLOSE = 0,  // Exit when a signal bar CLOSES beyond the level
@@ -179,6 +185,11 @@ input ENUM_CANDLE_SL_SRC InpCandleSLSource       = CSL_TRIGGER_CANDLE;          
 input string          _s05                       = "=== SCALED EXIT ===";       // .
 input double          InpPartialClosePct         = 50.0;                        // % of the position closed AT THE TARGET
 input bool            InpMoveStopAfterPartial    = false;                       // After the partial, stop the runner at entry
+
+input string          _s05b                      = "=== REVERSAL EXIT ===";     // .
+input bool            InpUseReversalExit         = false;                       // Close the trade if price reverses
+input double          InpReversalPctOfRange      = 50.0;                        // Reversal size, as % of the range
+input ENUM_REVERSAL_FROM InpReversalFrom         = REV_FROM_ENTRY;              // Reversal measured from what
 
 input string          _s06                       = "=== 5-DAY ATR ===";         // .
 input int             InpATRDays                 = 5;                           // ATR lookback in daily bars
@@ -289,6 +300,8 @@ double   g_entryPrice[SLOT_COUNT][DX_COUNT];
 bool     g_partialDone[SLOT_COUNT][DX_COUNT];
 bool     g_fullAtTarget[SLOT_COUNT][DX_COUNT];
 bool     g_armed[SLOT_COUNT][DX_COUNT];
+double   g_anchorRange[SLOT_COUNT][DX_COUNT];   // range height the trade was built on
+double   g_bestPrice[SLOT_COUNT][DX_COUNT];     // best price seen since entry
 
 //--- resolved from InpMaxOpenPerDirection, clamped to what the per-direction
 //--- state above can actually track: one ticket, one stop, one target
@@ -802,8 +815,14 @@ string GVName(const int slot, const int dx, const string field)
 
 void RememberTrade(const int slot, const int dx, const int ticket,
                    const double exitLevel, const double target,
-                   const double entry, const bool fullAtTarget)
+                   const double entry, const bool fullAtTarget,
+                   const double anchorRange)
   {
+   g_anchorRange[slot][dx] = anchorRange;
+   g_bestPrice[slot][dx]   = entry;
+   GlobalVariableSet(GVName(slot, dx, "RANGE"), anchorRange);
+   GlobalVariableSet(GVName(slot, dx, "BEST"),  entry);
+
    g_ticket[slot][dx]       = ticket;
    g_exitLevel[slot][dx]    = exitLevel;
    g_target[slot][dx]       = target;
@@ -824,6 +843,7 @@ void UpdateTradeState(const int slot, const int dx)
    GlobalVariableSet(GVName(slot, dx, "TICKET"), (double)g_ticket[slot][dx]);
    GlobalVariableSet(GVName(slot, dx, "EXIT"),   g_exitLevel[slot][dx]);
    GlobalVariableSet(GVName(slot, dx, "PART"),   g_partialDone[slot][dx] ? 1.0 : 0.0);
+   GlobalVariableSet(GVName(slot, dx, "BEST"),   g_bestPrice[slot][dx]);
   }
 
 void ForgetTrade(const int slot, const int dx)
@@ -834,7 +854,11 @@ void ForgetTrade(const int slot, const int dx)
    g_entryPrice[slot][dx]   = 0.0;
    g_partialDone[slot][dx]  = false;
    g_fullAtTarget[slot][dx] = false;
+   g_anchorRange[slot][dx]  = 0.0;
+   g_bestPrice[slot][dx]    = 0.0;
 
+   GlobalVariableDel(GVName(slot, dx, "RANGE"));
+   GlobalVariableDel(GVName(slot, dx, "BEST"));
    GlobalVariableDel(GVName(slot, dx, "TICKET"));
    GlobalVariableDel(GVName(slot, dx, "EXIT"));
    GlobalVariableDel(GVName(slot, dx, "TGT"));
@@ -856,6 +880,10 @@ void RecallTrade(const int slot, const int dx)
    g_entryPrice[slot][dx]   = GlobalVariableGet(GVName(slot, dx, "ENTRY"));
    g_partialDone[slot][dx]  = (GlobalVariableGet(GVName(slot, dx, "PART")) > 0.5);
    g_fullAtTarget[slot][dx] = (GlobalVariableGet(GVName(slot, dx, "FULL")) > 0.5);
+   if(GlobalVariableCheck(GVName(slot, dx, "RANGE")))
+      g_anchorRange[slot][dx] = GlobalVariableGet(GVName(slot, dx, "RANGE"));
+   if(GlobalVariableCheck(GVName(slot, dx, "BEST")))
+      g_bestPrice[slot][dx] = GlobalVariableGet(GVName(slot, dx, "BEST"));
   }
 
 //+------------------------------------------------------------------+
@@ -1066,7 +1094,8 @@ bool PartialIsPossible(const double lots, double &partialLots)
   }
 
 bool OpenTrade(const int slot, const int dir,
-               const double structuralLevel, const double target)
+               const double structuralLevel, const double target,
+               const double anchorRange)
   {
    int dx = DirIndex(dir);
 
@@ -1203,7 +1232,7 @@ bool OpenTrade(const int slot, const int dir,
       return(false);
      }
 
-   RememberTrade(slot, dx, ticket, structuralLevel, tp, entry, fullAtTarget);
+   RememberTrade(slot, dx, ticket, structuralLevel, tp, entry, fullAtTarget, anchorRange);
    g_tradesToday[slot]++;
    g_armed[slot][dx] = false;
 
@@ -1420,6 +1449,89 @@ void TakePartialAtTarget(const int slot, const int dir)
   }
 
 //+------------------------------------------------------------------+
+//| The reversal exit                                                |
+//|                                                                  |
+//| Close the trade when price turns back against it by a percentage |
+//| of the range it was built on - the Asia range in Asia mode, the  |
+//| trigger candle's height in candle mode (or the Asia range there  |
+//| too, if InpCandleSLSource says so).                              |
+//|                                                                  |
+//| Two references, because they answer different questions:         |
+//|   REV_FROM_ENTRY  how far the trade is allowed to go wrong from  |
+//|                   where it started. A fixed line, set at entry.  |
+//|   REV_FROM_PEAK   how much of a move already made it is allowed  |
+//|                   to give back. A line that follows price up.    |
+//|                                                                  |
+//| It fires on a bar CLOSE or on a TOUCH, following InpStopStyle,   |
+//| so the whole EA keeps one convention for when a stop counts.     |
+//+------------------------------------------------------------------+
+double ReversalLevel(const int slot, const int dx, const int dir)
+  {
+   if(!InpUseReversalExit)                    return(0.0);
+   if(InpReversalPctOfRange <= 0.0)           return(0.0);
+   if(g_anchorRange[slot][dx] <= 0.0)         return(0.0);
+
+   double give = g_anchorRange[slot][dx] * InpReversalPctOfRange / 100.0;
+   double from = (InpReversalFrom == REV_FROM_PEAK)
+                 ? g_bestPrice[slot][dx]
+                 : g_entryPrice[slot][dx];
+   if(from <= 0.0)
+      return(0.0);
+
+   return((dir == DIR_LONG) ? from - give : from + give);
+  }
+
+//--- keep the high-water mark up to date; only meaningful for REV_FROM_PEAK
+void TrackBestPrice(const int slot, const int dir)
+  {
+   int dx = DirIndex(dir);
+   if(CountOpenDir(slot, dir) == 0)
+      return;
+
+   RefreshRates();
+   double price = (dir == DIR_LONG) ? Bid : Ask;
+   if(g_bestPrice[slot][dx] <= 0.0)
+     {
+      g_bestPrice[slot][dx] = price;
+      return;
+     }
+
+   double better = (dir == DIR_LONG)
+                   ? MathMax(g_bestPrice[slot][dx], price)
+                   : MathMin(g_bestPrice[slot][dx], price);
+   if(better != g_bestPrice[slot][dx])
+     {
+      g_bestPrice[slot][dx] = better;
+      GlobalVariableSet(GVName(slot, dx, "BEST"), better);
+     }
+  }
+
+//--- 'price' is the tick price for a touch stop, the bar close for a close stop
+void CheckReversalExit(const int slot, const int dir, const double price)
+  {
+   int dx = DirIndex(dir);
+   if(CountOpenDir(slot, dir) == 0)
+      return;
+
+   double level = ReversalLevel(slot, dx, dir);
+   if(level <= 0.0)
+      return;
+
+   bool hit = (dir == DIR_LONG) ? (price <= level) : (price >= level);
+   if(!hit)
+      return;
+
+   PrintFormat("[%s] %s %s reversal exit: price %s reached %s, which is %.0f%% "
+               "of the %.0f point range back from %s.",
+               InpTradeComment, SlotName(slot), DirName(dir),
+               DoubleToString(price, Digits), DoubleToString(level, Digits),
+               InpReversalPctOfRange, g_anchorRange[slot][dx] / g_pointsToPrice,
+               (InpReversalFrom == REV_FROM_PEAK ? "its best price" : "entry"));
+
+   CloseDir(slot, dir, "reversal exit");
+  }
+
+//+------------------------------------------------------------------+
 //| Reconcile a position the BROKER closed                           |
 //+------------------------------------------------------------------+
 void ReconcileClosed(const int slot, const int dir)
@@ -1598,6 +1710,12 @@ void EvaluateCloseStop(const int slot, const double close)
            }
         }
 
+      //--- the reversal exit is usually the tighter of the two, so it is
+      //--- offered the bar first
+      CheckReversalExit(slot, dir, close);
+      if(CountOpenDir(slot, dir) == 0)
+         continue;
+
       bool stopped = (dir == DIR_LONG) ? (close < g_exitLevel[slot][dx])
                                        : (close > g_exitLevel[slot][dx]);
       if(stopped)
@@ -1716,7 +1834,7 @@ void EvaluateEntry(const int slot, const datetime nowBroker,
       return;
      }
 
-   OpenTrade(slot, dir, structural, tp);
+   OpenTrade(slot, dir, structural, tp, stopHigh - stopLow);
   }
 
 //--- everything that happens once per closed signal bar, in the order it has
@@ -1903,6 +2021,12 @@ void UpdatePanel(const datetime nowBroker)
                               DoubleToString(g_exitLevel[slot][dx], Digits),
                               DoubleToString(g_target[slot][dx], Digits),
                               (g_partialDone[slot][dx] ? "  [partial taken]" : ""));
+         double revLevel = ReversalLevel(slot, dx, dir);
+         if(revLevel > 0.0)
+            text += StringFormat("\n               reversal exit %s (%.0f%% of range from %s)",
+                                 DoubleToString(revLevel, Digits),
+                                 InpReversalPctOfRange,
+                                 (InpReversalFrom == REV_FROM_PEAK ? "peak" : "entry"));
          if(InpStopStyle == STOP_ON_CLOSE && OrderStopLoss() > 0.0)
             text += StringFormat("\n               broker S/L %s = disaster stop, not the level",
                                  DoubleToString(OrderStopLoss(), Digits));
@@ -2180,6 +2304,16 @@ bool ValidateInputs()
      { Print("Both directions are disabled - the EA would never trade."); ok = false; }
    if(InpPartialClosePct < 0.0 || InpPartialClosePct > 100.0)
      { Print("InpPartialClosePct must be between 0 and 100."); ok = false; }
+   if(InpUseReversalExit && InpReversalPctOfRange <= 0.0)
+     { Print("InpReversalPctOfRange must be greater than zero when the reversal "
+             "exit is on."); ok = false; }
+   if(InpUseReversalExit)
+      PrintFormat("NOTE: reversal exit is ON - the trade closes if price turns "
+                  "back %.0f%% of the range against it, measured from %s, on a "
+                  "%s. It can fire well before the structural stop.",
+                  InpReversalPctOfRange,
+                  (InpReversalFrom == REV_FROM_PEAK ? "the best price reached" : "the entry"),
+                  (InpStopStyle == STOP_ON_TOUCH ? "touch" : "bar close"));
 
    int trigBarMinutes = PeriodSeconds(InpTriggerTF) / 60;
    if(trigBarMinutes > 0 && trigBarMinutes < 1440)
@@ -2289,6 +2423,8 @@ int OnInit()
          g_partialDone[slot][dx]  = false;
          g_fullAtTarget[slot][dx] = false;
          g_armed[slot][dx]        = true;
+         g_anchorRange[slot][dx]  = 0.0;
+         g_bestPrice[slot][dx]    = 0.0;
          RecallTrade(slot, dx);        // survive a restart holding a position
         }
      }
@@ -2384,6 +2520,21 @@ void OnTick()
       for(int slot = 0; slot < SLOT_COUNT; slot++)
          for(int dx = 0; dx < DX_COUNT; dx++)
             TakePartialAtTarget(slot, DirOf(dx));
+
+      //--- the high-water mark has to be tracked tick by tick whichever style
+      //--- is in use, or REV_FROM_PEAK would only ever see bar closes
+      if(InpUseReversalExit)
+         for(int slot = 0; slot < SLOT_COUNT; slot++)
+            for(int dx = 0; dx < DX_COUNT; dx++)
+              {
+               TrackBestPrice(slot, DirOf(dx));
+               if(InpStopStyle == STOP_ON_TOUCH)
+                 {
+                  RefreshRates();
+                  CheckReversalExit(slot, DirOf(dx),
+                                    (DirOf(dx) == DIR_LONG) ? Bid : Ask);
+                 }
+              }
      }
 
    //--- everything close-based happens once per closed signal bar
