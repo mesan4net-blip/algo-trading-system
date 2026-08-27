@@ -2077,6 +2077,34 @@ int OnInit()
    if(SlotEnabled(SLOT_TRIGGER))
       UpdateTriggerCandle(nowBroker);
 
+   //--- MT4's Strategy Tester only serves the timeframe being tested and
+   //--- higher. Asking it for a LOWER one returns nothing, the new-bar check
+   //--- never fires, and the EA sits there taking no trades and saying
+   //--- nothing about why. That is worth shouting about.
+   if(IsTesting() && PeriodSeconds(InpSignalTF) < PeriodSeconds((ENUM_TIMEFRAMES)Period()))
+      Alert(StringFormat("%s: the Strategy Tester is running on %s but InpSignalTF "
+                         "is %s. MT4 cannot serve a timeframe LOWER than the one "
+                         "being tested, so NO TRADES will be taken. Set the "
+                         "tester's Period to %s and use Every tick.",
+                         InpTradeComment,
+                         StringSubstr(EnumToString((ENUM_TIMEFRAMES)Period()), 7),
+                         StringSubstr(EnumToString(InpSignalTF), 7),
+                         StringSubstr(EnumToString(InpSignalTF), 7)));
+
+   int signalBars = iBars(NULL, InpSignalTF);
+   if(signalBars <= 2 || iTime(NULL, InpSignalTF, 1) == 0)
+      Alert(StringFormat("%s: no usable %s history on %s (%d bars). The EA cannot "
+                         "see a signal bar close, so it will take no trades. Open "
+                         "an %s chart for this symbol once to pull the history.",
+                         InpTradeComment, StringSubstr(EnumToString(InpSignalTF), 7),
+                         Symbol(), signalBars,
+                         StringSubstr(EnumToString(InpSignalTF), 7)));
+   else
+      PrintFormat("[%s] signal timeframe %s has %d bars, most recent close %s.",
+                  InpTradeComment, StringSubstr(EnumToString(InpSignalTF), 7),
+                  signalBars, TimeToString(iTime(NULL, InpSignalTF, 1) +
+                                           PeriodSeconds(InpSignalTF), TIME_DATE|TIME_MINUTES));
+
    PrintFormat("[%s] v2 ready on %s. TF: signal %s, trigger %s, range %s. "
                "Up to %d entries/day, %d open per direction. Hard exit %s.",
                InpTradeComment, Symbol(),
@@ -2125,9 +2153,29 @@ void OnTick()
 
    //--- everything close-based happens once per closed signal bar
    datetime currentBar = iTime(NULL, InpSignalTF, 0);
+
+   //--- a zero here means the signal timeframe has no data. Without this the
+   //--- new-bar check would simply never fire and the EA would look idle.
+   if(currentBar == 0)
+     {
+      static datetime lastBlindWarning = 0;
+      if(nowBroker - lastBlindWarning > 300)
+        {
+         lastBlindWarning = nowBroker;
+         PrintFormat("[%s] no %s data available - no signal bars to read, so no "
+                     "trades can be taken. Open an %s chart for %s once.",
+                     InpTradeComment, StringSubstr(EnumToString(InpSignalTF), 7),
+                     StringSubstr(EnumToString(InpSignalTF), 7), Symbol());
+         g_skipReason[SLOT_ASIA]    = "no signal TF data";
+         g_skipReason[SLOT_TRIGGER] = "no signal TF data";
+        }
+     }
+
    for(int slot = 0; slot < SLOT_COUNT; slot++)
      {
       if(!SlotEnabled(slot))
+         continue;
+      if(currentBar == 0)
          continue;
       if(currentBar == g_lastSignalBar[slot])
          continue;
